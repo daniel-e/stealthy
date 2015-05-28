@@ -1,0 +1,14 @@
+[package]
+
+name = "icmpmessaging"
+version = "0.0.1"
+authors = ["unknown"]
+build = "build.rs"
+
+[dependencies]
+rand = "*"
+libc = "*"
+time = "*"
+log = "*"
+getopts = "*"
+term = "*"

@@ -3,8 +3,8 @@ extern crate libc;
 
 #[repr(C)]
 struct BF_KEY {
-    P: [libc::c_uint; 18],
-    S: [libc::c_uint; 4 * 256]
+    p: [libc::c_uint; 18],
+    s: [libc::c_uint; 4 * 256]
 }
 
 #[link(name = "crypto")]
@@ -25,8 +25,8 @@ extern {
     );
 }
 
-const BfEncrypt: libc::c_long = 1; // values taken from header file
-const BfDecrypt: libc::c_long = 0;
+const BF_ENCRYPT: libc::c_long = 1; // values taken from header file
+const BF_DECRYPT: libc::c_long = 0;
 
 
 pub struct EncryptionResult {
@@ -39,8 +39,8 @@ pub struct Blowfish {
     key: Vec<u8>
 }
 
-const KeyLen: i32 = 16;
-const IvLen: i32 = 16;
+const KEY_LEN: i32 = 16;
+const IV_LEN: i32 = 16;
 
 impl Blowfish {
 
@@ -48,8 +48,8 @@ impl Blowfish {
 
         Blowfish {
             schedule: Box::new(BF_KEY {
-                    P: [0; 18], 
-                    S: [0; 4 * 256],
+                    p: [0; 18], 
+                    s: [0; 4 * 256],
                 }),
             key: Blowfish::new_key()
         }
@@ -62,7 +62,7 @@ impl Blowfish {
     /// Creates a random key.
     fn new_key() -> Vec<u8> {
         let mut key: Vec<u8> = vec![];;
-        for _ in 0..KeyLen {
+        for _ in 0..KEY_LEN {
             key.push(rand::random::<u8>());  // TODO crypto rng
         }
         key
@@ -99,8 +99,8 @@ impl Blowfish {
 
         self.setup_key();
 
-        let mut plain = Blowfish::padding(data.clone());
-        let     iv    = Blowfish::new_iv(IvLen);
+        let plain = Blowfish::padding(data.clone());
+        let iv    = Blowfish::new_iv(IV_LEN);
 
         // we need a copy of the iv because it is modified by
         // BF_cbc_encrypt
@@ -115,7 +115,7 @@ impl Blowfish {
                 plain.len() as libc::c_long, 
                 &mut *(self.schedule), 
                 iv.as_ptr() as *mut u8,
-                BfEncrypt as libc::c_long
+                BF_ENCRYPT as libc::c_long
             );
         }
 
@@ -150,7 +150,7 @@ impl Blowfish {
                 cipher.len() as libc::c_long,
                 &mut *(self.schedule),
                 iv.as_ptr() as *mut u8,
-                BfDecrypt as libc::c_long
+                BF_DECRYPT as libc::c_long
             );
         }
 

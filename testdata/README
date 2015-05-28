@@ -1,0 +1,2 @@
+openssl genrsa 2048 > rsa_priv.pem
+openssl rsa -in rsa_priv.pem -pubout > rsa_pub.pem

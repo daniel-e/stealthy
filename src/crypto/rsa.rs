@@ -16,7 +16,7 @@ struct EVP_PKEY;
 struct PEM_PASSWORD_CALLBACK;
 
 #[repr(C)]
-struct RSA;
+pub struct RSA;
 
 #[link(name = "crypto")]
 extern {
@@ -53,7 +53,7 @@ extern {
         padding: libc::c_int) -> libc::c_int;
 
     // https://www.openssl.org/docs/crypto/RSA_public_encrypt.html
-    fn RSA_private_decrypt(
+    pub fn RSA_private_decrypt(
         flen: libc::c_int,
         from: *mut u8,
         to: *mut u8,
@@ -77,7 +77,7 @@ enum KeyType {
     PrivateKey
 }
 
-struct RSAenc {
+pub struct RSAenc {
     rsapub: *mut RSA,
     rsapriv: *mut RSA,
 }
@@ -86,6 +86,7 @@ impl RSAenc {
 
     fn pem(pem: String, kt: KeyType) -> Option<*mut RSA> {
 
+        // TODO BIO_new_mem_buf()
         unsafe {
             let bio_method = BIO_s_mem();
             if bio_method.is_null() {

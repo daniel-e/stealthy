@@ -1,7 +1,9 @@
 mod logo;
-extern crate term;
+mod crypto;
 
+extern crate term;
 extern crate getopts;
+
 extern crate icmpmessaging;
 
 use std::env;
@@ -11,6 +13,7 @@ use getopts::Options;
 use icmpmessaging::network::Message;
 use icmpmessaging::network::Network;
 use icmpmessaging::network::Errors;
+use icmpmessaging::crypto::Encryption;
 
 fn parse_arguments() -> Option<(String, String)> {
 
@@ -70,6 +73,24 @@ fn ack_message(_id: u64) {
     println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
 }
 
+fn init_encryption() -> Option<Encryption> {
+
+    // TODO hard coded
+    let pubkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_pub.pem";
+    let privkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_priv.pem";
+
+    let pubkey = crypto::tools::read_file(pubkey_file);
+    let privkey = crypto::tools::read_file(privkey_file);
+
+    match pubkey.is_some() && privkey.is_some() {
+        false => {
+            println!("Could not read all required keys.");
+            None
+        }
+        true  => { Some(Encryption::new(pubkey.unwrap(), privkey.unwrap())) }
+    }
+}
+
 fn main() {
     logo::print_logo();
 
@@ -79,8 +100,8 @@ fn main() {
 	}
 	let (device, dstip) = r.unwrap();
 
-
 	let mut n = Network::new(device.clone(), new_message, ack_message);
+    let mut e = init_encryption();
 
 	println!("Device is        : {}", device);
 	println!("Destination IP is: {}", dstip);

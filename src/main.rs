@@ -72,7 +72,7 @@ fn new_message(msg: Message) {
 /// they can be protected via cryptographic mechanisms.
 fn ack_message(id: u64) {
 
-    println!("* ack.");
+    println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
 }
 
 fn main() {
@@ -97,7 +97,7 @@ fn main() {
         if s.trim().len() > 0 {
     		match n.send_msg(msg) {
     			Ok(id) => {
-    				println!("* transmitting...");
+                    println_colored("transmitting...".to_string(), term::color::BLUE);
     			}
     			Err(e) => { match e {
     				Errors::MessageTooBig => { println!("main: message too big"); }

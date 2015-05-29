@@ -40,10 +40,17 @@ fn parse_arguments() -> Option<(String, String)> {
 /// This callback function is called when a new message arrives.
 fn new_message(msg: Message) {
 
-	let ip  = msg.ip;
-	let buf = String::from_utf8(msg.buf).unwrap();
+	let ip = msg.ip;
+    let s  = String::from_utf8(msg.buf);
+    match s {
+        Ok(s) => {
+	        println!("{} says: {}", ip, s);
+        }
 
-	println!("{} says: <{}>", ip, buf);
+        Err(e) => {
+            println!("{} error: could not decode message", ip);
+        }
+    }
 }
 
 /// This callback function is called when the receiver has received the
@@ -55,7 +62,7 @@ fn new_message(msg: Message) {
 /// they can be protected via cryptographic mechanisms.
 fn ack_message(id: u64) {
 
-    println!("* ack.            (id = {})", id);
+    println!("* ack.");
 }
 
 fn main() {
@@ -77,15 +84,17 @@ fn main() {
 	let mut s = String::new();
 	while io::stdin().read_line(& mut s).unwrap() != 0 {
 		let msg = Message::new(dstip.clone(), s.trim().to_string().into_bytes());
-		match n.send_msg(msg) {
-			Ok(id) => {
-				println!("* transmitting... (id = {})", id);
-			}
-			Err(e) => { match e {
-				Errors::MessageTooBig => { println!("main: message too big"); }
-				Errors::SendFailed => { println!("main: sending failed"); }
-			}}
-		}
+        if s.trim().len() > 0 {
+    		match n.send_msg(msg) {
+    			Ok(id) => {
+    				println!("* transmitting...");
+    			}
+    			Err(e) => { match e {
+    				Errors::MessageTooBig => { println!("main: message too big"); }
+    				Errors::SendFailed => { println!("main: sending failed"); }
+    			}}
+    		}
+        }
 		s.clear();
 	}
 }

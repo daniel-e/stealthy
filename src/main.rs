@@ -1,4 +1,5 @@
 mod logo;
+extern crate term;
 
 extern crate getopts;
 extern crate icmpmessaging;
@@ -37,6 +38,15 @@ fn parse_arguments() -> Option<(String, String)> {
 	}
 }
 
+fn println_colored(msg: String, color: term::color::Color) {
+
+    let mut t = term::stdout().unwrap();
+    t.fg(color).unwrap();
+    (write!(t, "{}", msg)).unwrap();
+    t.reset().unwrap();
+    (write!(t, "\n")).unwrap();
+}
+
 /// This callback function is called when a new message arrives.
 fn new_message(msg: Message) {
 
@@ -44,7 +54,7 @@ fn new_message(msg: Message) {
     let s  = String::from_utf8(msg.buf);
     match s {
         Ok(s) => {
-	        println!("{} says: {}", ip, s);
+	        println_colored(format!("{} says: {}", ip, s), term::color::YELLOW);
         }
 
         Err(e) => {

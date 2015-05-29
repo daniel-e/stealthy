@@ -53,13 +53,8 @@ fn new_message(msg: Message) {
 	let ip = msg.ip;
     let s  = String::from_utf8(msg.buf);
     match s {
-        Ok(s) => {
-	        println_colored(format!("{} says: {}", ip, s), term::color::YELLOW);
-        }
-
-        Err(e) => {
-            println!("{} error: could not decode message", ip);
-        }
+        Ok(s)  => { println_colored(format!("{} says: {}", ip, s), term::color::YELLOW); }
+        Err(_) => { println!("{} error: could not decode message", ip); }
     }
 }
 
@@ -70,7 +65,7 @@ fn new_message(msg: Message) {
 /// attacker could drop acknowledges or could fake acknowledges. Therefore,
 /// it is important that acknowledges are handled on a higher layer where
 /// they can be protected via cryptographic mechanisms.
-fn ack_message(id: u64) {
+fn ack_message(_id: u64) {
 
     println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
 }
@@ -96,7 +91,7 @@ fn main() {
 		let msg = Message::new(dstip.clone(), s.trim().to_string().into_bytes());
         if s.trim().len() > 0 {
     		match n.send_msg(msg) {
-    			Ok(id) => {
+    			Ok(_) => {
                     println_colored("transmitting...".to_string(), term::color::BLUE);
     			}
     			Err(e) => { match e {

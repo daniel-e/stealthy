@@ -87,19 +87,17 @@ impl RSAenc {
     fn pem(pem: String, kt: KeyType) -> Option<*mut RSA> {
 
         unsafe {
-            let mut bio_method: *mut BIO_METHOD = ptr::null_mut();
-            bio_method = BIO_s_mem();
+            let bio_method = BIO_s_mem();
             if bio_method.is_null() {
                 return None;
             }
 
-            let mut bio: *mut BIO = ptr::null_mut();
-            bio = BIO_new(bio_method);
+            let bio: *mut BIO = BIO_new(bio_method);
             if bio.is_null() {
                 return None;
             }
 
-            if (BIO_write(bio, pem.as_ptr(), pem.len() as libc::c_int) != pem.len() as libc::c_int) {
+            if BIO_write(bio, pem.as_ptr(), pem.len() as libc::c_int) != pem.len() as libc::c_int {
                 return None;
             }
 

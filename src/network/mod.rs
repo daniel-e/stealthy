@@ -31,7 +31,7 @@ impl Message {
 	}
 }
 
-const RETRY_TIMEOUT: u32      = 5000;
+const RETRY_TIMEOUT: u32      = 15000;
 const MAX_MESSAGE_SIZE: usize = (10 * 1024);
 
 
@@ -48,7 +48,14 @@ extern "C" fn callback(target: *mut Network, buf: *const u8, len: u32, typ: u32,
 #[link(name = "pcap")]
 extern {
 	fn send_icmp(ip: *const u8, buf: *const u8, siz: u16) -> libc::c_int;
-	fn recv_callback(target: *mut Network,
+}
+
+// TODO warning about improper ctypes is disabled; we should enable it again
+// and try to eliminate all warnings
+#[allow(improper_ctypes)]
+extern {
+	fn recv_callback(
+        target: *mut Network,
 		dev: *const u8, 
 		cb: extern fn(*mut Network, *const u8, u32, u32, *const u8)) -> libc::c_int;
 }

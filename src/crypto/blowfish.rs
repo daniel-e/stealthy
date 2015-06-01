@@ -39,20 +39,26 @@ pub struct Blowfish {
     key: Vec<u8>
 }
 
-const KEY_LEN: i32 = 16;
-const IV_LEN: i32 = 8;
+pub const KEY_LEN: usize = 16;
+pub const IV_LEN: usize = 8;
 
 impl Blowfish {
 
-    pub fn new() -> Blowfish {
+    pub fn new() -> Blowfish { Blowfish::from_key(Blowfish::new_key()).unwrap() }
 
-        Blowfish {
+    pub fn from_key(key: Vec<u8>) -> Option<Blowfish> {
+
+        if key.len() != KEY_LEN {
+            return None;
+        }
+
+        Some(Blowfish {
             schedule: Box::new(BF_KEY {
                     p: [0; 18], 
                     s: [0; 4 * 256],
                 }),
-            key: Blowfish::new_key()
-        }
+            key: key.clone()
+        })
     }
 
     pub fn key(&self) -> Vec<u8> {
@@ -86,7 +92,7 @@ impl Blowfish {
         r
     }
 
-    fn new_iv(len: i32) -> Vec<u8> {
+    fn new_iv(len: usize) -> Vec<u8> {
 
         let mut iv: Vec<u8> = vec![];
         for _ in 0..len {
@@ -171,34 +177,45 @@ impl Blowfish {
 #[cfg(test)]
 mod tests {
 
-fn print_u8_vector(v: Vec<u8>, s: &str) {
+    fn print_u8_vector(v: Vec<u8>, s: &str) {
 
-    print!("{}", s);
-    for i in 0..v.len() {
-        print!("{:02x} ", v[i]);
+        print!("{}", s);
+        for i in 0..v.len() {
+            print!("{:02x} ", v[i]);
+        }
+        println!("");
     }
-    println!("");
-}
 
-#[test]
-fn test_encryption() {
+    #[test]
+    fn test_encryption() {
 
-    // use cargo test -- --nocapture to see output of print
-    let mut b = super::Blowfish::new();
-    let k = b.key().clone();
+        // use cargo test -- --nocapture to see output of print
+        let mut b = super::Blowfish::new();
+        let k = b.key().clone();
 
-    println!("--------------------------------------");
-    let v = "123456789".to_string().into_bytes();
-    print_u8_vector(v.clone(), "plaintext: ");
+        println!("--------------------------------------");
+        let v = "123456789".to_string().into_bytes();
+        print_u8_vector(v.clone(), "plaintext: ");
 
-    let r = b.encrypt(v);
+        let r = b.encrypt(v);
 
-    print_u8_vector(r.iv.clone(), "iv       : ");
-    print_u8_vector(r.ciphertext.clone(), "cipher   : ");
+        print_u8_vector(r.iv.clone(), "iv       : ");
+        print_u8_vector(r.ciphertext.clone(), "cipher   : ");
 
-    let p = b.decrypt(r, k);
+        let p = b.decrypt(r, k);
 
-    print_u8_vector(p, "decrypted: ");
-    println!("--------------------------------------");
-}
+        print_u8_vector(p, "decrypted: ");
+        println!("--------------------------------------");
+    }
+
+    #[test]
+    fn test_from_key() {
+
+        let mut b = super::Blowfish::from_key(vec![0]);
+        assert!(!b.is_some());
+        let k = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+        b = super::Blowfish::from_key(k.clone());
+        assert!(b.is_some());
+        assert_eq!(b.unwrap().key, k);
+    }
 }

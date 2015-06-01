@@ -1,5 +1,5 @@
-mod blowfish;
-mod rsa;
+pub mod blowfish;
+pub mod rsa;
 pub mod tools;
 
 

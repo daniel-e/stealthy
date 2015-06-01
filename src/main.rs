@@ -15,6 +15,8 @@ use icmpmessaging::network::Network;
 use icmpmessaging::network::Errors;
 use icmpmessaging::crypto::Encryption;
 
+static BL_KEY: &'static str = "31303332353437363938323134333635";
+
 fn parse_arguments() -> Option<(String, String)> {
 
 	// parse comand line options
@@ -54,7 +56,8 @@ fn println_colored(msg: String, color: term::color::Color) {
 fn new_message(msg: Message) {
 
 	let ip = msg.ip;
-    let s  = String::from_utf8(msg.buf);
+    let m  = decrypt(msg.buf);
+    let s  = String::from_utf8(m);
     match s {
         Ok(s)  => { println_colored(format!("{} says: {}", ip, s), term::color::YELLOW); }
         Err(_) => { println!("{} error: could not decode message", ip); }
@@ -73,6 +76,7 @@ fn ack_message(_id: u64) {
     println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
 }
 
+/*
 fn init_encryption() -> Option<Encryption> {
 
     // TODO hard coded
@@ -90,6 +94,42 @@ fn init_encryption() -> Option<Encryption> {
         true  => { Some(Encryption::new(pubkey.unwrap(), privkey.unwrap())) }
     }
 }
+*/
+
+// TODO tmp code
+fn encrypt(b: &mut crypto::blowfish::Blowfish, v: Vec<u8>) -> Vec<u8> {
+
+    let er = b.encrypt(v);
+    let mut r = er.iv;
+    for i in er.ciphertext {
+        r.push(i);
+    }
+    r
+}
+
+fn decrypt(v: Vec<u8>) -> Vec<u8> {
+
+    let k = crypto::tools::from_hex(BL_KEY.to_string());
+    if !k.is_some() {
+        println!("Unable to initialize the crypto key.");
+        // TODO quit
+    }
+    let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
+    let k = b.key();
+
+    let (iv, cipher) = v.split_at(crypto::blowfish::IV_LEN);
+
+    let mut x = Vec::new();
+    for i in iv { x.push(*i) }
+    let mut y = Vec::new();
+    for i in cipher { y.push(*i) }
+
+    let e = crypto::blowfish::EncryptionResult {
+        iv: x,
+        ciphertext: y
+    };
+    b.decrypt(e, k)
+}
 
 fn main() {
     logo::print_logo();
@@ -101,15 +141,23 @@ fn main() {
 	let (device, dstip) = r.unwrap();
 
 	let mut n = Network::new(device.clone(), new_message, ack_message);
-    let mut e = init_encryption();
+
+    //let mut e = init_encryption();
+    let k = crypto::tools::from_hex(BL_KEY.to_string());
+    if !k.is_some() {
+        println!("Unable to initialize the crypto key.");
+        return;
+    }
+    let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
 
 	println!("Device is        : {}", device);
 	println!("Destination IP is: {}", dstip);
 	println!("\nYou can now start writing ...");
 
-	let mut s = String::new();
-	while io::stdin().read_line(& mut s).unwrap() != 0 {
-		let msg = Message::new(dstip.clone(), s.trim().to_string().into_bytes());
+    let mut s = String::new();
+    while io::stdin().read_line(&mut s).unwrap() != 0 {
+        let txt = s.trim().to_string();
+		let msg = Message::new(dstip.clone(), encrypt(&mut b, txt.into_bytes()));
         if s.trim().len() > 0 {
     		match n.send_msg(msg) {
     			Ok(_) => {

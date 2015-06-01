@@ -4,7 +4,7 @@ extern crate libc;
 
 mod packet;
 mod tools;
-pub mod splitter;
+pub mod delivery;
 
 use std::thread;
 use std::sync::Arc;

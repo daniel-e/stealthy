@@ -90,7 +90,6 @@ impl MessageHandle {
         }
     }
 
-
     /// This function is called when a new message arrives.
     fn new_msg(&self, msg: Message) {
 

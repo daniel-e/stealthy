@@ -79,12 +79,12 @@ fn init_encryption() -> Option<Encryption> {
 */
 
 struct MessageHandle {
-    e: Arc<Mutex<Encryption>>
+    e: Arc<Encryption>
 }
 
 impl MessageHandle {
 
-    pub fn new(e: Arc<Mutex<Encryption>>) -> MessageHandle {
+    pub fn new(e: Arc<Encryption>) -> MessageHandle {
         MessageHandle {
             e: e
         }
@@ -93,10 +93,9 @@ impl MessageHandle {
     /// This function is called when a new message arrives.
     fn new_msg(&self, msg: Message) {
 
-        let a  = self.e.lock().unwrap();
 	    let ip = msg.ip;
 
-        match a.decrypt(msg.buf) {
+        match (*self.e).decrypt(msg.buf) {
             Some(buf) => {
                 let s  = String::from_utf8(buf);
                 match s {
@@ -203,7 +202,7 @@ fn main() {
 	let (device, dstip, key) = r.unwrap();
 
     let (tx, rx) = channel();
-    let e        = Arc::new(Mutex::new(Encryption::new(&key)));
+    let e        = Arc::new(Encryption::new(&key));
     let mh       = Arc::new(Mutex::new(MessageHandle::new(e.clone())));
 
     recv_loop(rx, mh.clone());
@@ -217,8 +216,7 @@ fn main() {
     let mut s = String::new();
     while io::stdin().read_line(&mut s).unwrap() != 0 {
         let txt = s.trim().to_string();
-        let ec = e.lock().unwrap();
-		let msg = Message::new(dstip.clone(), ec.encrypt(txt.into_bytes()), MessageType::NewMessage);
+		let msg = Message::new(dstip.clone(), (*e).encrypt(txt.into_bytes()), MessageType::NewMessage);
         if s.trim().len() > 0 {
     		match n.send_msg(msg) {
     			Ok(_) => {

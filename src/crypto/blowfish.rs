@@ -15,6 +15,7 @@ extern {
         data: *const u8
     );
 
+    // https://www.openssl.org/docs/crypto/blowfish.html
     fn BF_cbc_encrypt(
         plaintext: *const u8,  // plaintext must be a multiple of 8 bytes
         cipher: *mut u8,       // buffer must be as long as the plaintext

@@ -1,9 +1,9 @@
 mod logo;
 mod crypto;
+mod tools;
 
-extern crate term;
 extern crate getopts;
-
+extern crate term;
 extern crate icmpmessaging;
 
 use std::env;
@@ -13,11 +13,11 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::thread;
 
-
 use icmpmessaging::network::Message;
 use icmpmessaging::network::Network;
 use icmpmessaging::network::Errors;
 use icmpmessaging::network::MessageType;
+use icmpmessaging::crypto::Encryption;
 
 static DEFAULT_ENCRYPTION_KEY: &'static str = "11111111111111111111111111111111";
 
@@ -47,15 +47,6 @@ fn parse_arguments() -> Option<(String, String, String)> {
         let key = matches.opt_str("e").unwrap_or(DEFAULT_ENCRYPTION_KEY.to_string());
 		Some((device, dstip, key))
 	}
-}
-
-fn println_colored(msg: String, color: term::color::Color) {
-
-    let mut t = term::stdout().unwrap();
-    t.fg(color).unwrap();
-    (write!(t, "{}", msg)).unwrap();
-    t.reset().unwrap();
-    (write!(t, "\n")).unwrap();
 }
 
 /*
@@ -99,7 +90,7 @@ impl MessageHandle {
             Some(buf) => {
                 let s  = String::from_utf8(buf);
                 match s {
-                    Ok(s)  => { println_colored(format!("{} says: {}", ip, s), term::color::YELLOW); }
+                    Ok(s)  => { tools::println_colored(format!("{} says: {}", ip, s), term::color::YELLOW); }
                     Err(_) => { println!("{} error: could not decode message", ip); }
                 }
             }
@@ -117,7 +108,7 @@ impl MessageHandle {
     /// they can be protected via cryptographic mechanisms.
     fn ack_msg(&self, msg: Message) {
 
-        println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
+        tools::println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
     }
 }
 
@@ -138,63 +129,10 @@ fn recv_loop(rx: Receiver<Message>, mh: Arc<Mutex<MessageHandle>>) {
     }});
 }
 
-struct Encryption {
-    key: String
-}
-
-impl Encryption {
-
-    pub fn new(key: &String) -> Encryption {
-        Encryption {
-            key: key.clone()
-        }
-    }
-
-    pub fn encrypt(&self, v: Vec<u8>) -> Vec<u8> {
-
-        let k = crypto::tools::from_hex(self.key.clone());
-        if !k.is_some() {
-            println!("Unable to initialize the crypto key.");
-        }
-        let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
-
-        let er = b.encrypt(v);
-        let mut r = er.iv;
-        for i in er.ciphertext {
-            r.push(i);
-        }
-        r
-    }
-
-    pub fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>> {
-
-        let k = crypto::tools::from_hex(self.key.clone());
-        if !k.is_some() {
-            println!("Unable to initialize the crypto key.");
-            // TODO quit
-        }
-        let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
-        let k = b.key();
-
-        let (iv, cipher) = v.split_at(crypto::blowfish::IV_LEN);
-
-        let mut x = Vec::new();
-        for i in iv { x.push(*i) }
-        let mut y = Vec::new();
-        for i in cipher { y.push(*i) }
-
-        let e = crypto::blowfish::EncryptionResult {
-            iv: x,
-            ciphertext: y
-        };
-        b.decrypt(e, k)
-    }
-}
-
-
 fn main() {
     logo::print_logo();
 
+    // parse command line arguments
 	let r = parse_arguments();
 	if r.is_none() {
 		return;
@@ -220,7 +158,7 @@ fn main() {
         if s.trim().len() > 0 {
     		match n.send_msg(msg) {
     			Ok(_) => {
-                    println_colored("transmitting...".to_string(), term::color::BLUE);
+                    tools::println_colored("transmitting...".to_string(), term::color::BLUE);
     			}
     			Err(e) => { match e {
     				Errors::MessageTooBig => { println!("main: message too big"); }

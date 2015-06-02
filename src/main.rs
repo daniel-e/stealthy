@@ -5,18 +5,16 @@ mod tools;
 extern crate getopts;
 extern crate term;
 extern crate icmpmessaging;
+extern crate time;
 
-use std::env;
-use std::io;
-use getopts::Options;
+use std::{env, io};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Sender, Receiver, channel};
 use std::thread;
+use getopts::Options;
+use time::PreciseTime;
 
-use icmpmessaging::network::Message;
-use icmpmessaging::network::Network;
-use icmpmessaging::network::Errors;
-use icmpmessaging::network::MessageType;
+use icmpmessaging::network::{Message, Network, Errors, MessageType};
 use icmpmessaging::crypto::Encryption;
 
 static DEFAULT_ENCRYPTION_KEY: &'static str = "11111111111111111111111111111111";
@@ -49,53 +47,88 @@ fn parse_arguments() -> Option<(String, String, String)> {
 	}
 }
 
-/*
-fn init_encryption() -> Option<Encryption> {
 
-    // TODO hard coded
-    let pubkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_pub.pem";
-    let privkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_priv.pem";
 
-    let pubkey = crypto::tools::read_file(pubkey_file);
-    let privkey = crypto::tools::read_file(privkey_file);
+struct Layers {
+    encryption_layer: Arc<Encryption>,
+    network_layer   : Box<Network>,
+}
 
-    match pubkey.is_some() && privkey.is_some() {
-        false => {
-            println!("Could not read all required keys.");
-            None
+impl Layers {
+    fn default(key: &String, device: &String, tx: Sender<Message>) -> Layers {
+
+        let e = Encryption::new(&key);
+        let (ltx, lrx) = channel(); // connection between network and layers
+        let n = Network::new(device.clone(), ltx);
+        Layers::new(e, n, lrx, tx)
+    }
+
+    fn new(
+        e              : Encryption, 
+        n              : Box<Network>,
+        rx_from_network: Receiver<Message>,
+        tx_application : Sender<Message>) -> Layers {
+
+        let enc = Arc::new(e);
+        let enc_thread = enc.clone();
+
+        thread::spawn(move || {
+            loop { match rx_from_network.recv() {
+                Ok(msg) => {
+                    match msg.typ {
+                        MessageType::NewMessage => { 
+                            match enc_thread.decrypt(msg.buf) {
+                                Some(buf) => {
+                                    tx_application.send(Message::new(msg.ip, buf, msg.typ));
+                                }
+
+                                None => { println!("{} error: could not decode message", msg.ip) }  // TODO error handling
+                            }
+                        }
+                        MessageType::AckMessage => { tx_application.send(msg); }
+                    }
+                }
+                Err(_) => { println!("Failed to receive message."); }
+            }};
+        });
+
+        Layers {
+            encryption_layer: enc,
+            network_layer   : n,
         }
-        true  => { Some(Encryption::new(pubkey.unwrap(), privkey.unwrap())) }
+    }
+
+    pub fn send(&mut self, msg: Message) -> Result<u64, Errors> {
+
+        let e = self.encryption_layer.encrypt(msg.buf);
+        let m = Message::new(msg.ip, e, msg.typ);
+
+        self.network_layer.send_msg(m)
     }
 }
-*/
 
-struct MessageHandle {
-    e: Arc<Encryption>
-}
+
+
+
+struct MessageHandle;
 
 impl MessageHandle {
 
-    pub fn new(e: Arc<Encryption>) -> MessageHandle {
-        MessageHandle {
-            e: e
-        }
+    pub fn new() -> MessageHandle {
+        MessageHandle
     }
 
     /// This function is called when a new message arrives.
     fn new_msg(&self, msg: Message) {
 
 	    let ip = msg.ip;
+        let s  = String::from_utf8(msg.buf);
+        let t  = time::now();
+        let fm = time::strftime("%R", &t).unwrap();
 
-        match (*self.e).decrypt(msg.buf) {
-            Some(buf) => {
-                let s  = String::from_utf8(buf);
-                match s {
-                    Ok(s)  => { tools::println_colored(format!("{} says: {}", ip, s), term::color::YELLOW); }
-                    Err(_) => { println!("{} error: could not decode message", ip); }
-                }
-            }
-
-            None => { println!("{} error: could not decode message", ip) }
+        match s {
+            Ok(s)  => { tools::println_colored(format!("[{}] {} says: {}", ip, fm, s), term::color::YELLOW); }
+            Err(_) => { println!("{} error: could not decode message", ip); }
         }
     }
 
@@ -106,7 +139,7 @@ impl MessageHandle {
     /// attacker could drop acknowledges or could fake acknowledges. Therefore,
     /// it is important that acknowledges are handled on a higher layer where
     /// they can be protected via cryptographic mechanisms.
-    fn ack_msg(&self, msg: Message) {
+    fn ack_msg(&self, _msg: Message) {
 
         tools::println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
     }
@@ -139,13 +172,10 @@ fn main() {
 	}
 	let (device, dstip, key) = r.unwrap();
 
+    let mh       = Arc::new(Mutex::new(MessageHandle::new()));
     let (tx, rx) = channel();
-    let e        = Arc::new(Encryption::new(&key));
-    let mh       = Arc::new(Mutex::new(MessageHandle::new(e.clone())));
-
     recv_loop(rx, mh.clone());
-
-	let mut n = Network::new(device.clone(), tx);
+    let mut l    = Layers::default(&key, &device, tx);
 
 	println!("Device is        : {}", device);
 	println!("Destination IP is: {}", dstip);
@@ -154,9 +184,9 @@ fn main() {
     let mut s = String::new();
     while io::stdin().read_line(&mut s).unwrap() != 0 {
         let txt = s.trim().to_string();
-		let msg = Message::new(dstip.clone(), (*e).encrypt(txt.into_bytes()), MessageType::NewMessage);
+		let msg = Message::new(dstip.clone(), txt.into_bytes(), MessageType::NewMessage);
         if s.trim().len() > 0 {
-    		match n.send_msg(msg) {
+    		match l.send(msg) {
     			Ok(_) => {
                     tools::println_colored("transmitting...".to_string(), term::color::BLUE);
     			}

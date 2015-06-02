@@ -131,14 +131,26 @@ impl Blowfish {
         }
     }
 
-    fn remove_padding(data: Vec<u8>) -> Vec<u8> {
+    fn remove_padding(data: Vec<u8>) -> Option<Vec<u8>> {
     
-        let mut plain = data.clone();
-        let padval = plain.pop().unwrap();
-        for _ in 0..(padval - 1) {
-            plain.pop();
+        if data.len() < 8 {
+            return None;
         }
-        plain
+
+        let mut plain  = data.clone();
+        let     padval = plain.pop().unwrap();
+
+        if padval > 8 {
+            return None;
+        }
+
+        for _ in 0..(padval - 1) {
+            let val = plain.pop();
+            if val.is_none() || val.unwrap() != padval {
+                return None;
+            }
+        }
+        Some(plain)
     }
 
     fn set_key(&mut self, key: Vec<u8>) {
@@ -146,7 +158,7 @@ impl Blowfish {
         self.key = key.clone();
     }
 
-    pub fn decrypt(&mut self, e: EncryptionResult, key: Vec<u8>) -> Vec<u8> {
+    pub fn decrypt(&mut self, e: EncryptionResult, key: Vec<u8>) -> Option<Vec<u8>> {
 
         self.set_key(key);
         self.setup_key();
@@ -202,7 +214,7 @@ mod tests {
         print_u8_vector(r.iv.clone(), "iv       : ");
         print_u8_vector(r.ciphertext.clone(), "cipher   : ");
 
-        let p = b.decrypt(r, k);
+        let p = b.decrypt(r, k).unwrap();
 
         print_u8_vector(p, "decrypted: ");
         println!("--------------------------------------");

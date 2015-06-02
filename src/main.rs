@@ -9,15 +9,19 @@ extern crate icmpmessaging;
 use std::env;
 use std::io;
 use getopts::Options;
+use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Sender, Receiver, channel};
+use std::thread;
+
 
 use icmpmessaging::network::Message;
 use icmpmessaging::network::Network;
 use icmpmessaging::network::Errors;
-use icmpmessaging::crypto::Encryption;
+use icmpmessaging::network::MessageType;
 
-static BL_KEY: &'static str = "31303332353437363938323134333635";
+static DEFAULT_ENCRYPTION_KEY: &'static str = "11111111111111111111111111111111";
 
-fn parse_arguments() -> Option<(String, String)> {
+fn parse_arguments() -> Option<(String, String, String)> {
 
 	// parse comand line options
 	let args : Vec<String> = env::args().collect();
@@ -25,6 +29,7 @@ fn parse_arguments() -> Option<(String, String)> {
 	let mut opts = Options::new();
 	opts.optopt("i", "dev", "set the device where to listen for messages", "device");
 	opts.optopt("d", "dst", "set the IP where messages are sent to", "IP");
+	opts.optopt("e", "enc", "set the encryption key", "key");
 	opts.optflag("h", "help", "print this message");
 
 	let matches = match opts.parse(&args[1..]) {
@@ -39,7 +44,8 @@ fn parse_arguments() -> Option<(String, String)> {
 	} else {		
 		let device = matches.opt_str("i").unwrap_or("lo".to_string());
 		let dstip = matches.opt_str("d").unwrap_or("127.0.0.1".to_string());
-		Some((device, dstip))
+        let key = matches.opt_str("e").unwrap_or(DEFAULT_ENCRYPTION_KEY.to_string());
+		Some((device, dstip, key))
 	}
 }
 
@@ -50,30 +56,6 @@ fn println_colored(msg: String, color: term::color::Color) {
     (write!(t, "{}", msg)).unwrap();
     t.reset().unwrap();
     (write!(t, "\n")).unwrap();
-}
-
-/// This callback function is called when a new message arrives.
-fn new_message(msg: Message) {
-
-	let ip = msg.ip;
-    let m  = decrypt(msg.buf);
-    let s  = String::from_utf8(m);
-    match s {
-        Ok(s)  => { println_colored(format!("{} says: {}", ip, s), term::color::YELLOW); }
-        Err(_) => { println!("{} error: could not decode message", ip); }
-    }
-}
-
-/// This callback function is called when the receiver has received the
-/// message with the given id.
-///
-/// Important notes: Acknowledges are not protected on this layer. An
-/// attacker could drop acknowledges or could fake acknowledges. Therefore,
-/// it is important that acknowledges are handled on a higher layer where
-/// they can be protected via cryptographic mechanisms.
-fn ack_message(_id: u64) {
-
-    println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
 }
 
 /*
@@ -96,40 +78,121 @@ fn init_encryption() -> Option<Encryption> {
 }
 */
 
-// TODO tmp code
-fn encrypt(b: &mut crypto::blowfish::Blowfish, v: Vec<u8>) -> Vec<u8> {
-
-    let er = b.encrypt(v);
-    let mut r = er.iv;
-    for i in er.ciphertext {
-        r.push(i);
-    }
-    r
+struct MessageHandle {
+    e: Arc<Mutex<Encryption>>
 }
 
-fn decrypt(v: Vec<u8>) -> Vec<u8> {
+impl MessageHandle {
 
-    let k = crypto::tools::from_hex(BL_KEY.to_string());
-    if !k.is_some() {
-        println!("Unable to initialize the crypto key.");
-        // TODO quit
+    pub fn new(e: Arc<Mutex<Encryption>>) -> MessageHandle {
+        MessageHandle {
+            e: e
+        }
     }
-    let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
-    let k = b.key();
 
-    let (iv, cipher) = v.split_at(crypto::blowfish::IV_LEN);
 
-    let mut x = Vec::new();
-    for i in iv { x.push(*i) }
-    let mut y = Vec::new();
-    for i in cipher { y.push(*i) }
+    /// This function is called when a new message arrives.
+    fn new_msg(&self, msg: Message) {
 
-    let e = crypto::blowfish::EncryptionResult {
-        iv: x,
-        ciphertext: y
-    };
-    b.decrypt(e, k)
+        let a  = self.e.lock().unwrap();
+	    let ip = msg.ip;
+
+        match a.decrypt(msg.buf) {
+            Some(buf) => {
+                let s  = String::from_utf8(buf);
+                match s {
+                    Ok(s)  => { println_colored(format!("{} says: {}", ip, s), term::color::YELLOW); }
+                    Err(_) => { println!("{} error: could not decode message", ip); }
+                }
+            }
+
+            None => { println!("{} error: could not decode message", ip) }
+        }
+    }
+
+    /// This callback function is called when the receiver has received the
+    /// message with the given id.
+    ///
+    /// Important notes: Acknowledges are not protected on this layer. An
+    /// attacker could drop acknowledges or could fake acknowledges. Therefore,
+    /// it is important that acknowledges are handled on a higher layer where
+    /// they can be protected via cryptographic mechanisms.
+    fn ack_msg(&self, msg: Message) {
+
+        println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
+    }
 }
+
+fn recv_loop(rx: Receiver<Message>, mh: Arc<Mutex<MessageHandle>>) {
+
+    thread::spawn(move || { 
+        let message_handling = mh.clone();
+        loop { match rx.recv() {
+            Ok(msg) => {
+                let x = message_handling.lock().unwrap();
+                match msg.typ {
+                    MessageType::NewMessage => { x.new_msg(msg); }
+                    MessageType::AckMessage => { x.ack_msg(msg); }
+                }
+            }
+            Err(_)  => { println!("Failed to receive message."); }
+        }
+    }});
+}
+
+struct Encryption {
+    key: String
+}
+
+impl Encryption {
+
+    pub fn new(key: &String) -> Encryption {
+        Encryption {
+            key: key.clone()
+        }
+    }
+
+    pub fn encrypt(&self, v: Vec<u8>) -> Vec<u8> {
+
+        let k = crypto::tools::from_hex(self.key.clone());
+        if !k.is_some() {
+            println!("Unable to initialize the crypto key.");
+        }
+        let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
+
+        let er = b.encrypt(v);
+        let mut r = er.iv;
+        for i in er.ciphertext {
+            r.push(i);
+        }
+        r
+    }
+
+    pub fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>> {
+
+        let k = crypto::tools::from_hex(self.key.clone());
+        if !k.is_some() {
+            println!("Unable to initialize the crypto key.");
+            // TODO quit
+        }
+        let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
+        let k = b.key();
+
+        let (iv, cipher) = v.split_at(crypto::blowfish::IV_LEN);
+
+        let mut x = Vec::new();
+        for i in iv { x.push(*i) }
+        let mut y = Vec::new();
+        for i in cipher { y.push(*i) }
+
+        let e = crypto::blowfish::EncryptionResult {
+            iv: x,
+            ciphertext: y
+        };
+        b.decrypt(e, k)
+    }
+}
+
 
 fn main() {
     logo::print_logo();
@@ -138,17 +201,15 @@ fn main() {
 	if r.is_none() {
 		return;
 	}
-	let (device, dstip) = r.unwrap();
+	let (device, dstip, key) = r.unwrap();
 
-	let mut n = Network::new(device.clone(), new_message, ack_message);
+    let (tx, rx) = channel();
+    let e        = Arc::new(Mutex::new(Encryption::new(&key)));
+    let mh       = Arc::new(Mutex::new(MessageHandle::new(e.clone())));
 
-    //let mut e = init_encryption();
-    let k = crypto::tools::from_hex(BL_KEY.to_string());
-    if !k.is_some() {
-        println!("Unable to initialize the crypto key.");
-        return;
-    }
-    let mut b = crypto::blowfish::Blowfish::from_key(k.unwrap()).unwrap();
+    recv_loop(rx, mh.clone());
+
+	let mut n = Network::new(device.clone(), tx);
 
 	println!("Device is        : {}", device);
 	println!("Destination IP is: {}", dstip);
@@ -157,7 +218,8 @@ fn main() {
     let mut s = String::new();
     while io::stdin().read_line(&mut s).unwrap() != 0 {
         let txt = s.trim().to_string();
-		let msg = Message::new(dstip.clone(), encrypt(&mut b, txt.into_bytes()));
+        let ec = e.lock().unwrap();
+		let msg = Message::new(dstip.clone(), ec.encrypt(txt.into_bytes()), MessageType::NewMessage);
         if s.trim().len() > 0 {
     		match n.send_msg(msg) {
     			Ok(_) => {

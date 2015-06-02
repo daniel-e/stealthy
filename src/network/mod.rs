@@ -13,6 +13,11 @@ use std::sync::mpsc::channel;
 use std::sync::mpsc::Sender;
 use std::sync::mpsc::Receiver;
 
+pub enum MessageType {
+    NewMessage,
+    AckMessage
+}
+
 pub enum Errors {
 	MessageTooBig,
 	SendFailed
@@ -21,13 +26,15 @@ pub enum Errors {
 pub struct Message {
 	pub ip : String,
 	pub buf: Vec<u8>,
+    pub typ: MessageType,
 }
 
 impl Message {
-	pub fn new(ip: String, buf: Vec<u8>) -> Message {
+	pub fn new(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
 		Message {
 			ip : ip,
 			buf: buf,
+            typ: typ,
 		}
 	}
 }
@@ -72,15 +79,14 @@ struct SharedData {
 
 #[repr(C)]
 pub struct Network {
-	new_msg_cb       : fn (Message),
-	ack_msg_cb       : fn (u64),
 	tx               : Sender<packet::IdType>,
-	shared           : Arc<Mutex<SharedData>>
+    tx_msg           : Sender<Message>,
+	shared           : Arc<Mutex<SharedData>>,
 }
 
 impl Network {
 	/// Constructs a new `Network`.
-	pub fn new(dev: String, new_msg_cb: fn (Message), ack_msg_cb: fn (u64)) -> Box<Network> {
+	pub fn new(dev: String, tx_msg: Sender<Message>) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : vec![],
@@ -92,8 +98,9 @@ impl Network {
 		// Network must be on the heap because of the callback function.
 		let mut n = Box::new(Network {
 			shared: s.clone(),
-			new_msg_cb: new_msg_cb,
-            ack_msg_cb: ack_msg_cb,
+            tx_msg: tx_msg,
+//			new_msg_cb: new_msg_cb,
+  //          ack_msg_cb: ack_msg_cb,
 			tx: tx,
 		});
 
@@ -157,10 +164,11 @@ impl Network {
         
         if !self.contains(p.id) { // we are not the sender of the message
    			let m = Message {
-				ip: p.ip.clone(),
-				buf: p.data.clone()
+				ip : p.ip.clone(),
+				buf: p.data.clone(),
+                typ: MessageType::NewMessage,
 			};
-			(self.new_msg_cb)(m);
+            self.tx_msg.send(m);
             Network::transmit(packet::Packet::create_ack(p));
             // TODO error
         }
@@ -181,7 +189,13 @@ impl Network {
         }
         if b {
             v.packets.swap_remove(c);
-            (self.ack_msg_cb)(p.id);
+
+            let m = Message {
+                ip : p.ip.clone(),
+                buf: vec![],
+                typ: MessageType::AckMessage
+            };
+            self.tx_msg.send(m); // TODO send id of ack
         }
   }
 

@@ -79,7 +79,7 @@ impl Layers {
                         MessageType::NewMessage => { 
                             match enc_thread.decrypt(msg.buf) {
                                 Some(buf) => {
-                                    tx_application.send(Message::new(msg.ip, buf, msg.typ));
+                                    tx_application.send(Message::new(&msg.ip, buf));
                                 }
 
                                 None => { println!("{} error: could not decode message", msg.ip) }  // TODO error handling
@@ -101,34 +101,35 @@ impl Layers {
     pub fn send(&mut self, msg: Message) -> Result<u64, Errors> {
 
         let e = self.encryption_layer.encrypt(msg.buf);
-        let m = Message::new(msg.ip, e, msg.typ);
+        let m = Message::new(&msg.ip, e); // TODO is this always a new message?
 
         self.network_layer.send_msg(m)
     }
 }
 
 
+trait Callbacks {
+    fn new_msg(&self, msg: Message);
+    fn ack_msg(&self, msg: Message);
+}
 
 
-struct MessageHandle;
+struct MessageHandler;
 
-impl MessageHandle {
-
-    pub fn new() -> MessageHandle {
-        MessageHandle
-    }
+impl Callbacks for MessageHandler {
 
     /// This function is called when a new message arrives.
     fn new_msg(&self, msg: Message) {
 
 	    let ip = msg.ip;
         let s  = String::from_utf8(msg.buf);
-        let t  = time::now();
-        let fm = time::strftime("%R", &t).unwrap();
+        let fm = time::strftime("%R", &time::now()).unwrap();
 
         match s {
             Ok(s)  => { tools::println_colored(format!("[{}] {} says: {}", ip, fm, s), term::color::YELLOW); }
-            Err(_) => { println!("{} error: could not decode message", ip); }
+            Err(_) => { 
+                tools::println_colored(format!("[{}] {} error: could not decode message", ip, fm), term::color::BRIGHT_RED); 
+            }
         }
     }
 
@@ -145,47 +146,47 @@ impl MessageHandle {
     }
 }
 
-fn recv_loop(rx: Receiver<Message>, mh: Arc<Mutex<MessageHandle>>) {
+fn init_backend(key: &String, device: &String, handler: MessageHandler) -> (Arc<MessageHandler>, Layers) {
+
+    let (tx, rx) = channel::<Message>();
+
+    let a = Arc::new(handler);
+    let h = a.clone();
+    let l = Layers::default(&key, &device, tx);
 
     thread::spawn(move || { 
-        let message_handling = mh.clone();
         loop { match rx.recv() {
             Ok(msg) => {
-                let x = message_handling.lock().unwrap();
                 match msg.typ {
-                    MessageType::NewMessage => { x.new_msg(msg); }
-                    MessageType::AckMessage => { x.ack_msg(msg); }
+                    MessageType::NewMessage => { h.new_msg(msg); }
+                    MessageType::AckMessage => { h.ack_msg(msg); }
                 }
             }
             Err(_)  => { println!("Failed to receive message."); }
         }
     }});
+
+    (a, l)
 }
+
 
 fn main() {
     logo::print_logo();
 
     // parse command line arguments
 	let r = parse_arguments();
-	if r.is_none() {
-		return;
-	}
-	let (device, dstip, key) = r.unwrap();
+    let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
 
-    let mh       = Arc::new(Mutex::new(MessageHandle::new()));
-    let (tx, rx) = channel();
-    recv_loop(rx, mh.clone());
-    let mut l    = Layers::default(&key, &device, tx);
+    let (mh, mut l) = init_backend(&key, &device, MessageHandler);
 
-	println!("Device is        : {}", device);
-	println!("Destination IP is: {}", dstip);
-	println!("\nYou can now start writing ...");
+	println!("device is {}, destination ip is {}", device, dstip);
+	println!("You can now start writing ...\n");
 
     let mut s = String::new();
     while io::stdin().read_line(&mut s).unwrap() != 0 {
-        let txt = s.trim().to_string();
-		let msg = Message::new(dstip.clone(), txt.into_bytes(), MessageType::NewMessage);
-        if s.trim().len() > 0 {
+        let txt = s.trim_right().to_string();
+        if txt.len() > 0 {
+		    let msg = Message::new(&dstip, txt.into_bytes());
     		match l.send(msg) {
     			Ok(_) => {
                     tools::println_colored("transmitting...".to_string(), term::color::BLUE);

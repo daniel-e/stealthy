@@ -171,7 +171,7 @@ static void* do_callback(void* args)
 
 int recv_callback(void* target, const char* dev, callback cb) {
 
-	pcap_t* handle = setup_pcap(dev, "icmp");
+	pcap_t* handle = setup_pcap(dev, "icmp && icmp[icmptype] = 8");
 	if (handle) {
 		pthread_t t;
 		struct arguments* args = (struct arguments*) malloc(sizeof(struct arguments));

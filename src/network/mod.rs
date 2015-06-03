@@ -7,11 +7,8 @@ mod tools;
 pub mod delivery;
 
 use std::thread;
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::mpsc::channel;
-use std::sync::mpsc::Sender;
-use std::sync::mpsc::Receiver;
+use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Sender, Receiver};
 
 pub enum MessageType {
     NewMessage,
@@ -30,11 +27,19 @@ pub struct Message {
 }
 
 impl Message {
-	pub fn new(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
+	pub fn new(ip: &String, buf: Vec<u8>) -> Message {
 		Message {
-			ip : ip,
+			ip : ip.clone(),
 			buf: buf,
-            typ: typ,
+            typ: MessageType::NewMessage,
+		}
+	}
+
+	pub fn ack(ip: &String) -> Message {
+		Message {
+			ip : ip.clone(),
+			buf: vec![],
+            typ: MessageType::AckMessage,
 		}
 	}
 }
@@ -163,11 +168,7 @@ impl Network {
     fn handle_new_message(&self, p: packet::Packet) {
         
         if !self.contains(p.id) { // we are not the sender of the message
-   			let m = Message {
-				ip : p.ip.clone(),
-				buf: p.data.clone(),
-                typ: MessageType::NewMessage,
-			};
+            let m = Message::new(&p.ip, p.data.clone());
             self.tx_msg.send(m);
             Network::transmit(packet::Packet::create_ack(p));
             // TODO error
@@ -190,11 +191,7 @@ impl Network {
         if b {
             v.packets.swap_remove(c);
 
-            let m = Message {
-                ip : p.ip.clone(),
-                buf: vec![],
-                typ: MessageType::AckMessage
-            };
+            let m = Message::ack(&p.ip);
             self.tx_msg.send(m); // TODO send id of ack
         }
   }

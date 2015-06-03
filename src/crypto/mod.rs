@@ -107,3 +107,26 @@ mod tests {
     }
 */
 
+
+
+/*
+fn init_encryption() -> Option<Encryption> {
+
+    // TODO hard coded
+    let pubkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_pub.pem";
+    let privkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_priv.pem";
+
+    let pubkey = crypto::tools::read_file(pubkey_file);
+    let privkey = crypto::tools::read_file(privkey_file);
+
+    match pubkey.is_some() && privkey.is_some() {
+        false => {
+            println!("Could not read all required keys.");
+            None
+        }
+        true  => { Some(Encryption::new(pubkey.unwrap(), privkey.unwrap())) }
+    }
+}
+*/
+
+

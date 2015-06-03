@@ -2,17 +2,17 @@ use std::fs::File;
 use std::io::Read;
 
 pub fn read_file(fname: &str) -> Option<String> {
-    let mut r = File::open(fname);
+    let r = File::open(fname);
     match r {
         Ok(mut file) => {
             let mut s = String::new();
             match file.read_to_string(&mut s) {
-                Ok(siz) => { Some(s) }
-                Err(e) => { None }
+                Ok(_siz) => { Some(s) }
+                Err(_) => { None }
             }
         }
 
-        Err(e) => { None }
+        Err(_) => { None }
     }
 }
 

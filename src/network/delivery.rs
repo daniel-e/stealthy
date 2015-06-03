@@ -1,7 +1,6 @@
 extern crate rand;
 
 use ::network::Message;
-use ::network::Network;
 use ::network::tools;
 
 struct MessagePart {

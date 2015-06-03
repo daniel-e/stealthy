@@ -1,7 +1,7 @@
 extern crate rand;
 
-use ::network::Message;
-use ::network::tools;
+use super::Message;
+use super::tools;
 
 struct MessagePart {
     buf: Vec<u8>,

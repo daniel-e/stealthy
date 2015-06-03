@@ -1,6 +1,6 @@
-pub mod blowfish;
-pub mod rsa;
-pub mod tools;
+
+use blowfish;
+use tools;
 
 pub struct Encryption {
     key: String

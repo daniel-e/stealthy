@@ -11,11 +11,12 @@ use std::sync::mpsc::Receiver;
 use std::thread;
 use getopts::Options;
 
-use icmpmessaging::network::{Message, Errors, MessageType, Layers};
+use icmpmessaging::{Message, Errors, MessageType, Layers};
 
-static DEFAULT_ENCRYPTION_KEY: &'static str = "11111111111111111111111111111111";
 
 fn parse_arguments() -> Option<(String, String, String)> {
+
+    static DEFAULT_ENCRYPTION_KEY: &'static str = "11111111111111111111111111111111";
 
 	// parse comand line options
 	let args : Vec<String> = env::args().collect();

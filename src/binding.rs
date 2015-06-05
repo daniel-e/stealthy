@@ -4,7 +4,7 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-use super::{packet, tools, Message, Errors};
+use super::{packet, tools, IncomingMessage, Message, Errors};
 
 const RETRY_TIMEOUT: u32      = 15000;
 const MAX_MESSAGE_SIZE: usize = (10 * 1024);
@@ -47,13 +47,13 @@ struct SharedData {
 #[repr(C)]
 pub struct Network {
 	tx               : Sender<packet::IdType>,
-    tx_msg           : Sender<Message>,
+    tx_msg           : Sender<IncomingMessage>,
 	shared           : Arc<Mutex<SharedData>>,
 }
 
 impl Network {
 	/// Constructs a new `Network`.
-	pub fn new(dev: &String, tx_msg: Sender<Message>) -> Box<Network> {
+	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : vec![],
@@ -129,7 +129,7 @@ impl Network {
         
         if !self.contains(p.id) { // we are not the sender of the message
             let m = Message::new(p.ip.clone(), p.data.clone());
-            match self.tx_msg.send(m) {
+            match self.tx_msg.send(IncomingMessage::New(m)) {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
                 _      => { }
             }
@@ -155,7 +155,7 @@ impl Network {
             v.packets.swap_remove(c);
 
             let m = Message::ack(p.ip.clone());
-            match self.tx_msg.send(m) { // TODO send id of ack
+            match self.tx_msg.send(IncomingMessage::Ack(p.id)) { // TODO send id of ack
                 Err(_) => println!("handle_ack: could not deliver ack to upper layer"),
                 _      => { }
             }

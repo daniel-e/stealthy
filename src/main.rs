@@ -11,7 +11,7 @@ use std::sync::mpsc::Receiver;
 use std::thread;
 use getopts::Options;
 
-use icmpmessaging::{Message, Errors, MessageType, Layers};
+use icmpmessaging::{Message, IncomingMessage, Errors, Layers};
 
 
 fn parse_arguments() -> Option<(String, String, String)> {
@@ -66,19 +66,19 @@ fn new_msg(msg: Message) {
 /// attacker could drop acknowledges or could fake acknowledges. Therefore,
 /// it is important that acknowledges are handled on a higher layer where
 /// they can be protected via cryptographic mechanisms.
-fn ack_msg(_msg: Message) {
+fn ack_msg(_id: u64) {
 
     tools::println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
 }
 
-fn recv_loop(rx: Receiver<Message>) {
+fn recv_loop(rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || { 
         loop { match rx.recv() {
             Ok(msg) => {
-                match msg.get_type() {
-                    MessageType::NewMessage => { new_msg(msg); }
-                    MessageType::AckMessage => { ack_msg(msg); }
+                match msg {
+                    IncomingMessage::New(msg) => { new_msg(msg); }
+                    IncomingMessage::Ack(id)  => { ack_msg(id); }
                 }
             }
             Err(e)  => { println!("recv_loop: failed to receive message. {:?}", e); }

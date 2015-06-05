@@ -14,10 +14,17 @@ use crypto::Encryption;  // Implemenation for encryption layer
 use binding::Network;    // Implemenation for network layer
 
 
+pub enum IncomingMessage {
+    New(Message),
+    Ack(u64)
+}
+
+
 pub enum MessageType {
     NewMessage,
     AckMessage
 }
+
 
 impl Clone for MessageType {
     fn clone(&self) -> MessageType { 
@@ -76,7 +83,7 @@ pub struct Layers {
 
 
 impl Layers {
-    pub fn default(key: &String, device: &String) -> (Receiver<Message>, Layers) {
+    pub fn default(key: &String, device: &String) -> (Receiver<IncomingMessage>, Layers) {
 
         // channel between network and this struct
         let (tx, rx) = channel();
@@ -94,10 +101,10 @@ impl Layers {
         self.network_layer.send_msg(m)
     }
 
-    fn new(e: Encryption, n: Box<Network>, rx_network: Receiver<Message>) -> (Receiver<Message>, Layers) {
+    fn new(e: Encryption, n: Box<Network>, rx_network: Receiver<IncomingMessage>) -> (Receiver<IncomingMessage>, Layers) {
 
         // channel between application and this struct
-        let (tx, rx) = channel::<Message>();
+        let (tx, rx) = channel::<IncomingMessage>();
 
         let l = Layers {
                     encryption_layer: Arc::new(e),
@@ -108,7 +115,7 @@ impl Layers {
         (rx, l)
     }
 
-    fn spawn_receiver(&self, tx: Sender<Message>, rx: Receiver<Message>) {
+    fn spawn_receiver(&self, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) {
 
         let enc = self.encryption_layer.clone();
 
@@ -128,18 +135,18 @@ impl Layers {
         }}});
     }
 
-    fn handle_message(m: Message, enc: Arc<Encryption>) -> Option<Message> {
+    fn handle_message(m: IncomingMessage, enc: Arc<Encryption>) -> Option<IncomingMessage> {
 
-        match m.typ {
-            MessageType::NewMessage => { 
-                let buf = enc.decrypt(m.buf.clone());
+        match m {
+            IncomingMessage::New(msg) => {
+                let buf = enc.decrypt(msg.buf.clone());
                 match buf {
-                    Some(buf) => { Some(m.set_payload(buf)) }
-                    None      => { None }
+                    Some(buf) => { Some(IncomingMessage::New(msg.set_payload(buf))) }
+                    _ => { None }
                 }
             }
 
-            MessageType::AckMessage => { Some(m) }
+            IncomingMessage::Ack(_) => { Some(m) }
         }
     }
 }

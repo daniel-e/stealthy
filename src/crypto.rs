@@ -23,10 +23,10 @@ impl Encryption {
         blowfish::Blowfish::from_key(k.unwrap()).unwrap()
     }
 
-    pub fn encrypt(&self, v: Vec<u8>) -> Vec<u8> {
+    pub fn encrypt(&self, v: &Vec<u8>) -> Vec<u8> {
 
         let mut b = self.blowfish();
-        let er    = b.encrypt(v);
+        let er    = b.encrypt(v.clone());
         let mut r = er.iv;
 
         for i in er.ciphertext {

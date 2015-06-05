@@ -53,7 +53,7 @@ pub struct Network {
 
 impl Network {
 	/// Constructs a new `Network`.
-	pub fn new(dev: String, tx_msg: Sender<Message>) -> Box<Network> {
+	pub fn new(dev: &String, tx_msg: Sender<Message>) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : vec![],
@@ -90,7 +90,7 @@ impl Network {
 		}}});
 	}
 
-	fn init_callback(&mut self, dev: String) {
+	fn init_callback(&mut self, dev: &String) {
 		let sdev = dev.clone() + "\0";
 		unsafe {
 			recv_callback(&mut *self, sdev.as_ptr(), callback); // TODO error handling
@@ -128,7 +128,7 @@ impl Network {
     fn handle_new_message(&self, p: packet::Packet) {
         
         if !self.contains(p.id) { // we are not the sender of the message
-            let m = Message::new(&p.ip, p.data.clone());
+            let m = Message::new(p.ip.clone(), p.data.clone());
             match self.tx_msg.send(m) {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
                 _      => { }
@@ -154,7 +154,7 @@ impl Network {
         if b {
             v.packets.swap_remove(c);
 
-            let m = Message::ack(&p.ip);
+            let m = Message::ack(p.ip.clone());
             match self.tx_msg.send(m) { // TODO send id of ack
                 Err(_) => println!("handle_ack: could not deliver ack to upper layer"),
                 _      => { }
@@ -178,10 +178,10 @@ impl Network {
 	///
 	/// ip  = IPv4 of the receiver
 	/// buf = data to be transmitted to the receiver
-	pub fn send_msg(&mut self, msg: Message) -> Result<u64, Errors> {
+	pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
 
-		let ip  = msg.ip.clone();
-		let buf = msg.buf.clone();
+		let ip  = msg.get_ip();
+		let buf = msg.get_payload();
 
 		if buf.len() > MAX_MESSAGE_SIZE {
 			Err(Errors::MessageTooBig)

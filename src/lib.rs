@@ -8,10 +8,10 @@ mod tools;
 
 use std::thread;
 use std::sync::Arc;
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crypto::Encryption;
-use binding::Network;
+use crypto::Encryption;  // Implemenation for encryption layer
+use binding::Network;    // Implemenation for network layer
 
 
 pub enum MessageType {
@@ -19,103 +19,128 @@ pub enum MessageType {
     AckMessage
 }
 
+impl Clone for MessageType {
+    fn clone(&self) -> MessageType { 
+        match *self {
+            MessageType::NewMessage => MessageType::NewMessage,
+            MessageType::AckMessage => MessageType::AckMessage
+        }
+    }
+}
+
+
 pub enum Errors {
 	MessageTooBig,
 	SendFailed
 }
 
+
 pub struct Message {
-	pub ip : String,
-	pub buf: Vec<u8>,
-    pub typ: MessageType,
+    /// Contains the destination ip for outgoing messages, source ip from incoming messages.
+	ip : String,
+    typ: MessageType,
+	buf: Vec<u8>,
 }
+
 
 impl Message {
-	pub fn new(ip: &String, buf: Vec<u8>) -> Message {
-		Message {
-			ip : ip.clone(),
-			buf: buf,
-            typ: MessageType::NewMessage,
-		}
-	}
+	pub fn new(ip: String, buf: Vec<u8>) -> Message { Message::create(ip, buf, MessageType::NewMessage) }
 
-	pub fn ack(ip: &String) -> Message {
+	pub fn ack(ip: String) -> Message { Message::create(ip, vec![], MessageType::AckMessage) }
+
+    pub fn set_payload(&self, buf: Vec<u8>) -> Message { 
+        Message::create(self.get_ip(), buf, self.get_type())
+    }
+
+    pub fn get_payload(&self) -> Vec<u8> { self.buf.clone() }
+
+    /// Returns the destination ip for outgoing messages or the source ip from incoming messages.
+    pub fn get_ip(&self) -> String { self.ip.clone() }
+
+    pub fn get_type(&self) -> MessageType { self.typ.clone() }
+
+    fn create(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
 		Message {
-			ip : ip.clone(),
-			buf: vec![],
-            typ: MessageType::AckMessage,
+			ip: ip,
+			buf: buf,
+            typ: typ,
 		}
 	}
 }
-
-
 
 
 pub struct Layers {
     encryption_layer: Arc<Encryption>,
-    network_layer   : Box<Network>,
+    network_layer   : Box<Network>
 }
+
 
 impl Layers {
     pub fn default(key: &String, device: &String) -> (Receiver<Message>, Layers) {
 
-        let (tx, rx) = channel::<Message>();
-        let e = Encryption::new(&key);
-        let (ltx, lrx) = channel(); // connection between network and layers
-        let n = Network::new(device.clone(), ltx);
-        (rx, Layers::new(e, n, lrx, tx))
+        // channel between network and this struct
+        let (tx, rx) = channel();
+
+        Layers::new(
+            Encryption::new(key),
+            Network::new(device, tx),
+            rx
+        )
     }
 
-    fn new(
-        e              : Encryption, 
-        n              : Box<Network>,
-        rx_from_network: Receiver<Message>,
-        tx_application : Sender<Message>) -> Layers {
+    pub fn send(&self, msg: Message) -> Result<u64, Errors> {
 
-        let enc = Arc::new(e);
-        let enc_thread = enc.clone();
+        let m = msg.set_payload(self.encryption_layer.encrypt(&msg.buf));
+        self.network_layer.send_msg(m)
+    }
 
-        // thread to handle received messages vi rx_from_network
-        thread::spawn(move || {
-            loop { match rx_from_network.recv() {
-                Ok(msg) => {
-                    match msg.typ {
-                        MessageType::NewMessage => { 
-                            match enc_thread.decrypt(msg.buf) {
-                                Some(buf) => {
-                                    match tx_application.send(Message::new(&msg.ip, buf)) {
-                                        Err(_) => println!("error: could not deliver new message"),
-                                        _      => { }
-                                    }
-                                }
+    fn new(e: Encryption, n: Box<Network>, rx_network: Receiver<Message>) -> (Receiver<Message>, Layers) {
 
-                                None => { println!("{} error: could not decode message", msg.ip) }  // TODO error handling
-                            }
-                        }
-                        MessageType::AckMessage => { 
-                            match tx_application.send(msg) {
-                                Err(_) => println!("error: could not deliver ack"),
-                                _      => { }
-                            }
+        // channel between application and this struct
+        let (tx, rx) = channel::<Message>();
+
+        let l = Layers {
+                    encryption_layer: Arc::new(e),
+                    network_layer: n
+                };
+
+        l.spawn_receiver(tx.clone(), rx_network);
+        (rx, l)
+    }
+
+    fn spawn_receiver(&self, tx: Sender<Message>, rx: Receiver<Message>) {
+
+        let enc = self.encryption_layer.clone();
+
+        thread::spawn(move || { loop { match rx.recv() {
+            Ok(msg) => {
+                match Layers::handle_message(msg, enc.clone()) {
+                    Some(msg) => { 
+                        match tx.send(msg) {
+                            Err(_) => { println!("error: could not deliver received message to application"); }
+                            _ => { }
                         }
                     }
+                    _ => { println!("error: could not handle received message") }
                 }
-                Err(_) => { println!("Failed to receive message."); }
-            }};
-        });
-
-        Layers {
-            encryption_layer: enc,
-            network_layer   : n,
-        }
+            }
+            _ => { println!("error: failed to receive message"); }
+        }}});
     }
 
-    pub fn send(&mut self, msg: Message) -> Result<u64, Errors> {
+    fn handle_message(m: Message, enc: Arc<Encryption>) -> Option<Message> {
 
-        let e = self.encryption_layer.encrypt(msg.buf);
-        let m = Message::new(&msg.ip, e); // TODO is this always a new message?
+        match m.typ {
+            MessageType::NewMessage => { 
+                let buf = enc.decrypt(m.buf.clone());
+                match buf {
+                    Some(buf) => { Some(m.set_payload(buf)) }
+                    None      => { None }
+                }
+            }
 
-        self.network_layer.send_msg(m)
+            MessageType::AckMessage => { Some(m) }
+        }
     }
 }
 

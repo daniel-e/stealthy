@@ -42,7 +42,7 @@ impl Delivery {
         Delivery {
             messages: parts,
             id: id,
-            ip: msg.ip.clone()
+            ip: msg.get_ip()
         }
     }
 

@@ -47,8 +47,8 @@ fn parse_arguments() -> Option<(String, String, String)> {
 /// This function is called when a new message arrives.
 fn new_msg(msg: Message) {
 
-    let ip = msg.ip;
-    let s  = String::from_utf8(msg.buf);
+    let ip = msg.get_ip();
+    let s  = String::from_utf8(msg.get_payload());
     let fm = time::strftime("%R", &time::now()).unwrap();
 
     match s {
@@ -76,12 +76,12 @@ fn recv_loop(rx: Receiver<Message>) {
     thread::spawn(move || { 
         loop { match rx.recv() {
             Ok(msg) => {
-                match msg.typ {
+                match msg.get_type() {
                     MessageType::NewMessage => { new_msg(msg); }
                     MessageType::AckMessage => { ack_msg(msg); }
                 }
             }
-            Err(_)  => { println!("Failed to receive message."); }
+            Err(e)  => { println!("recv_loop: failed to receive message. {:?}", e); }
         }
     }});
 }
@@ -94,7 +94,7 @@ fn main() {
 	let r = parse_arguments();
     let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
 
-    let (rx, mut l) = Layers::default(&key, &device);
+    let (rx, l) = Layers::default(&key, &device);
     recv_loop(rx);
 
 	println!("device is {}, destination ip is {}", device, dstip);
@@ -104,7 +104,7 @@ fn main() {
     while io::stdin().read_line(&mut s).unwrap() != 0 {
         let txt = s.trim_right().to_string();
         if txt.len() > 0 {
-		    let msg = Message::new(&dstip, txt.into_bytes());
+		    let msg = Message::new(dstip.clone(), txt.into_bytes());
     		match l.send(msg) {
     			Ok(_) => {
                     tools::println_colored("transmitting...".to_string(), term::color::BLUE);

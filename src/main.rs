@@ -20,6 +20,7 @@ use icmpmessaging::{Message, IncomingMessage, Errors, Layers};
 use humaninterface::InputOutput;
 use callbacks::Callbacks;
 use humaninterface_std::Std;
+use humaninterface_ncurses::Ncurses;
 
 type HumanInterface = Std;
 

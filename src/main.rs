@@ -44,41 +44,46 @@ fn parse_arguments() -> Option<(String, String, String)> {
 	}
 }
 
-/// This function is called when a new message arrives.
-fn new_msg(msg: Message) {
+struct OutputDevice;
 
-    let ip = msg.get_ip();
-    let s  = String::from_utf8(msg.get_payload());
-    let fm = time::strftime("%R", &time::now()).unwrap();
+impl OutputDevice {
+    /// This function is called when a new message has been received.
+    fn new_msg(&self, msg: Message) {
 
-    match s {
-        Ok(s)  => { tools::println_colored(format!("[{}] {} says: {}", ip, fm, s), term::color::YELLOW); }
-        Err(_) => { 
-            tools::println_colored(format!("[{}] {} error: could not decode message", ip, fm), term::color::BRIGHT_RED); 
+        let ip = msg.get_ip();
+        let s  = String::from_utf8(msg.get_payload());
+        let fm = time::strftime("%R", &time::now()).unwrap();
+
+        match s {
+            Ok(s)  => { tools::println_colored(format!("[{}] {} says: {}", ip, fm, s), term::color::YELLOW); }
+            Err(_) => { 
+                tools::println_colored(format!("[{}] {} error: could not decode message", ip, fm), term::color::BRIGHT_RED); 
+            }
         }
+    }
+
+    /// This callback function is called when the receiver has received the
+    /// message with the given id.
+    ///
+    /// Important note: The acknowledge that is received here is the ack on the
+    /// network layer which is not protected. An
+    /// attacker could drop acknowledges or could fake acknowledges. Therefore,
+    /// it is important that acknowledges are handled on a higher layer where
+    /// they can be protected via cryptographic mechanisms.
+    fn ack_msg(&self, _id: u64) {
+
+        tools::println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
     }
 }
 
-/// This callback function is called when the receiver has received the
-/// message with the given id.
-///
-/// Important notes: Acknowledges are not protected on this layer. An
-/// attacker could drop acknowledges or could fake acknowledges. Therefore,
-/// it is important that acknowledges are handled on a higher layer where
-/// they can be protected via cryptographic mechanisms.
-fn ack_msg(_id: u64) {
-
-    tools::println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
-}
-
-fn recv_loop(rx: Receiver<IncomingMessage>) {
+fn recv_loop(rx: Receiver<IncomingMessage>, o: OutputDevice) {
 
     thread::spawn(move || { 
         loop { match rx.recv() {
             Ok(msg) => {
                 match msg {
-                    IncomingMessage::New(msg) => { new_msg(msg); }
-                    IncomingMessage::Ack(id)  => { ack_msg(id); }
+                    IncomingMessage::New(msg) => { o.new_msg(msg); }
+                    IncomingMessage::Ack(id)  => { o.ack_msg(id); }
                 }
             }
             Err(e)  => { println!("recv_loop: failed to receive message. {:?}", e); }
@@ -95,7 +100,7 @@ fn main() {
     let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
 
     let (rx, l) = Layers::default(&key, &device);
-    recv_loop(rx);
+    recv_loop(rx, OutputDevice);
 
 	println!("device is {}, destination ip is {}", device, dstip);
 	println!("You can now start writing ...\n");

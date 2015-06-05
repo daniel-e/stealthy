@@ -1,5 +1,6 @@
 mod logo;
 mod tools;
+//mod outputcurses;
 
 extern crate getopts;
 extern crate term;
@@ -7,9 +8,12 @@ extern crate icmpmessaging;
 extern crate time;
 
 use std::{env, io};
+use std::ops::Drop;
 use std::sync::mpsc::Receiver;
+use std::sync::Arc;
 use std::thread;
 use getopts::Options;
+use term::color;
 
 use icmpmessaging::{Message, IncomingMessage, Errors, Layers};
 
@@ -44,9 +48,42 @@ fn parse_arguments() -> Option<(String, String, String)> {
 	}
 }
 
-struct OutputDevice;
 
-impl OutputDevice {
+trait OutputDevice {
+    fn println(&self, s: String, color: color::Color);
+}
+
+trait InputDevice {
+    fn read_line(&self) -> Option<String>;
+}
+
+trait Callbacks {
+    fn new_msg(&self, msg: Message);
+    fn ack_msg(&self, id: u64);
+}
+
+
+struct Std;
+
+impl OutputDevice for Std {
+    fn println(&self, s: String, color: color::Color) {
+        tools::println_colored(s, color);
+    }
+}
+
+impl InputDevice for Std {
+    fn read_line(&self) -> Option<String> {
+        let mut s = String::new();
+        match io::stdin().read_line(&mut s) {
+            Ok(n) => {
+                if n != 0 { Some(s) } else { None }
+            }
+            _ => None
+        }
+    }
+}
+
+impl Callbacks for Std {
     /// This function is called when a new message has been received.
     fn new_msg(&self, msg: Message) {
 
@@ -55,9 +92,9 @@ impl OutputDevice {
         let fm = time::strftime("%R", &time::now()).unwrap();
 
         match s {
-            Ok(s)  => { tools::println_colored(format!("[{}] {} says: {}", ip, fm, s), term::color::YELLOW); }
+            Ok(s)  => { self.println(format!("[{}] {} says: {}", ip, fm, s), color::YELLOW); }
             Err(_) => { 
-                tools::println_colored(format!("[{}] {} error: could not decode message", ip, fm), term::color::BRIGHT_RED); 
+                self.println(format!("[{}] {} error: could not decode message", ip, fm), color::BRIGHT_RED); 
             }
         }
     }
@@ -72,11 +109,11 @@ impl OutputDevice {
     /// they can be protected via cryptographic mechanisms.
     fn ack_msg(&self, _id: u64) {
 
-        tools::println_colored("ack".to_string(), term::color::BRIGHT_GREEN);
+        self.println("ack".to_string(), color::BRIGHT_GREEN);
     }
 }
 
-fn recv_loop(rx: Receiver<IncomingMessage>, o: OutputDevice) {
+fn recv_loop(rx: Receiver<IncomingMessage>, o: Arc<Std>) {
 
     thread::spawn(move || { 
         loop { match rx.recv() {
@@ -86,7 +123,7 @@ fn recv_loop(rx: Receiver<IncomingMessage>, o: OutputDevice) {
                     IncomingMessage::Ack(id)  => { o.ack_msg(id); }
                 }
             }
-            Err(e)  => { println!("recv_loop: failed to receive message. {:?}", e); }
+            Err(e)  => { o.println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); }
         }
     }});
 }
@@ -99,27 +136,33 @@ fn main() {
 	let r = parse_arguments();
     let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
 
+    let o = Arc::new(Std);
     let (rx, l) = Layers::default(&key, &device);
-    recv_loop(rx, OutputDevice);
+    recv_loop(rx, o.clone());
 
-	println!("device is {}, destination ip is {}", device, dstip);
-	println!("You can now start writing ...\n");
+	o.println(format!("device is {}, destination ip is {}", device, dstip), color::WHITE);
+	o.println(format!("You can now start writing ...\n"), color::WHITE);
 
-    let mut s = String::new();
-    while io::stdin().read_line(&mut s).unwrap() != 0 {
-        let txt = s.trim_right().to_string();
-        if txt.len() > 0 {
-		    let msg = Message::new(dstip.clone(), txt.into_bytes());
-    		match l.send(msg) {
-    			Ok(_) => {
-                    tools::println_colored("transmitting...".to_string(), term::color::BLUE);
-    			}
-    			Err(e) => { match e {
-    				Errors::MessageTooBig => { println!("main: message too big"); }
-    				Errors::SendFailed => { println!("main: sending failed"); }
-    			}}
-    		}
+    loop {
+        match (*o).read_line() {
+            Some(s) => {
+                let txt = s.trim_right().to_string();
+                if txt.len() > 0 {
+        		    let msg = Message::new(dstip.clone(), txt.into_bytes());
+    	        	match l.send(msg) {
+    			        Ok(_) => {
+                            o.println(format!("transmitting..."), color::BLUE);
+    	        		}
+    			        Err(e) => { match e {
+            				Errors::MessageTooBig => { o.println(format!("main: message too big"), color::RED); }
+    	        			Errors::SendFailed => { o.println(format!("main: sending failed"), color::RED); }
+    			        }}
+            		}
+                }
+            }
+            _ => { break; }
         }
-		s.clear();
-	}
+    }
+
+
 }

@@ -23,6 +23,7 @@ use humaninterface_std::Std;
 use humaninterface_ncurses::Ncurses;
 
 type HumanInterface = Std;
+//type HumanInterface = Ncurses;
 
 
 fn recv_loop(rx: Receiver<IncomingMessage>, o: Arc<HumanInterface>) {
@@ -82,6 +83,8 @@ fn main() {
             _ => { break; }
         }
     }
+
+    o.quit();
 }
 
 

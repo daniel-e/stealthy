@@ -18,6 +18,9 @@ impl Std {
 
 impl InputOutput for Std {
 
+    fn quit(&self) {
+    }
+
     fn println(&self, s: String, color: color::Color) {
         println_colored(s, color);
     }

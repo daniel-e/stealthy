@@ -9,10 +9,9 @@ extern crate getopts;
 extern crate term;
 extern crate icmpmessaging;
 
-use std::env;
+use std::{env, thread};
 use std::sync::mpsc::Receiver;
 use std::sync::Arc;
-use std::thread;
 use getopts::Options;
 use term::color;
 
@@ -26,7 +25,7 @@ type HumanInterface = Std;
 //type HumanInterface = Ncurses;
 
 
-fn recv_loop(rx: Receiver<IncomingMessage>, o: Arc<HumanInterface>) {
+fn recv_loop(o: Arc<HumanInterface>), rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || { 
         loop { match rx.recv() {
@@ -36,35 +35,16 @@ fn recv_loop(rx: Receiver<IncomingMessage>, o: Arc<HumanInterface>) {
                     IncomingMessage::Ack(id)  => { o.ack_msg(id); }
                 }
             }
-            Err(e)  => { o.println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); }
+            Err(e) => { o.println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); }
         }
     }});
 }
 
-
-fn main() {
-    logo::print_logo();
-
-    // parse command line arguments
-	let r = parse_arguments();
-    let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
-
-    // initialize human interface for input and output
-    let o = Arc::new(HumanInterface::new());
-
-    // initialize the network layer
-    let (rx, l) = Layers::default(&key, &device);
-
-    // loop for received messages
-    recv_loop(rx, o.clone());
-
-	o.println(format!("device is {}, destination ip is {}", device, dstip), color::WHITE);
-	o.println(format!("You can now start writing ...\n"), color::WHITE);
+fn input_loop(o: Arc<HumanInterface>, l: Layers, dstip: String) {
 
     // read from human interface until user enters control-d and send the
     // message via the network layer
-    loop {
-        match (*o).read_line() {
+    loop { match (*o).read_line() {
             Some(s) => {
                 let txt = s.trim_right().to_string();
                 if txt.len() > 0 {
@@ -81,10 +61,27 @@ fn main() {
                 }
             }
             _ => { break; }
-        }
-    }
-
+    }}
     o.quit();
+}
+
+fn main() {
+    logo::print_logo();
+
+    // parse command line arguments
+	let r = parse_arguments();
+    let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
+
+    let o       = Arc::new(HumanInterface::new());  // human interface for input and output
+    let (rx, l) = Layers::default(&key, &device);   // network layer
+
+    // this is the loop which handles messages received via rx
+    recv_loop(o.clone(), rx);
+
+	o.println(format!("device is {}, destination ip is {}", device, dstip), color::WHITE);
+	o.println(format!("You can now start writing ...\n"), color::WHITE);
+
+    input_loop(o, l, dstip);
 }
 
 

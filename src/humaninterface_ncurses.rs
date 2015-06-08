@@ -10,7 +10,7 @@ use callbacks::Callbacks;
 
 pub struct Ncurses {
     maxx: i32,
-    maxy: i32
+    maxy: i32,
 }
 
 impl Ncurses {
@@ -33,7 +33,7 @@ impl Ncurses {
 
         Ncurses {
             maxx: max_x,
-            maxy: max_y
+            maxy: max_y,
         }
     }
 

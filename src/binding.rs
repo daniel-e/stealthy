@@ -153,9 +153,7 @@ impl Network {
         }
         if b {
             v.packets.swap_remove(c);
-
-            let m = Message::ack(p.ip.clone());
-            match self.tx_msg.send(IncomingMessage::Ack(p.id)) { // TODO send id of ack
+            match self.tx_msg.send(IncomingMessage::Ack(p.id)) {
                 Err(_) => println!("handle_ack: could not deliver ack to upper layer"),
                 _      => { }
             }

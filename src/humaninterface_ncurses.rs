@@ -5,7 +5,7 @@ use std::io;
 use term::color;
 use self::ncurses::*;
 
-use humaninterface::InputOutput;
+use humaninterface::{Input, Output};
 use callbacks::Callbacks;
 
 pub struct Ncurses {
@@ -53,15 +53,7 @@ impl Ncurses {
     }
 }
 
-impl InputOutput for Ncurses {
-
-    fn quit(&self) {
-        endwin();
-    }
-
-    fn println(&self, s: String, color: color::Color) {
-        // TODO
-    }
+impl Input for Ncurses {
 
     fn read_line(&self) -> Option<String> {
 
@@ -112,6 +104,17 @@ impl InputOutput for Ncurses {
         }
 
         None
+    }
+}
+
+impl Output for Ncurses {
+
+    fn close(&self) {
+        endwin();
+    }
+
+    fn println(&self, s: String, color: color::Color) {
+        // TODO
     }
 }
 

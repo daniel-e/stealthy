@@ -16,7 +16,7 @@ use getopts::Options;
 use term::color;
 
 use icmpmessaging::{Message, IncomingMessage, Errors, Layers};
-use humaninterface::InputOutput;
+use humaninterface::{Input, Output};
 use callbacks::Callbacks;
 use humaninterface_std::Std;
 use humaninterface_ncurses::Ncurses;
@@ -25,7 +25,7 @@ type HumanInterface = Std;
 //type HumanInterface = Ncurses;
 
 
-fn recv_loop(o: Arc<HumanInterface>), rx: Receiver<IncomingMessage>) {
+fn recv_loop(o: Arc<HumanInterface>, rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || { 
         loop { match rx.recv() {
@@ -62,7 +62,7 @@ fn input_loop(o: Arc<HumanInterface>, l: Layers, dstip: String) {
             }
             _ => { break; }
     }}
-    o.quit();
+    o.close();
 }
 
 fn main() {

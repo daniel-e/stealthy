@@ -2,10 +2,10 @@ extern crate time;
 
 use term::color;
 
-use humaninterface::InputOutput;
+use humaninterface::Output;
 use icmpmessaging::Message;
 
-pub trait Callbacks : InputOutput {
+pub trait Callbacks : Output {
 
     /// This function is called when a new message has been received.
     fn new_msg(&self, msg: Message) {

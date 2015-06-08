@@ -8,6 +8,6 @@ pub trait Input {
 
 pub trait Output {
     fn close(&self);
-    fn println(&self, s: String, color: color::Color);
+    fn println(&mut self, s: String, color: color::Color);
 }
 

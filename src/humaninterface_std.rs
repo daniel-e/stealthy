@@ -7,16 +7,24 @@ use humaninterface::{Input, Output};
 use callbacks::Callbacks;
 use tools::println_colored;
 
-pub struct Std;
+pub struct StdIn;
+pub struct StdOut;
 
-impl Std {
+impl StdOut {
 
-    pub fn new() -> Std {
-        Std
+    pub fn new() -> StdOut {
+        StdOut
     }
 }
 
-impl Input for Std {
+impl StdIn {
+
+    pub fn new() -> StdIn {
+        StdIn
+    }
+}
+
+impl Input for StdIn {
 
     fn read_line(&self) -> Option<String> {
         let mut s = String::new();
@@ -29,15 +37,15 @@ impl Input for Std {
     }
 }
 
-impl Output for Std {
+impl Output for StdOut {
 
     fn close(&self) { }
 
-    fn println(&self, s: String, color: color::Color) {
+    fn println(&mut self, s: String, color: color::Color) {
         println_colored(s, color);
     }
 }
 
-impl Callbacks for Std { } // use default implementations
+impl Callbacks for StdOut { } // use default implementations
 
 

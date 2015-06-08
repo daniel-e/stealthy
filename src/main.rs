@@ -8,61 +8,71 @@ mod callbacks;
 extern crate getopts;
 extern crate term;
 extern crate icmpmessaging;
+extern crate time;
 
 use std::{env, thread};
 use std::sync::mpsc::Receiver;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use getopts::Options;
 use term::color;
 
 use icmpmessaging::{Message, IncomingMessage, Errors, Layers};
 use humaninterface::{Input, Output};
 use callbacks::Callbacks;
-use humaninterface_std::Std;
-use humaninterface_ncurses::Ncurses;
+use humaninterface_std::{StdIn, StdOut};
+use humaninterface_ncurses::{NcursesIn, NcursesOut};
 
-type HumanInterface = Std;
-//type HumanInterface = Ncurses;
+//type HiIn = StdIn;
+//type HiOut = StdOut;
+type HiIn = NcursesIn;
+type HiOut = NcursesOut;
 
-
-fn recv_loop(o: Arc<HumanInterface>, rx: Receiver<IncomingMessage>) {
+fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || { 
         loop { match rx.recv() {
             Ok(msg) => {
+                let mut out = o.lock().unwrap();
                 match msg {
-                    IncomingMessage::New(msg) => { o.new_msg(msg); }
-                    IncomingMessage::Ack(id)  => { o.ack_msg(id); }
+                    IncomingMessage::New(msg) => { out.new_msg(msg); }
+                    IncomingMessage::Ack(id)  => { out.ack_msg(id); }
                 }
             }
-            Err(e) => { o.println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); }
+            Err(e) => { 
+                let mut out = o.lock().unwrap();
+                out.println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); 
+            }
         }
     }});
 }
 
-fn input_loop(o: Arc<HumanInterface>, l: Layers, dstip: String) {
+fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 
     // read from human interface until user enters control-d and send the
     // message via the network layer
-    loop { match (*o).read_line() {
+    loop { match i.read_line() {
             Some(s) => {
                 let txt = s.trim_right().to_string();
                 if txt.len() > 0 {
         		    let msg = Message::new(dstip.clone(), txt.into_bytes());
+                    let mut out = o.lock().unwrap();
+                    let fm = time::strftime("%R", &time::now()).unwrap();
+                    out.println(format!("{} [you] says: {}", fm, s), color::WHITE);
     	        	match l.send(msg) {
     			        Ok(_) => {
-                            o.println(format!("transmitting..."), color::BLUE);
+                            out.println(format!("transmitting..."), color::BLUE);
     	        		}
     			        Err(e) => { match e {
-            				Errors::MessageTooBig => { o.println(format!("main: message too big"), color::RED); }
-    	        			Errors::SendFailed => { o.println(format!("main: sending failed"), color::RED); }
+            				Errors::MessageTooBig => { out.println(format!("main: message too big"), color::RED); }
+    	        			Errors::SendFailed => { out.println(format!("main: sending failed"), color::RED); }
     			        }}
             		}
                 }
             }
             _ => { break; }
     }}
-    o.close();
+    let mut out = o.lock().unwrap();
+    out.close();
 }
 
 fn main() {
@@ -72,16 +82,20 @@ fn main() {
 	let r = parse_arguments();
     let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
 
-    let o       = Arc::new(HumanInterface::new());  // human interface for input and output
-    let (rx, l) = Layers::default(&key, &device);   // network layer
+    let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
+    let i = HiIn::new();                           // human interface for input
+    let (rx, l) = Layers::default(&key, &device);  // network layer
 
     // this is the loop which handles messages received via rx
     recv_loop(o.clone(), rx);
 
-	o.println(format!("device is {}, destination ip is {}", device, dstip), color::WHITE);
-	o.println(format!("You can now start writing ...\n"), color::WHITE);
+    {
+        let mut out = o.lock().unwrap();
+    	out.println(format!("device is {}, destination ip is {}", device, dstip), color::WHITE);
+	    out.println(format!("You can now start writing ...\n"), color::WHITE);
+    }
 
-    input_loop(o, l, dstip);
+    input_loop(o.clone(), i, l, dstip);
 }
 
 

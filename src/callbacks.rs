@@ -1,6 +1,7 @@
 extern crate time;
 
 use term::color;
+use std::process::Command;
 
 use humaninterface::Output;
 use icmpmessaging::Message;
@@ -15,7 +16,14 @@ pub trait Callbacks : Output {
         let fm = time::strftime("%R", &time::now()).unwrap();
 
         match s {
-            Ok(s)  => { self.println(format!("{} [{}] says: {}", fm, ip, s), color::YELLOW); }
+            Ok(s)  => { 
+                self.println(format!("{} [{}] says: {}", fm, ip, s), color::YELLOW);
+
+                let output = Command::new("notify-send")
+                    .arg("-t")
+                    .arg("3000")
+                    .arg(format!("new message from {}", ip)).output();
+            }
             Err(_) => { 
                 self.println(format!("[{}] {} error: could not decode message", ip, fm), color::BRIGHT_RED); 
             }

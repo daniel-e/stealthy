@@ -205,7 +205,6 @@ impl Output for NcursesOut {
         wprintw(self.win1.win, &s);
         wprintw(self.win1.win, "\n");
         wattroff(self.win1.win, attr as i32);
-        wrefresh(self.win1.win);
         mv(y, x);
         wrefresh(self.win1.win);
     }

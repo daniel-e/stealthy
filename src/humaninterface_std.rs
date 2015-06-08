@@ -10,8 +10,6 @@ use term::color;
 use humaninterface::{Input, Output};
 #[cfg(not(feature="usencurses"))]
 use callbacks::Callbacks;
-#[cfg(not(feature="usencurses"))]
-use tools::println_colored;
 
 #[cfg(not(feature="usencurses"))]
 pub struct StdIn;
@@ -60,3 +58,16 @@ impl Output for StdOut {
 
 #[cfg(not(feature="usencurses"))]
 impl Callbacks for StdOut { } // use default implementations
+
+
+#[cfg(not(feature="usencurses"))]
+pub fn println_colored(msg: String, color: term::color::Color) {
+
+    let mut t = term::stdout().unwrap();
+    t.fg(color).unwrap();
+    (write!(t, "{}", msg)).unwrap();
+    t.reset().unwrap();
+    (write!(t, "\n")).unwrap();
+}
+
+

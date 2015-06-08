@@ -1,7 +1,6 @@
 extern crate rand;
 
 use super::Message;
-use super::tools;
 
 struct MessagePart {
     buf: Vec<u8>,
@@ -10,7 +9,7 @@ struct MessagePart {
     id : u64
 }
 
-struct Delivery {
+pub struct Delivery {
     messages: Vec<MessagePart>,
     id: u64,
     ip: String
@@ -20,6 +19,7 @@ const MAX_MESSAGE_PART_SIZE: usize = 128;
 
 impl Delivery {
 
+    /// Splits the message into smaller chunks of equal size.
     pub fn new(msg: &Message) -> Delivery {
         
         let     id = rand::random::<u64>();
@@ -46,17 +46,23 @@ impl Delivery {
         }
     }
 
+    // TODO
+    // pub fn transmit ...
+
+    /// Serializes a chunk into a vector which is ready to be transmitted
+    /// via an icmp echo request.
     fn serialize(m: &MessagePart) -> Vec<u8> {
 
         let mut v: Vec<u8> = Vec::new();
-        v.push(1);                                 // version u8
-        tools::push_val(&mut v, m.id, 8);          // id u64
-        tools::push_val(&mut v, m.n as u64, 4);    // number of messages u32
-        tools::push_val(&mut v, m.seq as u64, 4);  // seq u32
-        tools::push_slice(&mut v, &m.buf);         // message: variable len
+        v.push(1);                          // version u8
+        push_val(&mut v, m.id, 8);          // id u64
+        push_val(&mut v, m.n as u64, 4);    // number of messages u32
+        push_val(&mut v, m.seq as u64, 4);  // seq u32
+        push_slice(&mut v, &m.buf);         // message: variable len
         v
     }
 
+    /// Deserialized a received icmp echo request into a chunk.
     fn deserialize(data: &Vec<u8>) -> Option<MessagePart> {
 
         if data.len() < (1 + 8 + 4 + 4) {
@@ -64,15 +70,15 @@ impl Delivery {
         }
 
         let mut v = data.clone();
-        let version = tools::pop_val(&mut v, 1).unwrap();
+        let version = pop_val(&mut v, 1).unwrap();
 
         if version != 1 {
             return None;
         }
 
-        let id: u64 = tools::pop_val(&mut v, 8).unwrap();         // id
-        let n: u32 = tools::pop_val(&mut v, 4).unwrap() as u32;   // number of messages
-        let seq: u32 = tools::pop_val(&mut v, 4).unwrap() as u32; // seq
+        let id: u64 = pop_val(&mut v, 8).unwrap();         // id
+        let n: u32 = pop_val(&mut v, 4).unwrap() as u32;   // number of messages
+        let seq: u32 = pop_val(&mut v, 4).unwrap() as u32; // seq
         
         Some(MessagePart {
             buf: v.clone(),
@@ -82,6 +88,36 @@ impl Delivery {
         })
     }
 }
+
+fn push_slice(v: &mut Vec<u8>, arr: &[u8]) {
+    for i in arr { 
+        v.push(*i) 
+    }
+}
+
+fn push_val(dst: &mut Vec<u8>, val: u64, n: usize) {
+    let mut v = val;
+    let mask = 0xff as u64;
+    for _ in 0..n {
+        let x: u8 = (v & mask) as u8;
+        dst.push(x);
+        v = v >> 8;
+    }
+}
+
+fn pop_val(src: &mut Vec<u8>, n: usize) -> Option<u64> {
+    let mut r: u64 = 0;
+    if src.len() < n {
+        return None;
+    }
+    for i in 0..n {
+        r = r << 8;
+        r = r + (src[n - 1 - i] as u64);
+        src.remove(n - 1 - i); // TODO performance
+    }
+    Some(r)
+}
+
 
 // ------------------------------------------------------------------------
 // TESTS
@@ -215,6 +251,49 @@ mod tests {
         // Check that length check does work.
         x = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         assert!(Delivery::deserialize(&x).is_some());
+    }
+
+    // ========================================================================
+
+    use super::{push_slice, push_val, pop_val};
+
+    #[test]
+    fn test_push_slice() {
+        let mut v: Vec<u8> = Vec::new();
+        push_slice(&mut v, &[1, 2, 3]);
+        assert_eq!(v.len(), 3);
+        assert_eq!(v, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn test_push_val() {
+        let mut v: Vec<u8> = Vec::new();
+
+        push_val(&mut v, 123, 2);
+        assert_eq!(v, vec![123, 0]);
+
+        v.clear();
+        push_val(&mut v, 23 * 256 + 78, 2);
+        assert_eq!(v, vec![78, 23]);
+    }
+
+    #[test]
+    fn test_pop_val() {
+        let mut v: Vec<u8> = vec![1, 2, 3];
+        
+        let mut i = pop_val(&mut v, 4);
+        assert!(!i.is_some());
+
+        v.clear();
+        push_val(&mut v, 17 * 256 + 19, 2);
+        push_val(&mut v, 34, 1);
+        i = pop_val(&mut v, 2);
+        assert_eq!(i.unwrap(), 17 * 256 + 19);
+        assert_eq!(v.len(), 1);
+
+        i = pop_val(&mut v, 1);
+        assert_eq!(i.unwrap(), 34);
+        assert_eq!(v.len(), 0);
     }
 }
 

@@ -4,11 +4,23 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 
-use super::{packet, tools, IncomingMessage, Message, Errors};
+use super::{packet, IncomingMessage, Message, Errors};
 
 const RETRY_TIMEOUT: u32      = 15000;
 const MAX_MESSAGE_SIZE: usize = (10 * 1024);
 
+
+pub fn string_from_cstr(cstr: *const u8) -> String {
+
+	let mut v: Vec<u8> = vec![];
+	let mut i = 0;
+	loop { unsafe {
+		let c = *cstr.offset(i);
+		if c == 0 { break; } else { v.push(c); }
+		i += 1;
+	}}
+	String::from_utf8(v).unwrap()
+}
 
 // Callback functions.------------------------------------------------------------------
 
@@ -16,7 +28,7 @@ const MAX_MESSAGE_SIZE: usize = (10 * 1024);
 extern "C" fn callback(target: *mut Network, buf: *const u8, len: u32, typ: u32, srcip: *const u8) {
 
 	if typ == 0 { // check only ping messages
-		unsafe { (*target).recv_packet(buf, len, tools::string_from_cstr(srcip)); }
+		unsafe { (*target).recv_packet(buf, len, string_from_cstr(srcip)); }
 	}
 }
 

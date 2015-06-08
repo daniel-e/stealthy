@@ -1,6 +1,4 @@
-
 use blowfish;
-use tools;
 
 pub struct Encryption {
     key: String
@@ -16,7 +14,7 @@ impl Encryption {
 
     fn blowfish(&self) -> blowfish::Blowfish {
 
-        let k = tools::from_hex(self.key.clone());
+        let k = from_hex(self.key.clone());
         if k.is_none() {
             println!("Unable to initialize the crypto key.");
         }
@@ -53,6 +51,36 @@ impl Encryption {
         };
         b.decrypt(e, k)
     }
+}
+
+
+fn from_hex(s: String) -> Option<Vec<u8>> {
+
+    let bytes = s.into_bytes();
+
+    if bytes.len() % 2 != 0 {
+        return None
+    }
+
+    let mut v: Vec<u8> = vec![];
+    let mut p: usize = 0;
+    while p < bytes.len() {
+        let mut b: u8 = 0;
+        for _ in 0..2 {
+            b = b << 4;
+            let val = bytes[p];
+            match val {
+                b'A'...b'F' => b += val - b'A' + 10,
+                b'a'...b'f' => b += val - b'a' + 10,
+                b'0'...b'9' => b += val - b'0',
+                _ => { return None; }
+            }
+            p += 1;
+        }
+        v.push(b);
+    }
+
+    Some(v)
 }
 
 
@@ -129,4 +157,25 @@ fn init_encryption() -> Option<Encryption> {
 }
 */
 
+// ------------------------------------------------------------------------
+// TESTS
+// ------------------------------------------------------------------------
 
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_from_hex() {
+        
+        let mut r = super::from_hex("0".to_string());
+        assert!(!r.is_some());
+
+        r = super::from_hex("0001090A0F10".to_string());
+        assert!(r.is_some());
+
+        let o: Vec<u8> = vec![0, 1, 9, 10, 15, 16];
+        let v = r.unwrap();
+        assert!(v.len() == 6);
+        assert_eq!(o, v);
+    }
+}

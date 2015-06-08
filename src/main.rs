@@ -19,12 +19,19 @@ use term::color;
 use icmpmessaging::{Message, IncomingMessage, Errors, Layers};
 use humaninterface::{Input, Output};
 use callbacks::Callbacks;
-use humaninterface_std::{StdIn, StdOut};
-use humaninterface_ncurses::{NcursesIn, NcursesOut};
 
-//type HiIn = StdIn;
-//type HiOut = StdOut;
+#[cfg(not(feature="usencurses"))]
+use humaninterface_std::{StdIn, StdOut};
+#[cfg(not(feature="usencurses"))]
+type HiIn = StdIn;
+#[cfg(not(feature="usencurses"))]
+type HiOut = StdOut;
+
+#[cfg(feature="usencurses")]
+use humaninterface_ncurses::{NcursesIn, NcursesOut};
+#[cfg(feature="usencurses")]
 type HiIn = NcursesIn;
+#[cfg(feature="usencurses")]
 type HiOut = NcursesOut;
 
 fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
@@ -39,8 +46,8 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
                 }
             }
             Err(e) => { 
-                let mut out = o.lock().unwrap();
-                out.println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); 
+                o.lock().unwrap()
+                    .println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); 
             }
         }
     }});
@@ -71,8 +78,7 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
             }
             _ => { break; }
     }}
-    let mut out = o.lock().unwrap();
-    out.close();
+    o.lock().unwrap().close();
 }
 
 fn main() {

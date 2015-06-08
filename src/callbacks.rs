@@ -19,10 +19,14 @@ pub trait Callbacks : Output {
             Ok(s)  => { 
                 self.println(format!("{} [{}] says: {}", fm, ip, s), color::YELLOW);
 
-                let output = Command::new("notify-send")
-                    .arg("-t")
-                    .arg("3000")
-                    .arg(format!("new message from {}", ip)).output();
+                // TODO configure the command
+                if Command::new("notify-send")
+                        .arg("-t")
+                        .arg("3000")
+                        .arg(format!("new message from {}", ip))
+                        .status().is_err() {
+                    self.println(format!("calling notify-send failed"), color::RED);
+                }
             }
             Err(_) => { 
                 self.println(format!("[{}] {} error: could not decode message", ip, fm), color::BRIGHT_RED); 

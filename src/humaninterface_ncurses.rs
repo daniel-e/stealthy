@@ -1,40 +1,51 @@
+#[cfg(feature="usencurses")]
 extern crate term;
+#[cfg(feature="usencurses")]
 extern crate ncurses;
 
-use std::io;
+#[cfg(feature="usencurses")]
 use term::color;
+#[cfg(feature="usencurses")]
 use self::ncurses::*;
 
+#[cfg(feature="usencurses")]
 use humaninterface::{Input, Output};
+#[cfg(feature="usencurses")]
 use callbacks::Callbacks;
 
+#[cfg(feature="usencurses")]
 struct WindowWrapper {
     pub win: WINDOW
 }
 
+#[cfg(feature="usencurses")]
 unsafe impl Send for WindowWrapper { }
 
 
+#[cfg(feature="usencurses")]
 pub struct NcursesOut {
-    maxx: i32,
-    maxy: i32,
-    curx: i32,
-    cury: i32,
     win1: WindowWrapper,
     win2: WindowWrapper
 }
 
+#[cfg(feature="usencurses")]
 pub struct NcursesIn {
     maxx: i32,
     maxy: i32,
 }
 
+#[cfg(feature="usencurses")]
 static COLOR_WHITE_ON_BKGD: i16 = 1;
+#[cfg(feature="usencurses")]
 static COLOR_YELLOW_ON_BKGD: i16 = 2;
+#[cfg(feature="usencurses")]
 static COLOR_RED_ON_BKGD: i16 = 3;
+#[cfg(feature="usencurses")]
 static COLOR_BLUE_ON_BKGD: i16 = 4;
+#[cfg(feature="usencurses")]
 static COLOR_GREEN_ON_BKGD: i16 = 5;
 
+#[cfg(feature="usencurses")]
 impl NcursesOut {
 
     pub fn new() -> NcursesOut {
@@ -45,6 +56,7 @@ impl NcursesOut {
         clear();
         noecho();
         refresh();
+
         //init_color(30, 255 * 4, 255 * 4, 255 * 4);
         init_pair(COLOR_WHITE_ON_BKGD, COLOR_WHITE, -1);
         init_pair(COLOR_YELLOW_ON_BKGD, COLOR_YELLOW, -1);
@@ -68,10 +80,6 @@ impl NcursesOut {
         scrollok(w1.win, true);
 
         NcursesOut {
-            maxx: max_x,
-            maxy: max_y,
-            curx: 0,
-            cury: 0,
             win1: w1,
             win2: w2
         }
@@ -93,6 +101,7 @@ impl NcursesOut {
 }
 
 
+#[cfg(feature="usencurses")]
 impl NcursesIn {
 
     pub fn new() -> NcursesIn {
@@ -121,14 +130,9 @@ impl NcursesIn {
         x
     }
 
-    fn y(&self) -> i32 {
-        let mut x = 0;
-        let mut y = 0;
-        getyx(stdscr, &mut y, &mut x);
-        y
-    }
 }
 
+#[cfg(feature="usencurses")]
 impl Input for NcursesIn {
 
     fn read_line(&self) -> Option<String> {
@@ -178,11 +182,10 @@ impl Input for NcursesIn {
                 mv(self.maxy - 1, 0);
             }
         }
-
-        None
     }
 }
 
+#[cfg(feature="usencurses")]
 impl Output for NcursesOut {
 
     fn close(&self) {
@@ -207,8 +210,10 @@ impl Output for NcursesOut {
         wattroff(self.win1.win, attr as i32);
         mv(y, x);
         wrefresh(self.win1.win);
+        wrefresh(self.win2.win);
     }
 }
 
+#[cfg(feature="usencurses")]
 impl Callbacks for NcursesOut { }
 

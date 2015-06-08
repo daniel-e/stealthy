@@ -9,11 +9,12 @@ build = "build.rs"
 rand = "*"
 libc = "*"
 time = "*"
-log = "*"
 getopts = "*"
 term = "*"
-rustc-serialize = "*"
 
 [dependencies.ncurses]
 git = "https://github.com/jeaye/ncurses-rs.git"
 
+[features]
+default = ["usencurses"]
+usencurses = []

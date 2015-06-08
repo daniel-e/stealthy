@@ -4,10 +4,8 @@ version = "0.0.1"
 dependencies = [
  "getopts 0.2.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "log 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "ncurses 5.73.0 (git+https://github.com/jeaye/ncurses-rs.git)",
  "rand 0.3.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "rustc-serialize 0.3.14 (registry+https://github.com/rust-lang/crates.io-index)",
  "term 0.2.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "time 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -61,11 +59,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "libc 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
-
-[[package]]
-name = "rustc-serialize"
-version = "0.3.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "term"

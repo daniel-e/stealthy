@@ -1,15 +1,24 @@
+#[cfg(not(feature="usencurses"))]
 extern crate term;
 
+#[cfg(not(feature="usencurses"))]
 use std::io;
+#[cfg(not(feature="usencurses"))]
 use term::color;
 
+#[cfg(not(feature="usencurses"))]
 use humaninterface::{Input, Output};
+#[cfg(not(feature="usencurses"))]
 use callbacks::Callbacks;
+#[cfg(not(feature="usencurses"))]
 use tools::println_colored;
 
+#[cfg(not(feature="usencurses"))]
 pub struct StdIn;
+#[cfg(not(feature="usencurses"))]
 pub struct StdOut;
 
+#[cfg(not(feature="usencurses"))]
 impl StdOut {
 
     pub fn new() -> StdOut {
@@ -17,6 +26,7 @@ impl StdOut {
     }
 }
 
+#[cfg(not(feature="usencurses"))]
 impl StdIn {
 
     pub fn new() -> StdIn {
@@ -24,6 +34,7 @@ impl StdIn {
     }
 }
 
+#[cfg(not(feature="usencurses"))]
 impl Input for StdIn {
 
     fn read_line(&self) -> Option<String> {
@@ -37,6 +48,7 @@ impl Input for StdIn {
     }
 }
 
+#[cfg(not(feature="usencurses"))]
 impl Output for StdOut {
 
     fn close(&self) { }
@@ -46,6 +58,5 @@ impl Output for StdOut {
     }
 }
 
+#[cfg(not(feature="usencurses"))]
 impl Callbacks for StdOut { } // use default implementations
-
-

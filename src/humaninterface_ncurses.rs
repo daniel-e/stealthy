@@ -200,6 +200,7 @@ impl Output for NcursesOut {
             color::RED          => COLOR_PAIR(COLOR_RED_ON_BKGD),
             color::BLUE         => COLOR_PAIR(COLOR_BLUE_ON_BKGD),
             color::BRIGHT_RED   => COLOR_PAIR(COLOR_RED_ON_BKGD),
+            color::GREEN        => COLOR_PAIR(COLOR_GREEN_ON_BKGD),
             color::BRIGHT_GREEN => COLOR_PAIR(COLOR_GREEN_ON_BKGD), // TODO bright
             _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD) 
         };

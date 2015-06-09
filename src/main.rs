@@ -82,8 +82,6 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 }
 
 fn main() {
-    logo::print_logo();
-
     // parse command line arguments
 	let r = parse_arguments();
     let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
@@ -97,6 +95,7 @@ fn main() {
 
     {
         let mut out = o.lock().unwrap();
+        out.println(logo::get_logo(), color::GREEN);
     	out.println(format!("device is {}, destination ip is {}", device, dstip), color::WHITE);
 	    out.println(format!("You can now start writing ...\n"), color::WHITE);
     }

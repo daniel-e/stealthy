@@ -58,7 +58,6 @@ impl NcursesOut {
         noecho();
         refresh();
 
-        //init_color(30, 255 * 4, 255 * 4, 255 * 4);
         init_pair(COLOR_WHITE_ON_BKGD, COLOR_WHITE, -1);
         init_pair(COLOR_YELLOW_ON_BKGD, COLOR_YELLOW, -1);
         init_pair(COLOR_RED_ON_BKGD, COLOR_RED, -1);
@@ -67,10 +66,12 @@ impl NcursesOut {
 
         let mut max_x = 0;
         let mut max_y = 0;
+        // the the maximum number of rows and columns
+        // max_y - 1 is the last line on the screen
         getmaxyx(stdscr, &mut max_y, &mut max_x);
 
-        let w1 = WindowWrapper { win: newwin(max_y + 1 - 3, max_x, 0, 0) };
-        let w2 = WindowWrapper { win: newwin(2, max_x, max_y - 2, 0) };
+        let w1 = WindowWrapper { win: newwin(max_y - 2, max_x, 0, 0) };
+        let w2 = WindowWrapper { win: newwin(2, max_x, max_y - 1 - 1, 0) };
 
         wbkgd(w1.win, ' ' as chtype | COLOR_PAIR(1) as chtype);
         for x in 0..max_x {
@@ -86,21 +87,45 @@ impl NcursesOut {
         }
     }
 
-    fn x(&self) -> i32 {
+    fn pos(&self) -> (i32, i32) {
         let mut x = 0;
         let mut y = 0;
         getyx(stdscr, &mut y, &mut x);
-        x
-    }
-
-    fn y(&self) -> i32 {
-        let mut x = 0;
-        let mut y = 0;
-        getyx(stdscr, &mut y, &mut x);
-        y
+        (y, x)
     }
 }
 
+#[cfg(feature="usencurses")]
+impl Output for NcursesOut {
+
+    fn close(&self) {
+        endwin();
+    }
+
+    fn println(&mut self, s: String, color: color::Color) {
+
+        let attr = match color {
+            color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
+            color::RED          => COLOR_PAIR(COLOR_RED_ON_BKGD),
+            color::BLUE         => COLOR_PAIR(COLOR_BLUE_ON_BKGD),
+            color::BRIGHT_RED   => COLOR_PAIR(COLOR_RED_ON_BKGD),
+            color::GREEN        => COLOR_PAIR(COLOR_GREEN_ON_BKGD),
+            color::BRIGHT_GREEN => COLOR_PAIR(COLOR_GREEN_ON_BKGD), // TODO bright
+            _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD) 
+        };
+        let (y, x) = self.pos();
+        wattron(self.win1.win, attr as i32);
+        wprintw(self.win1.win, "\n");
+        wprintw(self.win1.win, &s);
+        wattroff(self.win1.win, attr as i32);
+        mv(y, x);
+        wrefresh(self.win1.win);
+        wrefresh(self.win2.win);
+    }
+}
+
+#[cfg(feature="usencurses")]
+impl Callbacks for NcursesOut { }
 
 #[cfg(feature="usencurses")]
 impl NcursesIn {
@@ -186,36 +211,4 @@ impl Input for NcursesIn {
     }
 }
 
-#[cfg(feature="usencurses")]
-impl Output for NcursesOut {
-
-    fn close(&self) {
-        endwin();
-    }
-
-    fn println(&mut self, s: String, color: color::Color) {
-
-        let attr = match color {
-            color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
-            color::RED          => COLOR_PAIR(COLOR_RED_ON_BKGD),
-            color::BLUE         => COLOR_PAIR(COLOR_BLUE_ON_BKGD),
-            color::BRIGHT_RED   => COLOR_PAIR(COLOR_RED_ON_BKGD),
-            color::GREEN        => COLOR_PAIR(COLOR_GREEN_ON_BKGD),
-            color::BRIGHT_GREEN => COLOR_PAIR(COLOR_GREEN_ON_BKGD), // TODO bright
-            _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD) 
-        };
-        let x = self.x();
-        let y = self.y();
-        wattron(self.win1.win, attr as i32);
-        wprintw(self.win1.win, &s);
-        wprintw(self.win1.win, "\n");
-        wattroff(self.win1.win, attr as i32);
-        mv(y, x);
-        wrefresh(self.win1.win);
-        wrefresh(self.win2.win);
-    }
-}
-
-#[cfg(feature="usencurses")]
-impl Callbacks for NcursesOut { }
 

@@ -11,8 +11,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use crypto::Encryption;  // Implemenation for encryption layer
-use binding::Network;    // Implemenation for network layer
-
+use delivery::Delivery;
+use binding::Network;
 
 pub enum IncomingMessage {
     New(Message),
@@ -78,37 +78,40 @@ impl Message {
 
 pub struct Layers {
     encryption_layer: Arc<Encryption>,
-    network_layer   : Box<Network>
+    delivery_layer  : Delivery
 }
 
 
 impl Layers {
     pub fn default(key: &String, device: &String) -> (Receiver<IncomingMessage>, Layers) {
 
-        // channel between network and this struct
-        let (tx, rx) = channel();
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+
+        // network  tx1 --- incoming message ---> rx1 delivery
+        // delivery tx2 --- incoming message ---> rx2 layers
 
         Layers::new(
             Encryption::new(key),
-            Network::new(device, tx),
-            rx
+            Delivery::new(Network::new(device, tx1), tx2, rx1),
+            rx2
         )
     }
 
     pub fn send(&self, msg: Message) -> Result<u64, Errors> {
 
         let m = msg.set_payload(self.encryption_layer.encrypt(&msg.buf));
-        self.network_layer.send_msg(m)
+        self.delivery_layer.send_msg(m)
     }
 
-    fn new(e: Encryption, n: Box<Network>, rx_network: Receiver<IncomingMessage>) -> (Receiver<IncomingMessage>, Layers) {
+    fn new(e: Encryption, d: Delivery, rx_network: Receiver<IncomingMessage>) -> (Receiver<IncomingMessage>, Layers) {
 
-        // channel between application and this struct
+        // tx is used to send received messages to the application via rx
         let (tx, rx) = channel::<IncomingMessage>();
 
         let l = Layers {
                     encryption_layer: Arc::new(e),
-                    network_layer: n
+                    delivery_layer: d,
                 };
 
         l.spawn_receiver(tx.clone(), rx_network);

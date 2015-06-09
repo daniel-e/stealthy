@@ -1,57 +1,106 @@
 extern crate rand;
 
-use super::Message;
+use std::thread;
+use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{Receiver, Sender};
 
-struct MessagePart {
+use super::{Message, IncomingMessage, Errors};
+use binding::Network;    // Implemenation for network layer
+
+
+struct SmallMessage {
     buf: Vec<u8>,
     seq: u32,
+    id : u64,
     n  : u32,
-    id : u64
+}
+
+struct SmallMessages {
+    messages: Vec<SmallMessage>,
+    ip: String,
+    id: u64
 }
 
 pub struct Delivery {
-    messages: Vec<MessagePart>,
-    id: u64,
-    ip: String
+    pending      : Arc<Mutex<Vec<SmallMessages>>>,
+    tx           : Sender<IncomingMessage>,
+    network_layer: Box<Network>
 }
 
 const MAX_MESSAGE_PART_SIZE: usize = 128;
 
 impl Delivery {
 
-    /// Splits the message into smaller chunks of equal size.
-    pub fn new(msg: &Message) -> Delivery {
-        
-        let     id = rand::random::<u64>();
-        let mut parts: Vec<MessagePart> = Vec::new();
+    /// Via rx1 this layer receives incoming messages from the
+    /// network layer.
+    pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) -> Delivery {
+
+        let mut d = Delivery {
+            pending: Arc::new(Mutex::new(vec![])),
+            tx: tx,
+            network_layer: n
+        };
+
+        d.init_rx(rx);
+        d
+    }
+
+    fn init_rx(&self, rx: Receiver<IncomingMessage>) {
+
+        let tx = self.tx.clone();
+        let queue = self.pending.clone();
+
+		thread::spawn(move || { loop { 
+            let r = rx.recv();
+            match r {
+                // TODO handle splitted messages
+                Ok(msg) => { tx.send(msg); }
+                _ => { } // TODO
+            }
+        }});
+    }
+
+    pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
+
+        let queue = self.pending.clone();
+        let mut pending = queue.lock().unwrap();
+
+        let small_messages = self.split_message(&msg);
+        pending.push(small_messages);
+
+        // TODO
+        self.network_layer.send_msg(msg)
+    }
+
+    fn split_message(&self, msg: &Message) -> SmallMessages {
+
+        let id = rand::random::<u64>();
+        let mut parts: Vec<SmallMessage> = Vec::new();
         let mut i: u32 = 1;
 
         let chunks = msg.buf.chunks(MAX_MESSAGE_PART_SIZE);
         let n = chunks.len();
 
         for win in chunks {
-            parts.push(MessagePart {
+            parts.push(SmallMessage {
                 buf: win.to_vec(),
                 seq: i,
-                n  : n as u32,
-                id : id
+                id: id,
+                n: n as u32,
             });
             i += 1;
         }
 
-        Delivery {
+        SmallMessages {
             messages: parts,
             id: id,
             ip: msg.get_ip()
         }
     }
 
-    // TODO
-    // pub fn transmit ...
-
     /// Serializes a chunk into a vector which is ready to be transmitted
     /// via an icmp echo request.
-    fn serialize(m: &MessagePart) -> Vec<u8> {
+    fn serialize(m: &SmallMessage) -> Vec<u8> {
 
         let mut v: Vec<u8> = Vec::new();
         v.push(1);                          // version u8
@@ -63,7 +112,7 @@ impl Delivery {
     }
 
     /// Deserialized a received icmp echo request into a chunk.
-    fn deserialize(data: &Vec<u8>) -> Option<MessagePart> {
+    fn deserialize(data: &Vec<u8>) -> Option<SmallMessage> {
 
         if data.len() < (1 + 8 + 4 + 4) {
             return None;
@@ -80,11 +129,11 @@ impl Delivery {
         let n: u32 = pop_val(&mut v, 4).unwrap() as u32;   // number of messages
         let seq: u32 = pop_val(&mut v, 4).unwrap() as u32; // seq
         
-        Some(MessagePart {
+        Some(SmallMessage {
             buf: v.clone(),
             seq: seq,
-            n  : n,
-            id : id
+            id : id,
+            n  : n
         })
     }
 }
@@ -126,92 +175,85 @@ fn pop_val(src: &mut Vec<u8>, n: usize) -> Option<u64> {
 #[cfg(test)]
 mod tests {
 
-    use super::{Delivery, MAX_MESSAGE_PART_SIZE, MessagePart};
+    use super::{Delivery, MAX_MESSAGE_PART_SIZE, SmallMessage};
     use std::iter::FromIterator;
 
-    use ::network::Message;
+    use ::Message;
 
     #[test]
-    fn test_new_id() {
-        let m = Message::new("1.2.3.4".to_string(), vec![]);
-        let m1 = Delivery::new(&m);
-        let m2 = Delivery::new(&m);
-        // it should be very unlikely that an ID is equal to zero
-        assert!(m1.id != 0);
-        assert!(m2.id != 0);
-        // check that messages have different IDs
-        assert!(m1.id != m2.id);
+    fn test_new() {
+        
+        let d = Delivery::new();
+        assert_eq!(d.pending.len(), 0);
     }
 
     #[test]
-    fn test_new_small_message() {
+    fn test_split_small_message() {
         
         let data = "hallo".to_string().into_bytes();
-        let msg = Message::new("1.2.3.4".to_string(), data.clone());
-        let s = Delivery::new(&msg);
+        let msg  = Message::new("1.2.3.4".to_string(), data.clone());
+        let s    = Delivery::new();
+        let r    = s.split_message(&msg);
 
         // check that the IP is the same as in the message.
-        assert_eq!(s.ip, "1.2.3.4".to_string());
+        assert_eq!(r.ip, "1.2.3.4".to_string());
         // Check that a random id has been generated.
-        assert!(s.id != 0);
+        assert!(r.id != 0);
         // Check that there is one message.
-        assert!(s.messages.len() == 1);
+        assert!(r.messages.len() == 1);
         // Check that the sequence number of the first message is 1.
-        assert!(s.messages[0].seq == 1);
+        assert!(r.messages[0].seq == 1);
         // Check that the first message is equal to the original message.
-        assert_eq!(s.messages[0].buf, data);
+        assert_eq!(r.messages[0].buf, data);
         
-        assert_eq!(s.messages[0].id, s.id);
-        assert_eq!(s.messages[0].n, 1);
+        assert_eq!(r.messages[0].id, r.id);
+        assert_eq!(r.messages[0].n, 1);
     }
 
     #[test]
-    fn test_new_one_message() {
+    fn test_split_small_message_a() {
 
         let v = (0..MAX_MESSAGE_PART_SIZE).map(|x| x as u8).collect::<Vec<_>>();
         let m = Message::new("1.2.3.4".to_string(), v.clone());
-        let d = Delivery::new(&m);
+        let d = Delivery::new();
+        let r = d.split_message(&m);
 
-        assert_eq!(d.messages.len(), 1);
-        assert_eq!(d.messages[0].buf, v);
-        assert_eq!(d.messages[0].id, d.id);
-        assert_eq!(d.messages[0].n, 1);
+        assert_eq!(r.messages.len(), 1);
+        assert_eq!(r.messages[0].buf, v);
+        assert_eq!(r.messages[0].id, r.id);
+        assert_eq!(r.messages[0].n, 1);
     }
 
     #[test]
-    fn test_new_big_message() {
+    fn test_split_big_message() {
 
-        // Create a message that should be divided into two
-        // pieces.
-        let piece = "0123456789".to_string().into_bytes();
-        let mut data: Vec<u8> = Vec::new();
-        for _ in 0..20 {
-            for i in piece.clone() { data.push(i); }
-        }
-        let msg = Message::new("1.2.3.4".to_string(), data.clone());
-        let s = Delivery::new(&msg);
+        // Create a message that should be divided into two pieces.
+        let v = (0..MAX_MESSAGE_PART_SIZE + 1).map(|x| x as u8).collect::<Vec<_>>();
+        let m = Message::new("1.2.3.4".to_string(), v.clone());
+        let d = Delivery::new();
+        let r = d.split_message(&m);
 
-        assert_eq!(s.ip, "1.2.3.4".to_string());
-        assert!(s.id != 0);
-        assert!(s.messages.len() == 2);
-        assert!(s.messages[0].seq == 1);
-        assert!(s.messages[0].id == s.id);
-        assert!(s.messages[0].n == 2);
-        assert!(s.messages[1].seq == 2);
-        assert!(s.messages[1].id == s.id);
-        assert!(s.messages[1].n == 2);
-        assert!(s.messages[0].buf.len() == super::MAX_MESSAGE_PART_SIZE);
-        assert!(s.messages[1].buf.len() == data.len() - super::MAX_MESSAGE_PART_SIZE);
+        assert_eq!(r.ip, "1.2.3.4".to_string());
+        assert!(r.id != 0);
+        assert!(r.messages.len() == 2);
+        assert!(r.messages[0].seq == 1);
+        assert!(r.messages[0].id == r.id);
+        assert!(r.messages[0].n == 2);
+        assert!(r.messages[1].seq == 2);
+        assert!(r.messages[1].id == r.id);
+        assert!(r.messages[1].n == 2);
+        assert!(r.messages[0].buf.len() == super::MAX_MESSAGE_PART_SIZE);
+        assert!(r.messages[1].buf.len() == 1);
 
-        let (v1, v2) = data.split_at(super::MAX_MESSAGE_PART_SIZE);
-        assert_eq!(s.messages[0].buf, v1);
-        assert_eq!(s.messages[1].buf, v2);
+        let (v1, v2) = v.split_at(super::MAX_MESSAGE_PART_SIZE);
+        assert_eq!(r.messages[0].buf, v1);
+        assert_eq!(r.messages[1].buf, v2);
     }
 
     #[test]
     fn test_de_and_serialize() {
 
-        let mp = MessagePart {
+        let mp = SmallMessage {
             buf: vec![1, 2, 3, 8, 9],
             seq: 211 * 256 + 189,
             n  : (99 * 256 + 134) * 256 + 177,

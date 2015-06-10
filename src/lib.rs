@@ -19,6 +19,8 @@ pub enum IncomingMessage {
     Ack(u64)
 }
 
+unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
+// http://doc.rust-lang.org/std/marker/trait.Sync.html
 
 pub enum MessageType {
     NewMessage,

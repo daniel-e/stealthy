@@ -1,5 +1,8 @@
 extern crate rand;
 
+
+use std::collections::HashMap;
+use std::collections::hash_set::HashSet;
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
@@ -17,12 +20,14 @@ struct SmallMessage {
 
 struct SmallMessages {
     messages: Vec<SmallMessage>,
+    acks: Vec<u64>,  /// pending acks
     ip: String,
     id: u64
 }
 
 pub struct Delivery {
     pending      : Arc<Mutex<Vec<SmallMessages>>>,
+    incoming     : Arc<Mutex<HashMap<u64, Vec<SmallMessage>>>>,
     tx           : Sender<IncomingMessage>,
     network_layer: Box<Network>
 }
@@ -38,7 +43,8 @@ impl Delivery {
         let mut d = Delivery {
             pending: Arc::new(Mutex::new(vec![])),
             tx: tx,
-            network_layer: n
+            network_layer: n,
+            incoming: Arc::new(Mutex::new(HashMap::new())),
         };
 
         d.init_rx(rx);
@@ -47,29 +53,95 @@ impl Delivery {
 
     fn init_rx(&self, rx: Receiver<IncomingMessage>) {
 
-        let tx = self.tx.clone();
-        let queue = self.pending.clone();
+        let tx       = self.tx.clone();
+        let queue    = self.pending.clone();
+        let incoming = self.incoming.clone();
 
 		thread::spawn(move || { loop { 
-            let r = rx.recv();
-            match r {
-                // TODO handle splitted messages
-                Ok(msg) => { tx.send(msg); }
-                _ => { } // TODO
+            match rx.recv() {
+                Ok(msg) => {
+                    match msg {
+                        IncomingMessage::New(m) => { // TODO beautify
+                            match Delivery::deserialize(&m.buf) {
+                                Some(small_msg) => {
+                                    let id    = small_msg.id;
+                                    let n     = small_msg.n;
+                                    let mut i = incoming.lock().unwrap();
+
+                                    if !i.contains_key(&id) {
+                                        i.insert(id, Vec::new());
+                                    }
+
+                                    if let Some(v) = i.get_mut(&id) {
+                                        v.push(small_msg);
+                                        v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
+                                    }
+
+                                    let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
+                                    let b = (1..n + 1).collect::<Vec<u32>>();
+
+                                    if a == b {
+                                        let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
+                                        i.remove(&id);
+                                        tx.send(IncomingMessage::New(Message::new(m.ip, buf)));
+                                    }
+                                }
+                                _ => { } // TODO error handling
+                            }
+                        }
+                        IncomingMessage::Ack(id) => { // TODO beautify
+                            let mut q = queue.lock().unwrap();  // lock guard on Vec<SmallMessages>
+                            let mut idx = 0;
+                            let mut pos = 0;
+                            let mut b = false;
+                            for i in q.iter() {
+                                pos = 0;
+                                for j in &i.acks {
+                                    if *j == id {
+                                        b = true;
+                                        break;
+                                    }
+                                    pos += 1;
+                                }
+                                if b {
+                                    break;
+                                }
+                                idx += 1;
+                            }
+                            if b {
+                                q[idx].acks.swap_remove(pos);
+                                if q[idx].acks.len() == 0 { // received all akcs
+                                    let iid = q[idx].id.clone();
+                                    q.swap_remove(idx);
+                                    tx.send(IncomingMessage::Ack(iid));
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => { } // TODO error handling
             }
         }});
     }
 
     pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
 
-        let queue = self.pending.clone();
-        let mut pending = queue.lock().unwrap();
+        let mut queue          = self.pending.lock().unwrap();
+        let mut small_messages = self.split_message(&msg);
 
-        let small_messages = self.split_message(&msg);
-        pending.push(small_messages);
+        // split messages and send them via the network layer
+        for i in &small_messages.messages {
+            let message = msg.set_payload(Delivery::serialize(i));
 
-        // TODO
-        self.network_layer.send_msg(msg)
+            match self.network_layer.send_msg(message) {
+                Ok(id) => { small_messages.acks.push(id); }
+                Err(e) => { return Err(e); }
+            }
+        }
+
+        let id = small_messages.id;
+        queue.push(small_messages);
+        Ok(id)
     }
 
     fn split_message(&self, msg: &Message) -> SmallMessages {
@@ -94,7 +166,8 @@ impl Delivery {
         SmallMessages {
             messages: parts,
             id: id,
-            ip: msg.get_ip()
+            ip: msg.get_ip(),
+            acks: vec![]
         }
     }
 

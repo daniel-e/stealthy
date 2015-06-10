@@ -2,7 +2,6 @@ extern crate rand;
 
 
 use std::collections::HashMap;
-use std::collections::hash_set::HashSet;
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
@@ -21,7 +20,6 @@ struct SmallMessage {
 struct SmallMessages {
     messages: Vec<SmallMessage>,
     acks: Vec<u64>,  /// pending acks
-    ip: String,
     id: u64
 }
 
@@ -40,7 +38,7 @@ impl Delivery {
     /// network layer.
     pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) -> Delivery {
 
-        let mut d = Delivery {
+        let d = Delivery {
             pending: Arc::new(Mutex::new(vec![])),
             tx: tx,
             network_layer: n,
@@ -77,13 +75,16 @@ impl Delivery {
                                         v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
                                     }
 
+                                    // TODO check that IP is the same
                                     let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
                                     let b = (1..n + 1).collect::<Vec<u32>>();
 
                                     if a == b {
                                         let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
                                         i.remove(&id);
-                                        tx.send(IncomingMessage::New(Message::new(m.ip, buf)));
+                                        if tx.send(IncomingMessage::New(Message::new(m.ip, buf))).is_err() {
+                                            // TODO error handling
+                                        }
                                     }
                                 }
                                 _ => { } // TODO error handling
@@ -113,7 +114,9 @@ impl Delivery {
                                 if q[idx].acks.len() == 0 { // received all akcs
                                     let iid = q[idx].id.clone();
                                     q.swap_remove(idx);
-                                    tx.send(IncomingMessage::Ack(iid));
+                                    if tx.send(IncomingMessage::Ack(iid)).is_err() {
+                                        // TODO error handling
+                                    }
                                 }
                             }
                         }
@@ -166,7 +169,6 @@ impl Delivery {
         SmallMessages {
             messages: parts,
             id: id,
-            ip: msg.get_ip(),
             acks: vec![]
         }
     }
@@ -268,8 +270,6 @@ mod tests {
         let s    = Delivery::new();
         let r    = s.split_message(&msg);
 
-        // check that the IP is the same as in the message.
-        assert_eq!(r.ip, "1.2.3.4".to_string());
         // Check that a random id has been generated.
         assert!(r.id != 0);
         // Check that there is one message.
@@ -306,7 +306,6 @@ mod tests {
         let d = Delivery::new();
         let r = d.split_message(&m);
 
-        assert_eq!(r.ip, "1.2.3.4".to_string());
         assert!(r.id != 0);
         assert!(r.messages.len() == 2);
         assert!(r.messages[0].seq == 1);

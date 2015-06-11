@@ -4,13 +4,12 @@ mod crypto;
 mod delivery;
 mod packet;
 mod rsa;
-mod tools;
 
 use std::thread;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crypto::Encryption;  // Implemenation for encryption layer
+use crypto::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
 use delivery::Delivery;
 use binding::Network;
 
@@ -77,9 +76,10 @@ impl Message {
 	}
 }
 
+type EncryptionType = Encryption;
 
 pub struct Layers {
-    encryption_layer: Arc<Encryption>,
+    encryption_layer: Arc<Box<EncryptionType>>,
     delivery_layer  : Delivery
 }
 
@@ -94,7 +94,24 @@ impl Layers {
         // delivery tx2 --- incoming message ---> rx2 layers
 
         Layers::new(
-            Encryption::new(key),
+            Box::new(SymmetricEncryption::new(key)),
+            Delivery::new(Network::new(device, tx1), tx2, rx1),
+            rx2
+        )
+    }
+
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> (Receiver<IncomingMessage>, Layers) {
+
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+
+        // network  tx1 --- incoming message ---> rx1 delivery
+        // delivery tx2 --- incoming message ---> rx2 layers
+
+        let e = AsymmetricEncryption::new(&pubkey_file, &privkey_file).unwrap(); // TODO XXX error
+        
+        Layers::new(
+            Box::new(e),
             Delivery::new(Network::new(device, tx1), tx2, rx1),
             rx2
         )
@@ -106,7 +123,7 @@ impl Layers {
         self.delivery_layer.send_msg(m)
     }
 
-    fn new(e: Encryption, d: Delivery, rx_network: Receiver<IncomingMessage>) -> (Receiver<IncomingMessage>, Layers) {
+    fn new(e: Box<EncryptionType>, d: Delivery, rx_network: Receiver<IncomingMessage>) -> (Receiver<IncomingMessage>, Layers) {
 
         // tx is used to send received messages to the application via rx
         let (tx, rx) = channel::<IncomingMessage>();
@@ -140,7 +157,7 @@ impl Layers {
         }}});
     }
 
-    fn handle_message(m: IncomingMessage, enc: Arc<Encryption>) -> Option<IncomingMessage> {
+    fn handle_message(m: IncomingMessage, enc: Arc<Box<EncryptionType>>) -> Option<IncomingMessage> {
 
         match m {
             IncomingMessage::New(msg) => {

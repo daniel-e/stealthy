@@ -1,5 +1,4 @@
 mod logo;
-mod tools;
 mod humaninterface;
 mod humaninterface_std;
 mod humaninterface_ncurses;
@@ -84,11 +83,16 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 fn main() {
     // parse command line arguments
 	let r = parse_arguments();
-    let (device, dstip, key) = if r.is_some() { r.unwrap() } else { return };
+    let args = if r.is_some() { r.unwrap() } else { return };
 
     let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
     let i = HiIn::new();                           // human interface for input
-    let (rx, l) = Layers::default(&key, &device);  // network layer
+    let (rx, l) = 
+        if args.pub_priv_mode {
+            Layers::asymmetric(&args.pubkey_file, &args.privkey_file, &args.device)  // network layer
+        } else {
+            Layers::default(&args.secret_key, &args.device)  // network layer
+        };
 
     // this is the loop which handles messages received via rx
     recv_loop(o.clone(), rx);
@@ -96,17 +100,25 @@ fn main() {
     {
         let mut out = o.lock().unwrap();
         out.println(logo::get_logo(), color::GREEN);
-    	out.println(format!("device is {}, destination ip is {}", device, dstip), color::WHITE);
+    	out.println(format!("device is {}, destination ip is {}", args.device, args.dstip), color::WHITE);
 	    out.println(format!("You can now start writing ...\n"), color::WHITE);
     }
 
-    input_loop(o.clone(), i, l, dstip);
+    input_loop(o.clone(), i, l, args.dstip);
 }
 
+struct Arguments {
+    pub device: String,
+    pub dstip: String,
+    pub pub_priv_mode: bool,
+    pub secret_key: String,
+    pub pubkey_file: String,
+    pub privkey_file: String,
+}
 
-fn parse_arguments() -> Option<(String, String, String)> {
+fn parse_arguments() -> Option<Arguments> {
 
-    static DEFAULT_ENCRYPTION_KEY: &'static str = "11111111111111111111111111111111";
+    static DEFAULT_SECRET_KEY: &'static str = "11111111111111111111111111111111";
 
 	// parse comand line options
 	let args : Vec<String> = env::args().collect();
@@ -115,6 +127,8 @@ fn parse_arguments() -> Option<(String, String, String)> {
 	opts.optopt("i", "dev", "set the device where to listen for messages", "device");
 	opts.optopt("d", "dst", "set the IP where messages are sent to", "IP");
 	opts.optopt("e", "enc", "set the encryption key", "key");
+	opts.optopt("r", "recipient", "public key in PEM format used for encryption", "filename");
+	opts.optopt("p", "priv", "private key in PEM format used for decryption", "filename");
 	opts.optflag("h", "help", "print this message");
 
 	let matches = match opts.parse(&args[1..]) {
@@ -122,15 +136,23 @@ fn parse_arguments() -> Option<(String, String, String)> {
 		Err(f) => { panic!(f.to_string()) }
 	};
 
-	if matches.opt_present("h") {
+    let pub_priv_mode = matches.opt_present("r") || matches.opt_present("p");
+
+	if matches.opt_present("h") ||
+            (pub_priv_mode && !(matches.opt_present("r") && matches.opt_present("p"))) {
+            
 		let brief = format!("Usage: {} [options]", args[0]);
 		println!("{}", opts.usage(&brief));
 		None
 	} else {		
-		let device = matches.opt_str("i").unwrap_or("lo".to_string());
-		let dstip = matches.opt_str("d").unwrap_or("127.0.0.1".to_string());
-        let key = matches.opt_str("e").unwrap_or(DEFAULT_ENCRYPTION_KEY.to_string());
-		Some((device, dstip, key))
+        Some(Arguments {
+            device: matches.opt_str("i").unwrap_or("lo".to_string()),
+            dstip: matches.opt_str("d").unwrap_or("127.0.0.1".to_string()),
+            secret_key: matches.opt_str("e").unwrap_or(DEFAULT_SECRET_KEY.to_string()),
+            pub_priv_mode: pub_priv_mode,
+            pubkey_file: matches.opt_str("r").unwrap_or("".to_string()),
+            privkey_file: matches.opt_str("p").unwrap_or("".to_string()),
+        })
 	}
 }
 

@@ -1,13 +1,31 @@
-use blowfish;
+use std::fs::File;
+use std::io::Read;
 
-pub struct Encryption {
+use blowfish;
+use blowfish::EncryptionResult;
+use rsa;
+
+pub trait Encryption : Send + Sync {
+    fn encrypt(&self, v: &Vec<u8>) -> Vec<u8>;
+    fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>>;
+}
+
+
+pub struct SymmetricEncryption {
     key: String
 }
 
-impl Encryption {
+pub struct AsymmetricEncryption {
+    pub_key: String,
+    priv_key: String
+}
 
-    pub fn new(key: &String) -> Encryption {
-        Encryption {
+// ---------------------------------
+
+impl SymmetricEncryption {
+
+    pub fn new(key: &String) -> SymmetricEncryption {
+        SymmetricEncryption {
             key: key.clone()
         }
     }
@@ -20,11 +38,14 @@ impl Encryption {
         }
         blowfish::Blowfish::from_key(k.unwrap()).unwrap()
     }
+}
 
-    pub fn encrypt(&self, v: &Vec<u8>) -> Vec<u8> {
+impl Encryption for SymmetricEncryption {
+
+    fn encrypt(&self, v: &Vec<u8>) -> Vec<u8> {
 
         let mut b = self.blowfish();
-        let er    = b.encrypt(v.clone());
+        let er    = b.encrypt(v);
         let mut r = er.iv;
 
         for i in er.ciphertext {
@@ -33,7 +54,7 @@ impl Encryption {
         r
     }
 
-    pub fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>> {
+    fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>> {
 
         let mut b = self.blowfish();
         let k     = b.key();
@@ -53,6 +74,115 @@ impl Encryption {
     }
 }
 
+impl AsymmetricEncryption {
+
+    pub fn new(pubkey_file: &str, privkey_file: &str) -> Option<AsymmetricEncryption> {
+
+        match read_file(pubkey_file) {
+            Some(pubkey) => {
+                match read_file(privkey_file) {
+                    Some(privkey) => Some(AsymmetricEncryption {
+                            pub_key: pubkey,
+                            priv_key: privkey
+                        }),
+                    _ => None
+                }
+            }
+            _ => None
+        }
+    }
+}
+
+impl Encryption for AsymmetricEncryption {
+
+    fn encrypt(&self, v: &Vec<u8>) -> Vec<u8> {
+        // 1. generate a random key and encrypt with blowfish -> ciphertext1, iv, key
+        // 2. encrypt iv + key with public key -> ciphertext2
+        // 3. return ciphertext2 + ciphertext1
+
+        let mut blowfish = blowfish::Blowfish::new();
+        let er = blowfish.encrypt(v);
+
+        let iv = er.iv;
+        let ciphertext1: Vec<u8> = er.ciphertext;
+        let key = blowfish.key();
+
+        let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
+        let mut data = to_hex(iv);
+        data.push_str(":");
+        data.push_str(&to_hex(key));
+        let ciphertext2: Option<Vec<u8>> = r.encrypt(data.into_bytes());
+
+        match ciphertext2 {
+            Some(cipher) => {
+                let mut c = String::new();
+                c.push_str(&to_hex(ciphertext1));  // TODO use more efficient encoding
+                c.push_str(":");
+                c.push_str(&to_hex(cipher));
+                c.into_bytes()
+            }
+            _ => { vec![] } // TODO error handling
+        }
+    }
+
+    fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>> {
+
+        match String::from_utf8(v) {
+            Ok(cipher) => {
+                let dec: Vec<&str> = cipher.split(':').collect();
+                if dec.len() != 2 {
+                    return None;
+                }
+                match from_hex(dec[0].to_string()) {
+                    Some(ciphertext) => {
+                        match from_hex(dec[1].to_string()) {
+                            Some(cipher_iv_key) => {
+                                let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
+                                let raw_iv_key = r.decrypt(cipher_iv_key);
+                                if raw_iv_key.is_none() {
+                                    return None;
+                                }
+                                match String::from_utf8(raw_iv_key.unwrap()) {
+                                    Ok(hex_str_iv_key) => {
+                                        let iv_key: Vec<&str> = hex_str_iv_key.split(':').collect();
+                                        if iv_key.len() != 2 {
+                                            return None;
+                                        }
+                                        let hex_str_iv = iv_key[0].to_string();
+                                        let hex_str_key = iv_key[1].to_string();
+                                        match from_hex(hex_str_iv) {
+                                            Some(iv) => {
+                                                match from_hex(hex_str_key) {
+                                                    Some(key) => {
+                                                        let er = EncryptionResult {
+                                                            iv: iv,
+                                                            ciphertext: ciphertext
+                                                        };
+                                                        let mut b = blowfish::Blowfish::new();
+                                                        b.decrypt(er, key)
+                                                    }
+                                                    _ => None
+                                                }
+                                            }
+                                            _ => None
+                                        }
+                                    }
+                                    _ => None
+                                }
+                            }
+                            _ => None
+                        }
+                    }
+                    _ => None
+                }
+            }
+            _ => None
+        }
+    }
+ 
+}
+
+// ------------------------------------------------------------------
 
 fn from_hex(s: String) -> Option<Vec<u8>> {
 
@@ -83,79 +213,30 @@ fn from_hex(s: String) -> Option<Vec<u8>> {
     Some(v)
 }
 
+pub fn to_hex(v: Vec<u8>) -> String {
 
-/*
-pub struct Encryption {
-    blowfish: blowfish::Blowfish,
-    rsa: rsa::RSAenc
+    let mut s = String::new();
+    for i in v {
+        s.push_str(&format!("{:02X}", i));
+    }
+    s
 }
 
-impl Encryption {
+pub fn read_file(fname: &str) -> Option<String> {
 
-    pub fn new(pubkey_pem: String, privkey_pem: String) -> Encryption {
-
-        Encryption {
-            rsa: rsa::RSAenc::new(Some(pubkey_pem), Some(privkey_pem)),
-            blowfish: blowfish::Blowfish::new()
+    let r = File::open(fname);
+    match r {
+        Ok(mut file) => {
+            let mut s = String::new();
+            match file.read_to_string(&mut s) {
+                Ok(_) => { Some(s) }
+                _ => { None }
+            }
         }
-    }
-
-    pub fn encrypt(&mut self, msg: Vec<u8>) -> Option<String> {
-
-        // encrypt message with blowfish
-        let mut r = self.blowfish.encrypt(msg);  // cipher + iv
-        let k = self.blowfish.key();         // symmetric key
-
-        // encrypt the symmetric encryption with RSA
-        let key_cipher = self.rsa.encrypt(k);
-        if !key_cipher.is_some() {
-            return None;
-        }
-
-        //Some(tools::to_hex(r.iv) + ":" + tools::to_hex(r.ciphertext) + ":" + tools::to_hex(key_cipher.unwrap()))
-        None
+        _ => { None }
     }
 }
 
-// ------------------------------------------------------------------------
-// TESTS
-// ------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-
-    use super::tools;
-
-    #[test]
-    fn test_bla() {
-
-    }
-
-    
-    }
-*/
-
-
-
-/*
-fn init_encryption() -> Option<Encryption> {
-
-    // TODO hard coded
-    let pubkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_pub.pem";
-    let privkey_file = "/home/dz/Dropbox/github/icmpmessaging-rs/testdata/rsa_priv.pem";
-
-    let pubkey = crypto::tools::read_file(pubkey_file);
-    let privkey = crypto::tools::read_file(privkey_file);
-
-    match pubkey.is_some() && privkey.is_some() {
-        false => {
-            println!("Could not read all required keys.");
-            None
-        }
-        true  => { Some(Encryption::new(pubkey.unwrap(), privkey.unwrap())) }
-    }
-}
-*/
 
 // ------------------------------------------------------------------------
 // TESTS
@@ -177,5 +258,43 @@ mod tests {
         let v = r.unwrap();
         assert!(v.len() == 6);
         assert_eq!(o, v);
+    }
+
+    #[test]
+    fn test_to_hex() {
+        
+        let v: Vec<u8> = vec![0, 1, 9, 10, 15, 16];
+        assert_eq!("0001090A0F10", super::to_hex(v));
+    }
+
+    // --------------------------------------------------------------
+ 
+    use super::{Encryption, AsymmetricEncryption};
+
+    #[test]
+    fn test_asymmetric_encryption() {
+        
+        let a = AsymmetricEncryption::new("testdata/rsa_pub.pem", "testdata/rsa_priv.pem");
+        assert!(a.is_some());
+
+        let b = AsymmetricEncryption::new("testdata/rsa_pub.pem", "abc");
+        assert!(b.is_none());
+
+    }
+
+    #[test]
+    fn test_asymmetric_encryp_decrypt() {
+        
+        let a = AsymmetricEncryption::new("testdata/rsa_pub.pem", "testdata/rsa_priv.pem");
+        assert!(a.is_some());
+        match a {
+            Some(a) => {
+                let plain  = "hello".to_string().into_bytes();
+                let cipher = a.encrypt(&plain);
+                let p      = a.decrypt(cipher).unwrap();
+                assert_eq!(plain, p);
+            }
+            _ => { }
+        }
     }
 }

@@ -102,7 +102,7 @@ impl Blowfish {
         iv
     }
 
-    pub fn encrypt(&mut self, data: Vec<u8>) -> EncryptionResult {
+    pub fn encrypt(&mut self, data: &Vec<u8>) -> EncryptionResult {
 
         self.setup_key();
 
@@ -210,7 +210,7 @@ mod tests {
         let v = "123456789".to_string().into_bytes();
         print_u8_vector(v.clone(), "plaintext: ");
 
-        let r = b.encrypt(v);
+        let r = b.encrypt(&v);
 
         print_u8_vector(r.iv.clone(), "iv       : ");
         print_u8_vector(r.ciphertext.clone(), "cipher   : ");

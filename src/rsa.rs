@@ -184,10 +184,11 @@ impl RSAenc {
         self.crypt(cipher, CryptOperation::Decrypt)
     }
 
-    pub fn new(pubkey: Option<String>, privkey: Option<String>) -> RSAenc {
+    pub fn new(pubkey: String, privkey: String) -> RSAenc {
 
-        let rsapub = RSAenc::rsa_pubkey(pubkey.unwrap()).unwrap();
-        let rsapriv = RSAenc::rsa_privkey(privkey.unwrap()).unwrap();
+        // TODO error handling
+        let rsapub = RSAenc::rsa_pubkey(pubkey).unwrap();
+        let rsapriv = RSAenc::rsa_privkey(privkey).unwrap();
 
         RSAenc {
             rsapub: rsapub,
@@ -233,7 +234,7 @@ fn test_encryption() {
     let pubkey = read_file("testdata/rsa_pub.pem").unwrap();
     let privkey = read_file("testdata/rsa_priv.pem").unwrap();
 
-    let mut rsa = super::RSAenc::new(Some(pubkey), Some(privkey));
+    let mut rsa = super::RSAenc::new(pubkey, privkey);
     let plain   = "hello".to_string();
 
     let cipher = rsa.encrypt(plain.clone().into_bytes()).unwrap();

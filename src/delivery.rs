@@ -255,6 +255,8 @@ mod tests {
 
     use ::Message;
 
+    // TODO
+    /*
     #[test]
     fn test_new() {
         
@@ -366,7 +368,7 @@ mod tests {
         x = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         assert!(Delivery::deserialize(&x).is_some());
     }
-
+*/
     // ========================================================================
 
     use super::{push_slice, push_val, pop_val};

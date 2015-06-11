@@ -5,6 +5,8 @@ Stealthy is a small chat application for the console which uses ICMP echo reques
 
 ## Installation
 
+### From Sources
+
 Before you can use stealthy you need some packages to compile successfully. When you're running Ubuntu you can install the packages as follows:
 
 ```sudo apt-get install build-essential libpcap-dev libssl-dev libncursesw5-dev```
@@ -28,5 +30,13 @@ export LD_LIBRARY_PATH=/opt/rust/lib/:$LD_LIBRARY_PATH
 
 Now, that you have installed all requirements you can compile stealthy as follows:
 
+```bash
+# checkout the sources
+git clone https://github.com/daniel-e/icmpmessaging-rs.git
 
+# build the sources
+cd icmpmessaging-rs
+cargo build
+```
 
+You can now start stealthy with the command ```sudo ./target/debug/icmpmessaging```.

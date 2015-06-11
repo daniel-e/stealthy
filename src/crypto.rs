@@ -7,7 +7,7 @@ use rsa;
 
 pub trait Encryption : Send + Sync {
     fn encrypt(&self, v: &Vec<u8>) -> Vec<u8>;
-    fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>>;
+    fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>>;
 }
 
 
@@ -54,7 +54,7 @@ impl Encryption for SymmetricEncryption {
         r
     }
 
-    fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>> {
+    fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
 
         let mut b = self.blowfish();
         let k     = b.key();
@@ -125,9 +125,9 @@ impl Encryption for AsymmetricEncryption {
         }
     }
 
-    fn decrypt(&self, v: Vec<u8>) -> Option<Vec<u8>> {
+    fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
 
-        match String::from_utf8(v) {
+        match String::from_utf8(v.clone()) {
             Ok(cipher) => {
                 let dec: Vec<&str> = cipher.split(':').collect();
                 if dec.len() != 2 {
@@ -291,7 +291,7 @@ mod tests {
             Some(a) => {
                 let plain  = "hello".to_string().into_bytes();
                 let cipher = a.encrypt(&plain);
-                let p      = a.decrypt(cipher).unwrap();
+                let p      = a.decrypt(&cipher).unwrap();
                 assert_eq!(plain, p);
             }
             _ => { }

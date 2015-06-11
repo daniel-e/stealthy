@@ -13,9 +13,15 @@ use crypto::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Impleme
 use delivery::Delivery;
 use binding::Network;
 
+pub enum ErrorType {
+    DecryptionError,
+    ReceiveError,
+}
+
 pub enum IncomingMessage {
     New(Message),
-    Ack(u64)
+    Ack(u64),
+    Error(ErrorType, String),
 }
 
 unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
@@ -76,45 +82,29 @@ impl Message {
 	}
 }
 
-type EncryptionType = Encryption;
+pub struct Layer {
+    pub rx    : Receiver<IncomingMessage>,
+    pub layers: Layers,
+}
+
 
 pub struct Layers {
-    encryption_layer: Arc<Box<EncryptionType>>,
+    encryption_layer: Arc<Box<Encryption>>,
     delivery_layer  : Delivery
 }
 
 
 impl Layers {
-    pub fn symmetric(key: &String, device: &String) -> Option<(Receiver<IncomingMessage>, Layers)> {
 
-        let (tx1, rx1) = channel();
-        let (tx2, rx2) = channel();
+    pub fn symmetric(key: &String, device: &String) -> Option<Layer> {
 
-        // network  tx1 --- incoming message ---> rx1 delivery
-        // delivery tx2 --- incoming message ---> rx2 layers
-
-        Some(Layers::new(
-            Box::new(SymmetricEncryption::new(key)),
-            Delivery::new(Network::new(device, tx1), tx2, rx1),
-            rx2
-        ))
+        Layers::init(Box::new(SymmetricEncryption::new(key)), device)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Option<(Receiver<IncomingMessage>, Layers)> {
-
-        let (tx1, rx1) = channel();
-        let (tx2, rx2) = channel();
-
-        // network  tx1 --- incoming message ---> rx1 delivery
-        // delivery tx2 --- incoming message ---> rx2 layers
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Option<Layer> {
 
         match AsymmetricEncryption::new(&pubkey_file, &privkey_file) {
-            Some(e) =>
-                Some(Layers::new(
-                    Box::new(e),
-                    Delivery::new(Network::new(device, tx1), tx2, rx1),
-                    rx2
-                )),
+            Some(e) => Layers::init(Box::new(e), device),
             _ => None
         }
     }
@@ -125,55 +115,90 @@ impl Layers {
         self.delivery_layer.send_msg(m)
     }
 
-    fn new(e: Box<EncryptionType>, d: Delivery, rx_network: Receiver<IncomingMessage>) -> (Receiver<IncomingMessage>, Layers) {
+    // ------ private functions
+
+    fn init(e: Box<Encryption>, device: &String) -> Option<Layer> {
+
+        // network  tx1 --- incoming message ---> rx1 delivery
+        // delivery tx2 --- incoming message ---> rx2 layers
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+        Some(Layers::new(e,
+            Delivery::new(Network::new(device, tx1), tx2, rx1),
+            rx2
+        ))
+    }
+
+    fn new(e: Box<Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>) -> Layer {
 
         // tx is used to send received messages to the application via rx
         let (tx, rx) = channel::<IncomingMessage>();
 
         let l = Layers {
-                    encryption_layer: Arc::new(e),
-                    delivery_layer: d,
-                };
+            encryption_layer: Arc::new(e),
+            delivery_layer: d,
+        };
 
-        l.spawn_receiver(tx.clone(), rx_network);
-        (rx, l)
+        l.recv_loop(tx, rx_network);
+        Layer {
+            rx: rx,
+            layers: l
+        }
     }
 
-    fn spawn_receiver(&self, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) {
+    /// Listens for incoming messages and processes them.
+    fn recv_loop(&self, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) {
 
         let enc = self.encryption_layer.clone();
-
         thread::spawn(move || { loop { match rx.recv() {
-            Ok(msg) => {
-                match Layers::handle_message(msg, enc.clone()) {
-                    Some(msg) => { 
-                        match tx.send(msg) {
-                            Err(_) => { println!("error: could not deliver received message to application"); }
-                            _ => { }
-                        }
-                    }
-                    _ => { println!("error: could not handle received message") }
-                }
-            }
-            _ => { println!("error: failed to receive message"); }
+            Ok(msg) => match Layers::handle_message(msg, enc.clone()) {
+                Some(m) => match tx.send(m) {
+                    Err(_) => panic!("Channel closed."),
+                    _ => { }
+                },
+                _ => Layers::err(ErrorType::DecryptionError, "Could not decrypt received message.", &tx)
+            },
+            _ => Layers::err(ErrorType::ReceiveError, "Could not receive message.", &tx)
         }}});
     }
 
-    fn handle_message(m: IncomingMessage, enc: Arc<Box<EncryptionType>>) -> Option<IncomingMessage> {
+    /// Notifies the application about an error.
+    fn err(e: ErrorType, msg: &str, tx: &Sender<IncomingMessage>) {
+
+        match tx.send(IncomingMessage::Error(e, msg.to_string())) {
+            Ok(_) => { }
+            // If the receiver has hung up quit the application.
+            _ => panic!("Channel closed.")
+        }
+    }
+
+    /// Decrypts incoming messages of type "new" or returns the message without
+    /// modification if it is not of type "new".
+    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>) -> Option<IncomingMessage> {
 
         match m {
             IncomingMessage::New(msg) => {
-                let buf = enc.decrypt(msg.buf.clone());
-                match buf {
-                    Some(buf) => { Some(IncomingMessage::New(msg.set_payload(buf))) }
-                    _ => { None }
+                match enc.decrypt(&msg.buf) {
+                    Some(buf) => Some(IncomingMessage::New(msg.set_payload(buf))),
+                    _ => None
                 }
             }
-
-            IncomingMessage::Ack(_) => { Some(m) }
+            _ => Some(m)
         }
     }
 }
 
 
+// ------------------------------------------------------------------------
+// TESTS
+// ------------------------------------------------------------------------
 
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_handle_message() {
+
+
+    }
+}

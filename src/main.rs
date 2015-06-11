@@ -40,8 +40,9 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
             Ok(msg) => {
                 let mut out = o.lock().unwrap();
                 match msg {
-                    IncomingMessage::New(msg) => { out.new_msg(msg); }
-                    IncomingMessage::Ack(id)  => { out.ack_msg(id); }
+                    IncomingMessage::New(msg) =>    { out.new_msg(msg); }
+                    IncomingMessage::Ack(id)  =>    { out.ack_msg(id); }
+                    IncomingMessage::Error(_, s) => { out.err_msg(s); }
                 }
             }
             Err(e) => { 
@@ -99,13 +100,13 @@ fn main() {
         return;
     }
 
-    let (rx, l) = ret.unwrap();
+    let layer = ret.unwrap();
 
     let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
     let i = HiIn::new();                           // human interface for input
 
     // this is the loop which handles messages received via rx
-    recv_loop(o.clone(), rx);
+    recv_loop(o.clone(), layer.rx);
 
     {
         let mut out = o.lock().unwrap();
@@ -114,7 +115,7 @@ fn main() {
 	    out.println(format!("You can now start writing ...\n"), color::WHITE);
     }
 
-    input_loop(o.clone(), i, l, args.dstip);
+    input_loop(o.clone(), i, layer.layers, args.dstip);
 }
 
 struct Arguments {

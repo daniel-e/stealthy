@@ -46,6 +46,11 @@ pub trait Callbacks : Output {
 
         self.println("ack".to_string(), color::BRIGHT_GREEN);
     }
+
+    fn err_msg(&mut self, msg: String) {
+
+        self.println(format!("error: {}", msg), color::BRIGHT_RED);
+    }
 }
 
 

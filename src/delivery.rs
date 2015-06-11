@@ -120,6 +120,7 @@ impl Delivery {
                                 }
                             }
                         }
+                        _ => { } // TODO should not occur
                     }
                 }
                 _ => { } // TODO error handling

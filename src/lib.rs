@@ -85,7 +85,7 @@ pub struct Layers {
 
 
 impl Layers {
-    pub fn default(key: &String, device: &String) -> (Receiver<IncomingMessage>, Layers) {
+    pub fn symmetric(key: &String, device: &String) -> Option<(Receiver<IncomingMessage>, Layers)> {
 
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
@@ -93,14 +93,14 @@ impl Layers {
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
 
-        Layers::new(
+        Some(Layers::new(
             Box::new(SymmetricEncryption::new(key)),
             Delivery::new(Network::new(device, tx1), tx2, rx1),
             rx2
-        )
+        ))
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> (Receiver<IncomingMessage>, Layers) {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Option<(Receiver<IncomingMessage>, Layers)> {
 
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
@@ -108,13 +108,15 @@ impl Layers {
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
 
-        let e = AsymmetricEncryption::new(&pubkey_file, &privkey_file).unwrap(); // TODO XXX error
-        
-        Layers::new(
-            Box::new(e),
-            Delivery::new(Network::new(device, tx1), tx2, rx1),
-            rx2
-        )
+        match AsymmetricEncryption::new(&pubkey_file, &privkey_file) {
+            Some(e) =>
+                Some(Layers::new(
+                    Box::new(e),
+                    Delivery::new(Network::new(device, tx1), tx2, rx1),
+                    rx2
+                )),
+            _ => None
+        }
     }
 
     pub fn send(&self, msg: Message) -> Result<u64, Errors> {

@@ -85,14 +85,24 @@ fn main() {
 	let r = parse_arguments();
     let args = if r.is_some() { r.unwrap() } else { return };
 
-    let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
-    let i = HiIn::new();                           // human interface for input
-    let (rx, l) = 
+    let ret = 
         if args.pub_priv_mode {
+            // use asymmetric encryption
             Layers::asymmetric(&args.pubkey_file, &args.privkey_file, &args.device)  // network layer
         } else {
-            Layers::default(&args.secret_key, &args.device)  // network layer
+            // use symmetric encryption
+            Layers::symmetric(&args.secret_key, &args.device)  // network layer
         };
+
+    if ret.is_none() {
+        println!("Initialization failed.");
+        return;
+    }
+
+    let (rx, l) = ret.unwrap();
+
+    let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
+    let i = HiIn::new();                           // human interface for input
 
     // this is the loop which handles messages received via rx
     recv_loop(o.clone(), rx);

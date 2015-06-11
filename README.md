@@ -3,6 +3,10 @@ Stealthy is a small chat application for the console which uses ICMP echo reques
 
 **All communication is encrypted**! Currently a hybrid approach is used where Blowfish is used to encrypt the messages (for fast encryption with small overhead) and RSA is used to encrypt the encryption key that is used by Blowfish.
 
+## Running stealthy
+
+TODO
+
 ## Installation
 
 ### From Sources

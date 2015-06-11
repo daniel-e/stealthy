@@ -127,48 +127,19 @@ impl Encryption for AsymmetricEncryption {
 
     fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
 
-        match String::from_utf8(v.clone()) {
-            Ok(cipher) => {
-                let dec: Vec<&str> = cipher.split(':').collect();
-                if dec.len() != 2 {
-                    return None;
-                }
-                match from_hex(dec[0].to_string()) {
-                    Some(ciphertext) => {
-                        match from_hex(dec[1].to_string()) {
-                            Some(cipher_iv_key) => {
-                                let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
-                                let raw_iv_key = r.decrypt(cipher_iv_key);
-                                if raw_iv_key.is_none() {
-                                    return None;
-                                }
-                                match String::from_utf8(raw_iv_key.unwrap()) {
-                                    Ok(hex_str_iv_key) => {
-                                        let iv_key: Vec<&str> = hex_str_iv_key.split(':').collect();
-                                        if iv_key.len() != 2 {
-                                            return None;
-                                        }
-                                        let hex_str_iv = iv_key[0].to_string();
-                                        let hex_str_key = iv_key[1].to_string();
-                                        match from_hex(hex_str_iv) {
-                                            Some(iv) => {
-                                                match from_hex(hex_str_key) {
-                                                    Some(key) => {
-                                                        let er = EncryptionResult {
-                                                            iv: iv,
-                                                            ciphertext: ciphertext
-                                                        };
-                                                        let mut b = blowfish::Blowfish::new();
-                                                        b.decrypt(er, key)
-                                                    }
-                                                    _ => None
-                                                }
-                                            }
-                                            _ => None
-                                        }
-                                    }
-                                    _ => None
-                                }
+        match split(v) {
+            Some((ciphertext, cipher_iv_key)) => {
+                let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
+                match r.decrypt(cipher_iv_key) {
+                    Some(raw_iv_key) => {
+                        match split(&raw_iv_key) {
+                            Some((iv, key)) => {                  
+                                let er = EncryptionResult {
+                                    iv: iv,
+                                    ciphertext: ciphertext
+                                };
+                                let mut b = blowfish::Blowfish::new();
+                                b.decrypt(er, key)
                             }
                             _ => None
                         }
@@ -179,10 +150,31 @@ impl Encryption for AsymmetricEncryption {
             _ => None
         }
     }
- 
 }
 
 // ------------------------------------------------------------------
+
+fn split(v: &Vec<u8>) -> Option<(Vec<u8>, Vec<u8>)> {
+    
+    match String::from_utf8(v.clone()) {
+        Ok(cipher) => {
+            let dec: Vec<&str> = cipher.split(':').collect();
+            if dec.len() != 2 {
+                return None;
+            }
+            match from_hex(dec[0].to_string()) {
+                Some(ciphertext) => {
+                    match from_hex(dec[1].to_string()) {
+                        Some(cipher_iv_key) => Some((ciphertext, cipher_iv_key)),
+                        _ => None
+                    }
+                }
+                _ => None
+            }
+        }
+        _ => None
+    }
+}
 
 fn from_hex(s: String) -> Option<Vec<u8>> {
 

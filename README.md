@@ -12,11 +12,16 @@ Before you can use stealthy you need some packages to compile successfully. When
 Stealthy is written in the Rust programming language. Currently, there is not Rust package for Ubuntu available. You can install Rust in /opt/rust/ as follows:
 
 
-```
+```bash
+# download rust
 wget https://static.rust-lang.org/dist/rust-1.0.0-x86_64-unknown-linux-gnu.tar.gz
+
+# install rust
 tar xzf rust-1.0.0-x86_64-unknown-linux-gnu.tar.gz
 cd rust-1.0.0-x86_64-unknown-linux-gnu/
 ./install.sh --prefix=/opt/rust
+
+# export the search paths for the rust binary and rust libraries
 export PATH=/opt/rust/bin/:$PATH
 export LD_LIBRARY_PATH=/opt/rust/lib/:$LD_LIBRARY_PATH
 ```

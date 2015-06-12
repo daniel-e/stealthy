@@ -173,7 +173,6 @@ impl Input for NcursesIn {
             refresh();
             let c = getch();
 
-            println!("{}", c);
             match c as i32 {
                 10 => { // TODO constant for enter
                     let s = String::from_utf8(buf.clone());

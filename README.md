@@ -46,7 +46,7 @@ sudo ./stealthy -i eth0 -d 2.4.1.2 -r pubA -p privB
 
 ### Binary
 
-For Linux you can download a binary which has been compiled for Linux Mint 17.1 and should work for Ubuntu as well.
+For Linux you can download a binary which has been compiled for Linux Mint 17 and has been tested successfully for Linux Mint 17, 17.1 and Ubuntu 14.04, 15.04 and 15.10.
 
 [https://github.com/daniel-e/icmpmessaging-rs/releases/download/v0.0.1/stealthy](https://github.com/daniel-e/icmpmessaging-rs/releases/download/v0.0.1/stealthy)
 
@@ -55,6 +55,7 @@ For Linux you can download a binary which has been compiled for Linux Mint 17.1 
 Before you can use stealthy you need some packages to be able to compile the sources successfully. When you're running Ubuntu you should install the following packages (if not already installed):
 
 ```
+sudo apt-get update
 sudo apt-get install build-essential libpcap-dev libssl-dev libncursesw5-dev
 ```
 

@@ -173,6 +173,7 @@ impl Input for NcursesIn {
             refresh();
             let c = getch();
 
+            println!("{}", c);
             match c as i32 {
                 10 => { // TODO constant for enter
                     let s = String::from_utf8(buf.clone());
@@ -182,8 +183,17 @@ impl Input for NcursesIn {
                     }
                 }
 
+                8 => { // TODO constant for ctrl h
+                }
+
                 4 => { // TODO constant for ctrl d
                     return None;
+                }
+
+                25 => { // TODO constant for ctrl y
+                }
+
+                5 => { //TODO constant for ctrl e
                 }
 
                 127 => { // TODO constant for backspace

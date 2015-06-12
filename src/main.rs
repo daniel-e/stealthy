@@ -8,6 +8,7 @@ extern crate getopts;
 extern crate term;
 extern crate icmpmessaging;
 extern crate time;
+extern crate libc;
 
 use std::{env, thread};
 use std::sync::mpsc::Receiver;
@@ -80,6 +81,7 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
     }}
     o.lock().unwrap().close();
 }
+
 
 fn main() {
     // parse command line arguments

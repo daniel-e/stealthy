@@ -91,3 +91,5 @@ You can now start stealthy with the command ```sudo ./target/debug/icmpmessaging
 ## Limitations
 
 Stealthy needs to be executed as root. This is due to the fact that stealthy needs to send raw IP packets which is only possible when the process is in privilege mode.
+
+Stealthy currently works only on systems with a little-endian architecture, like Intel processors.

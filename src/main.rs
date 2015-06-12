@@ -8,7 +8,6 @@ extern crate getopts;
 extern crate term;
 extern crate icmpmessaging;
 extern crate time;
-extern crate libc;
 
 use std::{env, thread};
 use std::sync::mpsc::Receiver;
@@ -73,6 +72,7 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
     			        Err(e) => { match e {
             				Errors::MessageTooBig => { out.println(format!("main: message too big"), color::RED); }
     	        			Errors::SendFailed => { out.println(format!("main: sending failed"), color::RED); }
+                            Errors::EncryptionError => {out.println(format!("main: encryption faild"), color::RED); }
     			        }}
             		}
                 }

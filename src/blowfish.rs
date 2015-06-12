@@ -1,6 +1,8 @@
 extern crate rand;
 extern crate libc;
 
+use self::rand::{OsRng, Rng};
+
 #[repr(C)]
 struct BF_KEY {
     p: [libc::c_uint; 18],
@@ -45,34 +47,42 @@ pub const IV_LEN: usize = 8;
 
 impl Blowfish {
 
-    pub fn new() -> Blowfish { Blowfish::from_key(Blowfish::new_key()).unwrap() }
+    pub fn new() -> Option<Blowfish> { 
+        
+        match Blowfish::new_key() {
+            Some(k) => Blowfish::from_key(k),
+            _ => None
+        }
+    }
 
     pub fn from_key(key: Vec<u8>) -> Option<Blowfish> {
 
-        if key.len() != KEY_LEN {
-            return None;
-        }
-
-        Some(Blowfish {
-            schedule: Box::new(BF_KEY {
-                    p: [0; 18], 
-                    s: [0; 4 * 256],
+        match key.len() {
+            KEY_LEN => 
+                Some(Blowfish {
+                    schedule: Box::new(BF_KEY {
+                        p: [0; 18], 
+                        s: [0; 4 * 256],
+                    }),
+                    key: key
                 }),
-            key: key.clone()
-        })
+            _ => None
+        }
     }
 
     pub fn key(&self) -> Vec<u8> {
         self.key.clone()
     }
 
-    /// Creates a random key.
-    fn new_key() -> Vec<u8> {
-        let mut key: Vec<u8> = vec![];;
-        for _ in 0..KEY_LEN {
-            key.push(rand::random::<u8>());  // TODO crypto rng
+    fn random_u8(n: usize) -> Option<Vec<u8>> {
+        match OsRng::new() {
+            Ok(mut r) => Some(r.gen_iter::<u8>().take(n).collect()),
+            _ => None
         }
-        key
+    }
+
+    fn new_key() -> Option<Vec<u8>> {
+        Blowfish::random_u8(KEY_LEN)
     }
 
     fn setup_key(&mut self) {
@@ -82,7 +92,7 @@ impl Blowfish {
         }
     }
 
-    fn padding(data: Vec<u8>) -> Vec<u8> {
+    fn padding(data: &Vec<u8>) -> Vec<u8> {
 
         let mut r = data.clone();
         // PKCS#7 padding
@@ -93,65 +103,60 @@ impl Blowfish {
         r
     }
 
-    fn new_iv(len: usize) -> Vec<u8> {
-
-        let mut iv: Vec<u8> = vec![];
-        for _ in 0..len {
-            iv.push(rand::random::<u8>()); // TODO crypto rng
-        }
-        iv
+    fn new_iv() -> Option<Vec<u8>> {
+        Blowfish::random_u8(IV_LEN)
     }
 
-    pub fn encrypt(&mut self, data: &Vec<u8>) -> EncryptionResult {
+    pub fn encrypt(&mut self, data: &Vec<u8>) -> Option<EncryptionResult> {
 
         self.setup_key();
+        let plain = Blowfish::padding(&data);
 
-        let plain = Blowfish::padding(data.clone());
-        let iv    = Blowfish::new_iv(IV_LEN);
+        match Blowfish::new_iv() {
+            Some(iv) => {
+                // we need a copy of the iv because it is modified by
+                // BF_cbc_encrypt
+                let v = iv.clone();
+                let cipher = plain.clone();
 
-        // we need a copy of the iv because it is modified by
-        // BF_cbc_encrypt
-        let v = iv.clone();
+                unsafe {
+                    BF_cbc_encrypt(
+                        plain.as_ptr(), 
+                        cipher.as_ptr() as *mut u8,
+                        plain.len() as libc::c_long, 
+                        &mut *(self.schedule), 
+                        iv.as_ptr() as *mut u8,
+                        BF_ENCRYPT as libc::c_long
+                    );
+                }
 
-        let cipher = plain.clone();
-
-        unsafe {
-            BF_cbc_encrypt(
-                plain.as_ptr(), 
-                cipher.as_ptr() as *mut u8,
-                plain.len() as libc::c_long, 
-                &mut *(self.schedule), 
-                iv.as_ptr() as *mut u8,
-                BF_ENCRYPT as libc::c_long
-            );
-        }
-
-        EncryptionResult {
-            iv: v,
-            ciphertext: cipher,
+                Some(EncryptionResult {
+                    iv: v,
+                    ciphertext: cipher,
+                })
+            }
+            _ => None
         }
     }
 
     fn remove_padding(data: Vec<u8>) -> Option<Vec<u8>> {
     
-        if data.len() < 8 {
+        let mut plain = data.clone();
+        if plain.len() < 8 {
             return None;
         }
 
-        let mut plain  = data.clone();
-        let     padval = plain.pop().unwrap();
-
-        if padval > 8 {
-            return None;
-        }
-
-        for _ in 0..(padval - 1) {
-            let val = plain.pop();
-            if val.is_none() || val.unwrap() != padval {
-                return None;
+        match plain.pop().unwrap() {
+            padval @ 0 ... 8 => {
+                for _ in 0..(padval - 1) {
+                    if plain.pop().unwrap() != padval {
+                        return None;
+                    }
+                }
+                Some(plain)
             }
+            _ => None
         }
-        Some(plain)
     }
 
     fn set_key(&mut self, key: Vec<u8>) {
@@ -164,9 +169,9 @@ impl Blowfish {
         self.set_key(key);
         self.setup_key();
 
-        let iv     = e.iv.clone();
+        let iv = e.iv.clone();
         let cipher = e.ciphertext.clone();
-        let plain  = cipher.clone();
+        let plain = cipher.clone();
 
         unsafe {
             BF_cbc_encrypt(
@@ -190,35 +195,30 @@ impl Blowfish {
 #[cfg(test)]
 mod tests {
 
-    fn print_u8_vector(v: Vec<u8>, s: &str) {
-
-        print!("{}", s);
-        for i in 0..v.len() {
-            print!("{:02x} ", v[i]);
-        }
-        println!("");
-    }
-
     #[test]
     fn test_encryption() {
 
-        // use cargo test -- --nocapture to see output of print
-        let mut b = super::Blowfish::new();
-        let k = b.key().clone();
-
-        println!("--------------------------------------");
+        let mut b = super::Blowfish::new().unwrap();
+        let k = b.key();
         let v = "123456789".to_string().into_bytes();
-        print_u8_vector(v.clone(), "plaintext: ");
-
-        let r = b.encrypt(&v);
-
-        print_u8_vector(r.iv.clone(), "iv       : ");
-        print_u8_vector(r.ciphertext.clone(), "cipher   : ");
-
+        let r = b.encrypt(&v).unwrap();
         let p = b.decrypt(r, k).unwrap();
+        assert_eq!(v, p);
 
-        print_u8_vector(p, "decrypted: ");
-        println!("--------------------------------------");
+        // check that two instances use different keys and different IVs
+        // and that the ciphertext differs for the same plaintext
+        let mut b1 = super::Blowfish::new().unwrap();
+        let mut b2 = super::Blowfish::new().unwrap();
+        let k1 = b1.key();
+        let k2 = b2.key();
+        assert!(k1 != k2);
+        let c1 = b1.encrypt(&v).unwrap();
+        let c2 = b2.encrypt(&v).unwrap();
+        assert!(c1.iv != c2.iv);
+        assert!(c1.ciphertext != c2.ciphertext);
+        let p1 = b.decrypt(c1, k1).unwrap();
+        let p2 = b.decrypt(c2, k2).unwrap();
+        assert_eq!(p1, p2);
     }
 
     #[test]

@@ -6,7 +6,7 @@ use blowfish::EncryptionResult;
 use rsa;
 
 pub trait Encryption : Send + Sync {
-    fn encrypt(&self, v: &Vec<u8>) -> Vec<u8>;
+    fn encrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>>;
     fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>>;
 }
 
@@ -42,16 +42,20 @@ impl SymmetricEncryption {
 
 impl Encryption for SymmetricEncryption {
 
-    fn encrypt(&self, v: &Vec<u8>) -> Vec<u8> {
+    fn encrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
 
         let mut b = self.blowfish();
-        let er    = b.encrypt(v);
-        let mut r = er.iv;
 
-        for i in er.ciphertext {
-            r.push(i);
+        match b.encrypt(v) {
+            Some(er) => {
+                let mut r = er.iv;
+                for i in er.ciphertext {
+                    r.push(i);
+                }
+                Some(r)
+            }
+            _ => None
         }
-        r
     }
 
     fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
@@ -95,33 +99,40 @@ impl AsymmetricEncryption {
 
 impl Encryption for AsymmetricEncryption {
 
-    fn encrypt(&self, v: &Vec<u8>) -> Vec<u8> {
+    fn encrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
         // 1. generate a random key and encrypt with blowfish -> ciphertext1, iv, key
         // 2. encrypt iv + key with public key -> ciphertext2
         // 3. return ciphertext2 + ciphertext1
 
-        let mut blowfish = blowfish::Blowfish::new();
-        let er = blowfish.encrypt(v);
+        match blowfish::Blowfish::new() {
+            None => None,
+            Some(mut blowfish) => {
+                match blowfish.encrypt(v) {
+                    Some(er) => {
+                        let iv = er.iv;
+                        let ciphertext1: Vec<u8> = er.ciphertext;
+                        let key = blowfish.key();
 
-        let iv = er.iv;
-        let ciphertext1: Vec<u8> = er.ciphertext;
-        let key = blowfish.key();
+                        let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
+                        let mut data = to_hex(iv);
+                        data.push_str(":");
+                        data.push_str(&to_hex(key));
+                        let ciphertext2: Option<Vec<u8>> = r.encrypt(data.into_bytes());
 
-        let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
-        let mut data = to_hex(iv);
-        data.push_str(":");
-        data.push_str(&to_hex(key));
-        let ciphertext2: Option<Vec<u8>> = r.encrypt(data.into_bytes());
-
-        match ciphertext2 {
-            Some(cipher) => {
-                let mut c = String::new();
-                c.push_str(&to_hex(ciphertext1));  // TODO use more efficient encoding
-                c.push_str(":");
-                c.push_str(&to_hex(cipher));
-                c.into_bytes()
+                        match ciphertext2 {
+                            Some(cipher) => {
+                                let mut c = String::new();
+                                c.push_str(&to_hex(ciphertext1));  // TODO use more efficient encoding
+                                c.push_str(":");
+                                c.push_str(&to_hex(cipher));
+                                Some(c.into_bytes())
+                            }
+                            _ => { Some(vec![]) } // TODO error handling
+                        }
+                    }
+                    _ => None
+                }
             }
-            _ => { vec![] } // TODO error handling
         }
     }
 
@@ -138,8 +149,11 @@ impl Encryption for AsymmetricEncryption {
                                     iv: iv,
                                     ciphertext: ciphertext
                                 };
-                                let mut b = blowfish::Blowfish::new();
-                                b.decrypt(er, key)
+
+                                match blowfish::Blowfish::new() {
+                                    Some(mut b) => b.decrypt(er, key),
+                                    _ => None
+                                }
                             }
                             _ => None
                         }
@@ -282,7 +296,7 @@ mod tests {
         match a {
             Some(a) => {
                 let plain  = "hello".to_string().into_bytes();
-                let cipher = a.encrypt(&plain);
+                let cipher = a.encrypt(&plain).unwrap();
                 let p      = a.decrypt(&cipher).unwrap();
                 assert_eq!(plain, p);
             }

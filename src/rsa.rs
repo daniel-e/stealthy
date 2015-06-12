@@ -1,4 +1,3 @@
-extern crate rand;
 extern crate libc;
 
 use std::ptr;

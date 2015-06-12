@@ -45,7 +45,8 @@ impl Clone for MessageType {
 
 pub enum Errors {
 	MessageTooBig,
-	SendFailed
+	SendFailed,
+    EncryptionError
 }
 
 
@@ -111,8 +112,10 @@ impl Layers {
 
     pub fn send(&self, msg: Message) -> Result<u64, Errors> {
 
-        let m = msg.set_payload(self.encryption_layer.encrypt(&msg.buf));
-        self.delivery_layer.send_msg(m)
+        match self.encryption_layer.encrypt(&msg.buf) {
+            Some(buf) => self.delivery_layer.send_msg(msg.set_payload(buf)),
+            _ => Err(Errors::EncryptionError)
+        }
     }
 
     // ------ private functions

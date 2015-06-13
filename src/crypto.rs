@@ -190,7 +190,7 @@ fn split(v: &Vec<u8>) -> Option<(Vec<u8>, Vec<u8>)> {
     }
 }
 
-fn from_hex(s: String) -> Option<Vec<u8>> {
+pub fn from_hex(s: String) -> Option<Vec<u8>> {
 
     let bytes = s.into_bytes();
 
@@ -223,7 +223,7 @@ pub fn to_hex(v: Vec<u8>) -> String {
 
     let mut s = String::new();
     for i in v {
-        s.push_str(&format!("{:02X}", i));
+        s.push_str(&format!("{:02x}", i));
     }
     s
 }
@@ -270,7 +270,7 @@ mod tests {
     fn test_to_hex() {
         
         let v: Vec<u8> = vec![0, 1, 9, 10, 15, 16];
-        assert_eq!("0001090A0F10", super::to_hex(v));
+        assert_eq!("0001090a0f10", super::to_hex(v));
     }
 
     // --------------------------------------------------------------

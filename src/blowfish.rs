@@ -2,6 +2,7 @@ extern crate rand;
 extern crate libc;
 
 use self::rand::{OsRng, Rng};
+use std::iter;
 
 #[repr(C)]
 struct BF_KEY {
@@ -47,16 +48,16 @@ pub const IV_LEN: usize = 8;
 
 impl Blowfish {
 
+    /// Returns a new instance of Blowfish with a random key.
     pub fn new() -> Option<Blowfish> { 
-        
         match Blowfish::new_key() {
             Some(k) => Blowfish::from_key(k),
             _ => None
         }
     }
 
+    /// Returns a new instance of Blowfish with the given key.
     pub fn from_key(key: Vec<u8>) -> Option<Blowfish> {
-
         match key.len() {
             KEY_LEN => 
                 Some(Blowfish {
@@ -70,10 +71,13 @@ impl Blowfish {
         }
     }
 
+    /// Returns the current key used by this instance.
     pub fn key(&self) -> Vec<u8> {
         self.key.clone()
     }
 
+    /// Returns cryptographically secure pseudorandom numbers for
+    /// keys and initialization vectors.
     fn random_u8(n: usize) -> Option<Vec<u8>> {
         match OsRng::new() {
             Ok(mut r) => Some(r.gen_iter::<u8>().take(n).collect()),
@@ -81,10 +85,17 @@ impl Blowfish {
         }
     }
 
+    /// Generates a new key.
     fn new_key() -> Option<Vec<u8>> {
         Blowfish::random_u8(KEY_LEN)
     }
 
+    /// Generates a new initialization vector.
+    fn new_iv() -> Option<Vec<u8>> {
+        Blowfish::random_u8(IV_LEN)
+    }
+
+    /// Initializes the configured key.
     fn setup_key(&mut self) {
         unsafe {
             let k = self.key.clone();
@@ -92,25 +103,37 @@ impl Blowfish {
         }
     }
 
+    /// Returns a new vector padded via PKCS#7.
     fn padding(data: &Vec<u8>) -> Vec<u8> {
 
-        let mut r = data.clone();
-        // PKCS#7 padding
-        let padval = (8 - r.len() % 8) as u8;
-        for _ in 0..padval {
-            r.push(padval);
-        }
-        r
+        let padval = 8 - data.len() % 8;
+        data.iter().map(|&x| x).chain(iter::repeat(padval as u8).take(padval)).collect()
     }
 
-    fn new_iv() -> Option<Vec<u8>> {
-        Blowfish::random_u8(IV_LEN)
+    fn remove_padding(data: Vec<u8>) -> Option<Vec<u8>> {
+    
+        let mut plain = data.clone();
+        if plain.len() < 8 {
+            return None;
+        }
+
+        match plain.pop().unwrap() {
+            padval @ 0 ... 8 => {
+                for _ in 0..(padval - 1) {
+                    if plain.pop().unwrap() != padval {
+                        return None;
+                    }
+                }
+                Some(plain)
+            }
+            _ => None
+        }
     }
 
     pub fn encrypt(&mut self, data: &Vec<u8>) -> Option<EncryptionResult> {
 
         self.setup_key();
-        let plain = Blowfish::padding(&data);
+        let plain = Blowfish::padding(data);
 
         match Blowfish::new_iv() {
             Some(iv) => {
@@ -134,26 +157,6 @@ impl Blowfish {
                     iv: v,
                     ciphertext: cipher,
                 })
-            }
-            _ => None
-        }
-    }
-
-    fn remove_padding(data: Vec<u8>) -> Option<Vec<u8>> {
-    
-        let mut plain = data.clone();
-        if plain.len() < 8 {
-            return None;
-        }
-
-        match plain.pop().unwrap() {
-            padval @ 0 ... 8 => {
-                for _ in 0..(padval - 1) {
-                    if plain.pop().unwrap() != padval {
-                        return None;
-                    }
-                }
-                Some(plain)
             }
             _ => None
         }
@@ -230,5 +233,17 @@ mod tests {
         b = super::Blowfish::from_key(k.clone());
         assert!(b.is_some());
         assert_eq!(b.unwrap().key, k);
+    }
+     #[test]
+    fn test_padding() {
+
+        let a = vec![1, 2, 3, 5];
+        assert_eq!(super::Blowfish::padding(&a), vec![1, 2, 3, 5, 4, 4, 4, 4]);
+        let b = vec![];
+        assert_eq!(super::Blowfish::padding(&b), vec![8 ,8, 8, 8, 8, 8, 8, 8]);
+        let c = vec![1, 2, 3, 4, 5, 6, 7, 8];
+        assert_eq!(super::Blowfish::padding(&c), vec![1 ,2, 3, 4, 5, 6, 7, 8, 8, 8, 8, 8, 8, 8, 8, 8]);
+        let d = vec![1, 2, 3, 4, 5, 6, 7];
+        assert_eq!(super::Blowfish::padding(&d), vec![1 ,2, 3, 4, 5, 6, 7, 1]);
     }
 }

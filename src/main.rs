@@ -97,7 +97,7 @@ fn main() {
             Layers::symmetric(&args.secret_key, &args.device)  // network layer
         };
 
-    if ret.is_none() {
+    if ret.is_err() {
         println!("Initialization failed.");
         return;
     }

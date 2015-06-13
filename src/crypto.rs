@@ -1,18 +1,16 @@
 use std::fs::File;
 use std::io::Read;
 
-use blowfish;
-use blowfish::EncryptionResult;
-use rsa;
+use super::{blowfish, rsa};
+use super::blowfish::EncryptionResult;
 
 pub trait Encryption : Send + Sync {
-    fn encrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>>;
+    fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String>;
     fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>>;
 }
 
-
 pub struct SymmetricEncryption {
-    key: String
+    algorithm: blowfish::Blowfish
 }
 
 pub struct AsymmetricEncryption {
@@ -24,59 +22,36 @@ pub struct AsymmetricEncryption {
 
 impl SymmetricEncryption {
 
-    pub fn new(key: &String) -> SymmetricEncryption {
-        SymmetricEncryption {
-            key: key.clone()
-        }
-    }
+    pub fn new(hexkey: &String) -> Result<SymmetricEncryption, String> {
 
-    fn blowfish(&self) -> blowfish::Blowfish {
-
-        let k = from_hex(self.key.clone());
-        if k.is_none() {
-            println!("Unable to initialize the crypto key.");
-        }
-        blowfish::Blowfish::from_key(k.unwrap()).unwrap()
+        Ok(SymmetricEncryption {
+            algorithm: try!(blowfish::Blowfish::from_key(try!(from_hex(hexkey.clone()))))
+        })
     }
 }
 
 impl Encryption for SymmetricEncryption {
 
-    fn encrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
+    fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
 
-        let mut b = self.blowfish();
-
-        match b.encrypt(v) {
-            Some(er) => {
-                let mut r = er.iv;
-                for i in er.ciphertext {
-                    r.push(i);
-                }
-                Some(r)
-            }
-            _ => None
-        }
+        let r = try!(self.algorithm.encrypt(v));
+        Ok(r.iv.iter().chain(r.ciphertext.iter()).cloned().collect())
     }
 
     fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
 
-        let mut b = self.blowfish();
-        let k     = b.key();
+        let (iv, cipher) = v.split_at(self.algorithm.iv_len());
 
-        let (iv, cipher) = v.split_at(blowfish::IV_LEN);
-
-        let mut x = Vec::new();
-        for i in iv { x.push(*i) }
-        let mut y = Vec::new();
-        for i in cipher { y.push(*i) }
-
-        let e = blowfish::EncryptionResult {
-            iv: x,
-            ciphertext: y
+        let e = EncryptionResult {
+            iv: iv.iter().cloned().collect(),
+            ciphertext: cipher.iter().cloned().collect()
         };
-        b.decrypt(e, k)
+
+        self.algorithm.decrypt(e)
     }
 }
+
+// ---------------------------------
 
 impl AsymmetricEncryption {
 
@@ -97,18 +72,20 @@ impl AsymmetricEncryption {
     }
 }
 
+// ---------------------------------
+
 impl Encryption for AsymmetricEncryption {
 
-    fn encrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
+    fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
         // 1. generate a random key and encrypt with blowfish -> ciphertext1, iv, key
         // 2. encrypt iv + key with public key -> ciphertext2
         // 3. return ciphertext2 + ciphertext1
 
         match blowfish::Blowfish::new() {
-            None => None,
-            Some(mut blowfish) => {
+            Err(e) => Err(e),
+            Ok(blowfish) => {
                 match blowfish.encrypt(v) {
-                    Some(er) => {
+                    Ok(er) => {
                         let iv = er.iv;
                         let ciphertext1: Vec<u8> = er.ciphertext;
                         let key = blowfish.key();
@@ -125,12 +102,12 @@ impl Encryption for AsymmetricEncryption {
                                 c.push_str(&to_hex(ciphertext1));  // TODO use more efficient encoding
                                 c.push_str(":");
                                 c.push_str(&to_hex(cipher));
-                                Some(c.into_bytes())
+                                Ok(c.into_bytes())
                             }
-                            _ => { Some(vec![]) } // TODO error handling
+                            _ => { Ok(vec![]) } // TODO error handling
                         }
                     }
-                    _ => None
+                    _ => Err("todo".to_string())
                 }
             }
         }
@@ -145,13 +122,13 @@ impl Encryption for AsymmetricEncryption {
                     Some(raw_iv_key) => {
                         match split(&raw_iv_key) {
                             Some((iv, key)) => {                  
-                                let er = EncryptionResult {
+                                let er = blowfish::EncryptionResult {
                                     iv: iv,
                                     ciphertext: ciphertext
                                 };
 
-                                match blowfish::Blowfish::new() {
-                                    Some(mut b) => b.decrypt(er, key),
+                                match blowfish::Blowfish::from_key(key) {
+                                    Ok(b) => b.decrypt(er),
                                     _ => None
                                 }
                             }
@@ -177,9 +154,9 @@ fn split(v: &Vec<u8>) -> Option<(Vec<u8>, Vec<u8>)> {
                 return None;
             }
             match from_hex(dec[0].to_string()) {
-                Some(ciphertext) => {
+                Ok(ciphertext) => {
                     match from_hex(dec[1].to_string()) {
-                        Some(cipher_iv_key) => Some((ciphertext, cipher_iv_key)),
+                        Ok(cipher_iv_key) => Some((ciphertext, cipher_iv_key)),
                         _ => None
                     }
                 }
@@ -190,12 +167,12 @@ fn split(v: &Vec<u8>) -> Option<(Vec<u8>, Vec<u8>)> {
     }
 }
 
-pub fn from_hex(s: String) -> Option<Vec<u8>> {
+pub fn from_hex(s: String) -> Result<Vec<u8>, String> {
 
     let bytes = s.into_bytes();
 
     if bytes.len() % 2 != 0 {
-        return None
+        return Err("Length of hexadecimal string is not a multiple of 2.".to_string());
     }
 
     let mut v: Vec<u8> = vec![];
@@ -209,14 +186,13 @@ pub fn from_hex(s: String) -> Option<Vec<u8>> {
                 b'A'...b'F' => b += val - b'A' + 10,
                 b'a'...b'f' => b += val - b'a' + 10,
                 b'0'...b'9' => b += val - b'0',
-                _ => { return None; }
+                _ => { return Err("Invalid character in hexadecimal string.".to_string()); }
             }
             p += 1;
         }
         v.push(b);
     }
-
-    Some(v)
+    Ok(v)
 }
 
 pub fn to_hex(v: Vec<u8>) -> String {
@@ -255,10 +231,10 @@ mod tests {
     fn test_from_hex() {
         
         let mut r = super::from_hex("0".to_string());
-        assert!(!r.is_some());
+        assert!(r.is_err());
 
         r = super::from_hex("0001090A0F10".to_string());
-        assert!(r.is_some());
+        assert!(r.is_ok());
 
         let o: Vec<u8> = vec![0, 1, 9, 10, 15, 16];
         let v = r.unwrap();

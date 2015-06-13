@@ -39,7 +39,6 @@ pub struct EncryptionResult {
 }
 
 pub struct Blowfish {
-    schedule: Box<BF_KEY>,
     key: Vec<u8>
 }
 
@@ -49,26 +48,24 @@ pub const IV_LEN: usize = 8;
 impl Blowfish {
 
     /// Returns a new instance of Blowfish with a random key.
-    pub fn new() -> Option<Blowfish> { 
-        match Blowfish::new_key() {
-            Some(k) => Blowfish::from_key(k),
-            _ => None
-        }
+    pub fn new() -> Result<Blowfish, String> { 
+        Blowfish::from_key(try!(Blowfish::new_key()))
     }
 
     /// Returns a new instance of Blowfish with the given key.
-    pub fn from_key(key: Vec<u8>) -> Option<Blowfish> {
+    pub fn from_key(key: Vec<u8>) -> Result<Blowfish, String> {
         match key.len() {
             KEY_LEN => 
-                Some(Blowfish {
-                    schedule: Box::new(BF_KEY {
-                        p: [0; 18], 
-                        s: [0; 4 * 256],
-                    }),
+                Ok(Blowfish {
                     key: key
                 }),
-            _ => None
+            _ => Err("Invalid key length.".to_string())
         }
+    }
+
+    /// Returns the length of the IV in bytes.
+    pub fn iv_len(&self) -> usize {
+        return IV_LEN;
     }
 
     /// Returns the current key used by this instance.
@@ -78,34 +75,21 @@ impl Blowfish {
 
     /// Returns cryptographically secure pseudorandom numbers for
     /// keys and initialization vectors.
-    fn random_u8(n: usize) -> Option<Vec<u8>> {
+    fn random_u8(n: usize) -> Result<Vec<u8>, String> {
         match OsRng::new() {
-            Ok(mut r) => Some(r.gen_iter::<u8>().take(n).collect()),
-            _ => None
+            Ok(mut r) => Ok(r.gen_iter::<u8>().take(n).collect()),
+            _         => Err("Could not get OsRng.".to_string())
         }
     }
 
     /// Generates a new key.
-    fn new_key() -> Option<Vec<u8>> {
+    fn new_key() -> Result<Vec<u8>, String> {
         Blowfish::random_u8(KEY_LEN)
     }
 
     /// Generates a new initialization vector.
-    fn new_iv() -> Option<Vec<u8>> {
+    fn new_iv() -> Result<Vec<u8>, String> {
         Blowfish::random_u8(IV_LEN)
-    }
-
-    /// Initializes the configured key.
-    fn setup_key(&mut self) {
-        unsafe {
-            let k = self.key.clone();
-            BF_set_key(&mut *(self.schedule), k.len() as libc::c_uint, k.as_ptr());
-        }
-    }
-
-    /// Sets a new encryptio / decryption key for this instance.
-    fn set_key(&mut self, key: Vec<u8>) {
-        self.key = key;
     }
 
     /// Returns a new vector padded via PKCS#7.
@@ -122,25 +106,34 @@ impl Blowfish {
             let padval = *data.last().unwrap();
             if padval <= 8 {
                 if data.iter().rev().take(padval as usize).all(|x| *x == padval) {
-                    return Some(data.iter().take(data.len() - padval as usize).map(|&x| x).collect());
+                    return Some(data.iter().take(data.len() - padval as usize).cloned().collect());
                 }
             }
         }
         None
     }
 
-    /// Function for encryption or decryption.
-    fn crypt(&mut self, src: Vec<u8>, iv: Vec<u8>, mode: libc::c_long) -> Vec<u8> {
+    /// Function for encryption and decryption.
+    fn crypt(&self, src: Vec<u8>, iv: Vec<u8>, key: Vec<u8>, mode: libc::c_long) -> Vec<u8> {
+
+        let mut schedule = Box::new(BF_KEY {
+                p: [0; 18], 
+                s: [0; 4 * 256],
+        });
+
+        unsafe {
+            let k = key.clone();
+            BF_set_key(&mut *schedule, k.len() as libc::c_uint, k.as_ptr());
+        }
 
         let result = src.clone();
         let i = iv.clone();
-        self.setup_key();
         unsafe {
             BF_cbc_encrypt(
                 src.as_ptr(), 
                 result.as_ptr() as *mut u8,
                 src.len() as libc::c_long, 
-                &mut *(self.schedule), 
+                &mut *schedule, 
                 i.as_ptr() as *mut u8,
                 mode
             );
@@ -149,24 +142,19 @@ impl Blowfish {
     }
 
     /// Encrypts the data with the current key and a new IV.
-    pub fn encrypt(&mut self, data: &Vec<u8>) -> Option<EncryptionResult> {
+    pub fn encrypt(&self, data: &Vec<u8>) -> Result<EncryptionResult, String> {
 
-        match Blowfish::new_iv() {
-            Some(iv) => {
-                Some(EncryptionResult {
-                    iv: iv.clone(),
-                    ciphertext: self.crypt(Blowfish::padding(data), iv, BF_ENCRYPT)
-                })
-            }
-            _ => None
-        }
+        let iv = try!(Blowfish::new_iv());
+        Ok(EncryptionResult {
+            iv: iv.clone(),
+            ciphertext: self.crypt(Blowfish::padding(data), iv, self.key.clone(), BF_ENCRYPT)
+        })
     }
 
     /// Decrypts the data.
-    pub fn decrypt(&mut self, e: EncryptionResult, key: Vec<u8>) -> Option<Vec<u8>> {
+    pub fn decrypt(&self, e: EncryptionResult) -> Option<Vec<u8>> {
 
-        self.set_key(key);
-        Blowfish::remove_padding(self.crypt(e.ciphertext, e.iv, BF_DECRYPT))
+        Blowfish::remove_padding(self.crypt(e.ciphertext, e.iv, self.key.clone(), BF_DECRYPT))
     }
 }
 
@@ -185,9 +173,9 @@ mod tests {
 
         let k = from_hex(key.to_string()).unwrap();
         let i = from_hex(iv.to_string()).unwrap();
-        let mut b = Blowfish::from_key(k).unwrap();
+        let mut b = Blowfish::new().unwrap();
         let src = s.to_string().into_bytes();
-        to_hex(b.crypt(Blowfish::padding(&src), i, super::BF_ENCRYPT))
+        to_hex(b.crypt(Blowfish::padding(&src), i, k, super::BF_ENCRYPT))
     }
 
     #[test]
@@ -208,10 +196,9 @@ mod tests {
     fn test_encryption_decryption() {
 
         let mut b = Blowfish::new().unwrap();
-        let k = b.key();
         let v = "123456789".to_string().into_bytes();
         let r = b.encrypt(&v).unwrap();
-        let p = b.decrypt(r, k).unwrap();
+        let p = b.decrypt(r).unwrap();
         assert_eq!(v, p);
 
         // check that two instances use different keys and different IVs
@@ -227,8 +214,8 @@ mod tests {
         assert_eq!(c2.ciphertext.len(), 16);
         assert!(c1.iv != c2.iv);
         assert!(c1.ciphertext != c2.ciphertext);
-        let p1 = b.decrypt(c1, k1).unwrap();
-        let p2 = b.decrypt(c2, k2).unwrap();
+        let p1 = b1.decrypt(c1).unwrap();
+        let p2 = b2.decrypt(c2).unwrap();
         assert_eq!(p1, p2);
     }
 
@@ -236,10 +223,10 @@ mod tests {
     fn test_from_key() {
 
         let mut b = Blowfish::from_key(vec![0]);
-        assert!(!b.is_some());
+        assert!(b.is_err());
         let k = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
         b = super::Blowfish::from_key(k.clone());
-        assert!(b.is_some());
+        assert!(b.is_ok());
         assert_eq!(b.unwrap().key, k);
     }
 

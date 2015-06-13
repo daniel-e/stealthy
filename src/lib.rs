@@ -97,36 +97,36 @@ pub struct Layers {
 
 impl Layers {
 
-    pub fn symmetric(key: &String, device: &String) -> Option<Layer> {
+    pub fn symmetric(hexkey: &String, device: &String) -> Result<Layer, String> {
 
-        Layers::init(Box::new(SymmetricEncryption::new(key)), device)
+        Layers::init(Box::new(try!(SymmetricEncryption::new(hexkey))), device)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Option<Layer> {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Result<Layer, String> {
 
         match AsymmetricEncryption::new(&pubkey_file, &privkey_file) {
             Some(e) => Layers::init(Box::new(e), device),
-            _ => None
+            _ => Err("todo".to_string()) // TODO
         }
     }
 
     pub fn send(&self, msg: Message) -> Result<u64, Errors> {
 
         match self.encryption_layer.encrypt(&msg.buf) {
-            Some(buf) => self.delivery_layer.send_msg(msg.set_payload(buf)),
+            Ok(buf) => self.delivery_layer.send_msg(msg.set_payload(buf)),
             _ => Err(Errors::EncryptionError)
         }
     }
 
     // ------ private functions
 
-    fn init(e: Box<Encryption>, device: &String) -> Option<Layer> {
+    fn init(e: Box<Encryption>, device: &String) -> Result<Layer, String> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
-        Some(Layers::new(e,
+        Ok(Layers::new(e,
             Delivery::new(Network::new(device, tx1), tx2, rx1),
             rx2
         ))

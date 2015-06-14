@@ -112,7 +112,7 @@ impl Blowfish {
     }
 
     /// Function for encryption and decryption.
-    fn crypt(&self, src: &[u8], iv: &[u8], key: Vec<u8>, mode: libc::c_long) -> Vec<u8> {
+    fn crypt(&self, src: &[u8], iv: &[u8], key: &[u8], mode: libc::c_long) -> Vec<u8> {
 
         let mut schedule = Box::new(BF_KEY {
                 p: [0; 18], 
@@ -149,7 +149,7 @@ impl Blowfish {
         Ok(
             iv.iter().cloned()
                 .chain(
-                    self.crypt(&Blowfish::padding(data), &iv, self.key.clone(), BF_ENCRYPT)
+                    self.crypt(&Blowfish::padding(data), &iv, &self.key, BF_ENCRYPT)
                         .iter().cloned())
                 .collect()
         )
@@ -164,7 +164,7 @@ impl Blowfish {
 
         let (iv, cipher) = ciphertext.split_at(IV_LEN);
         Blowfish::remove_padding(
-            &self.crypt(cipher, iv, self.key.clone(), BF_DECRYPT)
+            &self.crypt(cipher, iv, &self.key, BF_DECRYPT)
         )
     }
 }
@@ -187,8 +187,8 @@ mod tests {
 
     use ::crypto::{from_hex};
     use super::Blowfish;
-    use std::ascii::AsciiExt;
 
+    #[test]
     fn test_to_hex() {
         
         let v: Vec<u8> = vec![0, 1, 9, 10, 15, 16];
@@ -199,20 +199,20 @@ mod tests {
 
         let k = from_hex(key.to_string()).unwrap();
         let i = from_hex(iv.to_string()).unwrap();
-        let mut b = Blowfish::new().unwrap();
+        let b = Blowfish::new().unwrap();
         let src = s.to_string().into_bytes();
-        to_hex(b.crypt(&Blowfish::padding(&src), &i, k, super::BF_ENCRYPT))
+        to_hex(b.crypt(&Blowfish::padding(&src), &i, &k, super::BF_ENCRYPT))
     }
 
     fn decrypt(hexcipher: &str, key: &str, iv: &str) -> String {
 
         let k = from_hex(key.to_string()).unwrap();
         let i = from_hex(iv.to_string()).unwrap();
-        let mut b = Blowfish::new().unwrap();
+        let b = Blowfish::new().unwrap();
         String::from_utf8(
             Blowfish::remove_padding(
                 &b.crypt(
-                    &from_hex(hexcipher.to_string()).unwrap(), &i, k, super::BF_DECRYPT
+                    &from_hex(hexcipher.to_string()).unwrap(), &i, &k, super::BF_DECRYPT
                 )
             ).unwrap()
         ).unwrap()
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_encryption_decryption() {
 
-        let mut b = Blowfish::new().unwrap();
+        let b = Blowfish::new().unwrap();
         let v = "123456789".to_string().into_bytes();
         let r = b.encrypt(&v).unwrap();
         let p = b.decrypt(&r).unwrap();
@@ -254,8 +254,8 @@ mod tests {
 
         // check that two instances use different keys and different IVs
         // and that the ciphertext differs for the same plaintext
-        let mut b1 = Blowfish::new().unwrap();
-        let mut b2 = Blowfish::new().unwrap();
+        let b1 = Blowfish::new().unwrap();
+        let b2 = Blowfish::new().unwrap();
         let k1 = b1.key();
         let k2 = b2.key();
         assert!(k1 != k2);
@@ -276,12 +276,12 @@ mod tests {
     #[test]
     fn test_from_key() {
 
-        let mut b = Blowfish::from_key(vec![0]);
+        let b = Blowfish::from_key(vec![0]);
         assert!(b.is_err());
         let k = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
-        b = super::Blowfish::from_key(k.clone());
-        assert!(b.is_ok());
-        assert_eq!(b.unwrap().key, k);
+        let c = super::Blowfish::from_key(k.clone());
+        assert!(c.is_ok());
+        assert_eq!(c.unwrap().key, k);
     }
 
      #[test]

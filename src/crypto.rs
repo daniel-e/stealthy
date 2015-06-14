@@ -70,7 +70,11 @@ impl Encryption for AsymmetricEncryption {
         let cipher = try!(symenc.encrypt(v));
 
         // Encrypt the key used by Blowfish with RSA.
-        let ekey = try!(rsa::RSAenc::new(&self.pub_key, &self.priv_key).encrypt(&symenc.key()));
+        let ekey = try!(
+            try!(
+                rsa::RSA::new(&self.pub_key, &self.priv_key)
+            ).encrypt(&symenc.key())
+        );
 
         let mut v: Vec<u8> = Vec::new();
         push_value(&mut v, cipher.len() as u64, 8); // length of ciphertext
@@ -93,7 +97,7 @@ impl Encryption for AsymmetricEncryption {
         try!(
             blowfish::Blowfish::from_key(
                 try!(
-                    rsa::RSAenc::new(&self.pub_key, &self.priv_key)
+                    try!(rsa::RSA::new(&self.pub_key, &self.priv_key))
                         .decrypt(cipher_key)
                 )
             )

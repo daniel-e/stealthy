@@ -33,17 +33,13 @@ const BF_ENCRYPT: libc::c_long = 1; // values taken from header file
 const BF_DECRYPT: libc::c_long = 0;
 
 
-pub struct EncryptionResult {
-    pub iv: Vec<u8>,
-    pub ciphertext: Vec<u8>,
-}
-
 pub struct Blowfish {
     key: Vec<u8>
 }
 
 pub const KEY_LEN: usize = 16;
 pub const IV_LEN: usize = 8;
+pub const BLOCKSIZE: usize = 8;
 
 impl Blowfish {
 
@@ -95,22 +91,27 @@ impl Blowfish {
     /// Returns a new vector padded via PKCS#7.
     fn padding(data: &Vec<u8>) -> Vec<u8> {
 
-        let padval = 8 - data.len() % 8;
-        data.iter().map(|&x| x).chain(iter::repeat(padval as u8).take(padval)).collect()
+        let padval = BLOCKSIZE - data.len() % BLOCKSIZE;
+        data.iter().cloned().chain(iter::repeat(padval as u8).take(padval)).collect()
     }
 
     /// Removes the PKCS#7 padding.
-    fn remove_padding(data: Vec<u8>) -> Option<Vec<u8>> {
+    fn remove_padding(data: Vec<u8>) -> Result<Vec<u8>, String> {
     
-        if data.len() >= 8 {
-            let padval = *data.last().unwrap();
-            if padval <= 8 {
-                if data.iter().rev().take(padval as usize).all(|x| *x == padval) {
-                    return Some(data.iter().take(data.len() - padval as usize).cloned().collect());
-                }
-            }
+        if data.len() < BLOCKSIZE {
+            return Err("Length of ciphertext is smaller than the block size.".to_string());
         }
-        None
+
+        let padval = *data.last().unwrap();
+        if padval as usize > BLOCKSIZE {
+            return Err("Invalid padding value.".to_string());
+        }
+
+        let valid = data.iter().rev().take(padval as usize).all(|x| *x == padval);
+        match valid {
+            false => Err("Invalid padding.".to_string()),
+            true  => Ok(data.iter().take(data.len() - padval as usize).cloned().collect()),
+        }
     }
 
     /// Function for encryption and decryption.
@@ -122,8 +123,7 @@ impl Blowfish {
         });
 
         unsafe {
-            let k = key.clone();
-            BF_set_key(&mut *schedule, k.len() as libc::c_uint, k.as_ptr());
+            BF_set_key(&mut *schedule, key.len() as libc::c_uint, key.as_ptr());
         }
 
         let result = src.clone();
@@ -142,19 +142,26 @@ impl Blowfish {
     }
 
     /// Encrypts the data with the current key and a new IV.
-    pub fn encrypt(&self, data: &Vec<u8>) -> Result<EncryptionResult, String> {
+    pub fn encrypt(&self, data: &Vec<u8>) -> Result<Vec<u8>, String> {
 
         let iv = try!(Blowfish::new_iv());
-        Ok(EncryptionResult {
-            iv: iv.clone(),
-            ciphertext: self.crypt(Blowfish::padding(data), iv, self.key.clone(), BF_ENCRYPT)
-        })
+        Ok(
+            iv.iter().cloned()
+                .chain(
+                    self.crypt(Blowfish::padding(data), iv.clone(), self.key.clone(), BF_ENCRYPT)
+                        .iter().cloned()
+                )
+                .collect()
+        )
     }
 
     /// Decrypts the data.
-    pub fn decrypt(&self, e: EncryptionResult) -> Option<Vec<u8>> {
+    pub fn decrypt(&self, ciphertext: &Vec<u8>) -> Result<Vec<u8>, String> {
 
-        Blowfish::remove_padding(self.crypt(e.ciphertext, e.iv, self.key.clone(), BF_DECRYPT))
+        let (iv, cipher) = ciphertext.split_at(IV_LEN);
+        Blowfish::remove_padding(
+            self.crypt(cipher.iter().cloned().collect(), iv.iter().cloned().collect(), self.key.clone(), BF_DECRYPT)
+        )
     }
 }
 
@@ -198,7 +205,7 @@ mod tests {
         let mut b = Blowfish::new().unwrap();
         let v = "123456789".to_string().into_bytes();
         let r = b.encrypt(&v).unwrap();
-        let p = b.decrypt(r).unwrap();
+        let p = b.decrypt(&r).unwrap();
         assert_eq!(v, p);
 
         // check that two instances use different keys and different IVs
@@ -210,13 +217,13 @@ mod tests {
         assert!(k1 != k2);
         let c1 = b1.encrypt(&v).unwrap();
         let c2 = b2.encrypt(&v).unwrap();
-        assert_eq!(c1.ciphertext.len(), 16);
-        assert_eq!(c2.ciphertext.len(), 16);
-        assert!(c1.iv != c2.iv);
-        assert!(c1.ciphertext != c2.ciphertext);
-        let p1 = b1.decrypt(c1).unwrap();
-        let p2 = b2.decrypt(c2).unwrap();
+        assert_eq!(c1.len(), 16 + 8);
+        assert_eq!(c2.len(), 16 + 8);
+        assert!(c1 != c2);
+        let p1 = b1.decrypt(&c1).unwrap();
+        let p2 = b2.decrypt(&c2).unwrap();
         assert_eq!(p1, p2);
+        assert_eq!(p1, v);
     }
 
     #[test]
@@ -252,5 +259,10 @@ mod tests {
         let pd = Blowfish::padding(&d);
         assert_eq!(pd, vec![1 ,2, 3, 4, 5, 6, 7, 1]);
         assert_eq!(Blowfish::remove_padding(pd).unwrap(), d);
+
+        assert!(Blowfish::remove_padding(vec![1, 2, 3, 4, 5, 6, 7]).is_err());
+        assert!(Blowfish::remove_padding(vec![8, 8 ,8 ,8 ,8 ,8 ,8 ,8]).is_ok());
+        assert!(Blowfish::remove_padding(vec![8, 8 ,8 ,8 ,8 ,8 ,8 ,9]).is_err());
+        assert!(Blowfish::remove_padding(vec![8, 7 ,7 ,7 ,7 ,7 ,7 ,7]).is_ok());
     }
 }

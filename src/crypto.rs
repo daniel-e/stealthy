@@ -2,11 +2,10 @@ use std::fs::File;
 use std::io::Read;
 
 use super::{blowfish, rsa};
-use super::blowfish::EncryptionResult;
 
 pub trait Encryption : Send + Sync {
     fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String>;
-    fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>>;
+    fn decrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String>;
 }
 
 pub struct SymmetricEncryption {
@@ -32,22 +31,18 @@ impl SymmetricEncryption {
 
 impl Encryption for SymmetricEncryption {
 
+    /// Encrypts the given data stored in a vector and returns the concatenated
+    /// IV and ciphertext.
     fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
 
-        let r = try!(self.algorithm.encrypt(v));
-        Ok(r.iv.iter().chain(r.ciphertext.iter()).cloned().collect())
+        self.algorithm.encrypt(v)
     }
 
-    fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
+    /// Decrypts the given daa stored in a vector and returns the plaintext.
+    fn decrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
 
-        let (iv, cipher) = v.split_at(self.algorithm.iv_len());
-
-        let e = EncryptionResult {
-            iv: iv.iter().cloned().collect(),
-            ciphertext: cipher.iter().cloned().collect()
-        };
-
-        self.algorithm.decrypt(e)
+        // TODO String -> &str in result
+        self.algorithm.decrypt(v)
     }
 }
 
@@ -85,23 +80,16 @@ impl Encryption for AsymmetricEncryption {
             Err(e) => Err(e),
             Ok(blowfish) => {
                 match blowfish.encrypt(v) {
-                    Ok(er) => {
-                        let iv = er.iv;
-                        let ciphertext1: Vec<u8> = er.ciphertext;
-                        let key = blowfish.key();
-
+                    Ok(ci) => {
                         let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
-                        let mut data = to_hex(iv);
-                        data.push_str(":");
-                        data.push_str(&to_hex(key));
-                        let ciphertext2: Option<Vec<u8>> = r.encrypt(data.into_bytes());
+                        let cipher_of_key = r.encrypt(blowfish.key());
 
-                        match ciphertext2 {
-                            Some(cipher) => {
+                        match cipher_of_key {
+                            Some(cok) => {
                                 let mut c = String::new();
-                                c.push_str(&to_hex(ciphertext1));  // TODO use more efficient encoding
+                                c.push_str(&to_hex(ci));  // TODO use more efficient encoding
                                 c.push_str(":");
-                                c.push_str(&to_hex(cipher));
+                                c.push_str(&to_hex(cok));
                                 Ok(c.into_bytes())
                             }
                             _ => { Ok(vec![]) } // TODO error handling
@@ -113,32 +101,22 @@ impl Encryption for AsymmetricEncryption {
         }
     }
 
-    fn decrypt(&self, v: &Vec<u8>) -> Option<Vec<u8>> {
+    fn decrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
 
         match split(v) {
-            Some((ciphertext, cipher_iv_key)) => {
+            Some((ciphertext, cipher_key)) => {
                 let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
-                match r.decrypt(cipher_iv_key) {
-                    Some(raw_iv_key) => {
-                        match split(&raw_iv_key) {
-                            Some((iv, key)) => {                  
-                                let er = blowfish::EncryptionResult {
-                                    iv: iv,
-                                    ciphertext: ciphertext
-                                };
-
-                                match blowfish::Blowfish::from_key(key) {
-                                    Ok(b) => b.decrypt(er),
-                                    _ => None
-                                }
-                            }
-                            _ => None
+                match r.decrypt(cipher_key) {
+                    Some(raw_key) => {
+                        match blowfish::Blowfish::from_key(raw_key) {
+                            Ok(b) => b.decrypt(&ciphertext),
+                            _ => Err("todo err".to_string())
                         }
                     }
-                    _ => None
+                    _ => Err("todo".to_string())
                 }
             }
-            _ => None
+            _ => Err("todo".to_string())
         }
     }
 }
@@ -265,7 +243,7 @@ mod tests {
     }
 
     #[test]
-    fn test_asymmetric_encryp_decrypt() {
+    fn test_asymmetric_encrypt_decrypt() {
         
         let a = AsymmetricEncryption::new("testdata/rsa_pub.pem", "testdata/rsa_priv.pem");
         assert!(a.is_some());

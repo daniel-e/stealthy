@@ -182,7 +182,7 @@ impl Layers {
         match m {
             IncomingMessage::New(msg) => {
                 match enc.decrypt(&msg.buf) {
-                    Some(buf) => Some(IncomingMessage::New(msg.set_payload(buf))),
+                    Ok(buf) => Some(IncomingMessage::New(msg.set_payload(buf))),
                     _ => None
                 }
             }

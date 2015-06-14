@@ -3,9 +3,11 @@ use std::io::Read;
 
 use super::{blowfish, rsa};
 
+pub type ResultVec = Result<Vec<u8>, &'static str>;
+
 pub trait Encryption : Send + Sync {
-    fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String>;
-    fn decrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String>;
+    fn encrypt(&self, v: &Vec<u8>) -> ResultVec;
+    fn decrypt(&self, v: &Vec<u8>) -> ResultVec;
 }
 
 pub struct SymmetricEncryption {
@@ -21,7 +23,7 @@ pub struct AsymmetricEncryption {
 
 impl SymmetricEncryption {
 
-    pub fn new(hexkey: &String) -> Result<SymmetricEncryption, String> {
+    pub fn new(hexkey: &String) -> Result<SymmetricEncryption, &'static str> {
 
         Ok(SymmetricEncryption {
             algorithm: try!(blowfish::Blowfish::from_key(try!(from_hex(hexkey.clone()))))
@@ -33,15 +35,14 @@ impl Encryption for SymmetricEncryption {
 
     /// Encrypts the given data stored in a vector and returns the concatenated
     /// IV and ciphertext.
-    fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
+    fn encrypt(&self, v: &Vec<u8>) -> ResultVec {
 
         self.algorithm.encrypt(v)
     }
 
     /// Decrypts the given daa stored in a vector and returns the plaintext.
-    fn decrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
+    fn decrypt(&self, v: &Vec<u8>) -> ResultVec {
 
-        // TODO String -> &str in result
         self.algorithm.decrypt(v)
     }
 }
@@ -71,7 +72,7 @@ impl AsymmetricEncryption {
 
 impl Encryption for AsymmetricEncryption {
 
-    fn encrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
+    fn encrypt(&self, v: &Vec<u8>) -> ResultVec {
         // 1. generate a random key and encrypt with blowfish -> ciphertext1, iv, key
         // 2. encrypt iv + key with public key -> ciphertext2
         // 3. return ciphertext2 + ciphertext1
@@ -95,13 +96,13 @@ impl Encryption for AsymmetricEncryption {
                             _ => { Ok(vec![]) } // TODO error handling
                         }
                     }
-                    _ => Err("todo".to_string())
+                    _ => Err("todo")
                 }
             }
         }
     }
 
-    fn decrypt(&self, v: &Vec<u8>) -> Result<Vec<u8>, String> {
+    fn decrypt(&self, v: &Vec<u8>) -> ResultVec {
 
         match split(v) {
             Some((ciphertext, cipher_key)) => {
@@ -110,13 +111,13 @@ impl Encryption for AsymmetricEncryption {
                     Some(raw_key) => {
                         match blowfish::Blowfish::from_key(raw_key) {
                             Ok(b) => b.decrypt(&ciphertext),
-                            _ => Err("todo err".to_string())
+                            _ => Err("todo err")
                         }
                     }
-                    _ => Err("todo".to_string())
+                    _ => Err("todo")
                 }
             }
-            _ => Err("todo".to_string())
+            _ => Err("todo")
         }
     }
 }
@@ -145,12 +146,12 @@ fn split(v: &Vec<u8>) -> Option<(Vec<u8>, Vec<u8>)> {
     }
 }
 
-pub fn from_hex(s: String) -> Result<Vec<u8>, String> {
+pub fn from_hex(s: String) -> ResultVec {
 
     let bytes = s.into_bytes();
 
     if bytes.len() % 2 != 0 {
-        return Err("Length of hexadecimal string is not a multiple of 2.".to_string());
+        return Err("Length of hexadecimal string is not a multiple of 2.");
     }
 
     let mut v: Vec<u8> = vec![];
@@ -164,7 +165,7 @@ pub fn from_hex(s: String) -> Result<Vec<u8>, String> {
                 b'A'...b'F' => b += val - b'A' + 10,
                 b'a'...b'f' => b += val - b'a' + 10,
                 b'0'...b'9' => b += val - b'0',
-                _ => { return Err("Invalid character in hexadecimal string.".to_string()); }
+                _ => { return Err("Invalid character in hexadecimal string."); }
             }
             p += 1;
         }

@@ -41,21 +41,23 @@ pub const KEY_LEN: usize = 16;
 pub const IV_LEN: usize = 8;
 pub const BLOCKSIZE: usize = 8;
 
+type ResultVec = Result<Vec<u8>, &'static str>;
+
 impl Blowfish {
 
     /// Returns a new instance of Blowfish with a random key.
-    pub fn new() -> Result<Blowfish, String> { 
+    pub fn new() -> Result<Blowfish, &'static str> { 
         Blowfish::from_key(try!(Blowfish::new_key()))
     }
 
     /// Returns a new instance of Blowfish with the given key.
-    pub fn from_key(key: Vec<u8>) -> Result<Blowfish, String> {
+    pub fn from_key(key: Vec<u8>) -> Result<Blowfish, &'static str> {
         match key.len() {
             KEY_LEN => 
                 Ok(Blowfish {
                     key: key
                 }),
-            _ => Err("Invalid key length.".to_string())
+            _ => Err("Invalid key length.")
         }
     }
 
@@ -71,20 +73,20 @@ impl Blowfish {
 
     /// Returns cryptographically secure pseudorandom numbers for
     /// keys and initialization vectors.
-    fn random_u8(n: usize) -> Result<Vec<u8>, String> {
+    fn random_u8(n: usize) -> ResultVec {
         match OsRng::new() {
             Ok(mut r) => Ok(r.gen_iter::<u8>().take(n).collect()),
-            _         => Err("Could not get OsRng.".to_string())
+            _ => Err("Could not get OsRng.")
         }
     }
 
     /// Generates a new key.
-    fn new_key() -> Result<Vec<u8>, String> {
+    fn new_key() -> ResultVec {
         Blowfish::random_u8(KEY_LEN)
     }
 
     /// Generates a new initialization vector.
-    fn new_iv() -> Result<Vec<u8>, String> {
+    fn new_iv() -> ResultVec {
         Blowfish::random_u8(IV_LEN)
     }
 
@@ -96,20 +98,20 @@ impl Blowfish {
     }
 
     /// Removes the PKCS#7 padding.
-    fn remove_padding(data: Vec<u8>) -> Result<Vec<u8>, String> {
+    fn remove_padding(data: Vec<u8>) -> ResultVec {
     
         if data.len() < BLOCKSIZE {
-            return Err("Length of ciphertext is smaller than the block size.".to_string());
+            return Err("Length of ciphertext is smaller than the block size.");
         }
 
         let padval = *data.last().unwrap();
         if padval as usize > BLOCKSIZE {
-            return Err("Invalid padding value.".to_string());
+            return Err("Invalid padding value.");
         }
 
         let valid = data.iter().rev().take(padval as usize).all(|x| *x == padval);
         match valid {
-            false => Err("Invalid padding.".to_string()),
+            false => Err("Invalid padding."),
             true  => Ok(data.iter().take(data.len() - padval as usize).cloned().collect()),
         }
     }
@@ -141,26 +143,33 @@ impl Blowfish {
         result
     }
 
+
     /// Encrypts the data with the current key and a new IV.
-    pub fn encrypt(&self, data: &Vec<u8>) -> Result<Vec<u8>, String> {
+    pub fn encrypt(&self, data: &Vec<u8>) -> ResultVec {
 
         let iv = try!(Blowfish::new_iv());
         Ok(
             iv.iter().cloned()
                 .chain(
                     self.crypt(Blowfish::padding(data), iv.clone(), self.key.clone(), BF_ENCRYPT)
-                        .iter().cloned()
-                )
+                        .iter().cloned())
                 .collect()
         )
     }
 
     /// Decrypts the data.
-    pub fn decrypt(&self, ciphertext: &Vec<u8>) -> Result<Vec<u8>, String> {
+    pub fn decrypt(&self, ciphertext: &Vec<u8>) -> ResultVec {
+
+        if IV_LEN > ciphertext.len() {
+            return Err("Ciphertext has invalid length.");
+        }
 
         let (iv, cipher) = ciphertext.split_at(IV_LEN);
         Blowfish::remove_padding(
-            self.crypt(cipher.iter().cloned().collect(), iv.iter().cloned().collect(), self.key.clone(), BF_DECRYPT)
+            self.crypt(
+                cipher.iter().cloned().collect(), 
+                iv.iter().cloned().collect(), self.key.clone(), BF_DECRYPT
+            )
         )
     }
 }
@@ -224,6 +233,9 @@ mod tests {
         let p2 = b2.decrypt(&c2).unwrap();
         assert_eq!(p1, p2);
         assert_eq!(p1, v);
+
+        let x = vec![1, 2, 3];
+        assert!(b1.decrypt(&x).is_err());
     }
 
     #[test]

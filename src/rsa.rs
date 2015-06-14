@@ -135,7 +135,7 @@ impl RSAenc {
     }
 
 
-    fn crypt(&mut self, msg: Vec<u8>, op: CryptOperation) -> Option<Vec<u8>> {
+    fn crypt(&self, msg: &[u8], op: CryptOperation) -> Result<Vec<u8>, &'static str> {
 
         // TODO check message size
         // https://www.openssl.org/docs/crypto/RSA_public_encrypt.html
@@ -163,31 +163,31 @@ impl RSAenc {
             };
 
             match ret {
-                -1 => { None }
+                -1 => Err("Encryption or decryption with RSA failed."),
                 _  => {
                     to.truncate(ret as usize);
-                    Some(to)
+                    Ok(to)
                 }
             }
         }
     }
 
 
-    pub fn encrypt(&mut self, msg: Vec<u8>) -> Option<Vec<u8>> {
+    pub fn encrypt(&self, msg: &[u8]) -> Result<Vec<u8>, &'static str> {
 
         self.crypt(msg, CryptOperation::Encrypt)
     }
 
-    pub fn decrypt(&mut self, cipher: Vec<u8>) -> Option<Vec<u8>> {
+    pub fn decrypt(&self, cipher: &[u8]) -> Result<Vec<u8>, &'static str> {
 
         self.crypt(cipher, CryptOperation::Decrypt)
     }
 
-    pub fn new(pubkey: String, privkey: String) -> RSAenc {
+    pub fn new(pubkey: &String, privkey: &String) -> RSAenc {
 
         // TODO error handling
-        let rsapub = RSAenc::rsa_pubkey(pubkey).unwrap();
-        let rsapriv = RSAenc::rsa_privkey(privkey).unwrap();
+        let rsapub = RSAenc::rsa_pubkey(pubkey.clone()).unwrap();
+        let rsapriv = RSAenc::rsa_privkey(privkey.clone()).unwrap();
 
         RSAenc {
             rsapub: rsapub,
@@ -233,15 +233,15 @@ fn test_encryption() {
     let pubkey = read_file("testdata/rsa_pub.pem").unwrap();
     let privkey = read_file("testdata/rsa_priv.pem").unwrap();
 
-    let mut rsa = super::RSAenc::new(pubkey, privkey);
+    let mut rsa = super::RSAenc::new(&pubkey, &privkey);
     let plain   = "hello".to_string();
 
-    let cipher = rsa.encrypt(plain.clone().into_bytes()).unwrap();
+    let cipher = rsa.encrypt(&plain.clone().into_bytes()).unwrap();
 
     assert!(cipher != plain.clone().into_bytes());
     assert!(cipher.len() >= 256);
 
-    let p = String::from_utf8(rsa.decrypt(cipher).unwrap()).unwrap();
+    let p = String::from_utf8(rsa.decrypt(&cipher).unwrap()).unwrap();
     assert_eq!(p, plain);
 }
 }

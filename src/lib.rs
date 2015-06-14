@@ -104,10 +104,10 @@ impl Layers {
 
     pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Result<Layer, &'static str> {
 
-        match AsymmetricEncryption::new(&pubkey_file, &privkey_file) {
-            Some(e) => Layers::init(Box::new(e), device),
-            _ => Err("todo") // TODO
-        }
+        Layers::init(Box::new(
+                try!(AsymmetricEncryption::new(&pubkey_file, &privkey_file))
+            ), device
+        )
     }
 
     pub fn send(&self, msg: Message) -> Result<u64, Errors> {

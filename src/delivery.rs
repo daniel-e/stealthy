@@ -180,9 +180,9 @@ impl Delivery {
 
         let mut v: Vec<u8> = Vec::new();
         v.push(1);                          // version u8
-        push_val(&mut v, m.id, 8);          // id u64
-        push_val(&mut v, m.n as u64, 4);    // number of messages u32
-        push_val(&mut v, m.seq as u64, 4);  // seq u32
+        push_value(&mut v, m.id, 8);          // id u64
+        push_value(&mut v, m.n as u64, 4);    // number of messages u32
+        push_value(&mut v, m.seq as u64, 4);  // seq u32
         push_slice(&mut v, &m.buf);         // message: variable len
         v
     }
@@ -195,15 +195,15 @@ impl Delivery {
         }
 
         let mut v = data.clone();
-        let version = pop_val(&mut v, 1).unwrap();
+        let version = pop_value(&mut v, 1).unwrap();
 
         if version != 1 {
             return None;
         }
 
-        let id: u64 = pop_val(&mut v, 8).unwrap();         // id
-        let n: u32 = pop_val(&mut v, 4).unwrap() as u32;   // number of messages
-        let seq: u32 = pop_val(&mut v, 4).unwrap() as u32; // seq
+        let id: u64 = pop_value(&mut v, 8).unwrap();         // id
+        let n: u32 = pop_value(&mut v, 4).unwrap() as u32;   // number of messages
+        let seq: u32 = pop_value(&mut v, 4).unwrap() as u32; // seq
         
         Some(SmallMessage {
             buf: v.clone(),
@@ -214,13 +214,13 @@ impl Delivery {
     }
 }
 
-fn push_slice(v: &mut Vec<u8>, arr: &[u8]) {
+pub fn push_slice(v: &mut Vec<u8>, arr: &[u8]) {
     for i in arr { 
         v.push(*i) 
     }
 }
 
-fn push_val(dst: &mut Vec<u8>, val: u64, n: usize) {
+pub fn push_value(dst: &mut Vec<u8>, val: u64, n: usize) {
     let mut v = val;
     let mask = 0xff as u64;
     for _ in 0..n {
@@ -230,17 +230,17 @@ fn push_val(dst: &mut Vec<u8>, val: u64, n: usize) {
     }
 }
 
-fn pop_val(src: &mut Vec<u8>, n: usize) -> Option<u64> {
+pub fn pop_value(src: &mut Vec<u8>, n: usize) -> Result<u64, &'static str> {
     let mut r: u64 = 0;
     if src.len() < n {
-        return None;
+        return Err("Could not pop value from vector because vector is too short.");
     }
     for i in 0..n {
         r = r << 8;
         r = r + (src[n - 1 - i] as u64);
         src.remove(n - 1 - i); // TODO performance
     }
-    Some(r)
+    Ok(r)
 }
 
 
@@ -372,7 +372,7 @@ mod tests {
 */
     // ========================================================================
 
-    use super::{push_slice, push_val, pop_val};
+    use super::{push_slice, push_value, pop_value};
 
     #[test]
     fn test_push_slice() {
@@ -383,32 +383,32 @@ mod tests {
     }
 
     #[test]
-    fn test_push_val() {
+    fn test_push_value() {
         let mut v: Vec<u8> = Vec::new();
 
-        push_val(&mut v, 123, 2);
+        push_value(&mut v, 123, 2);
         assert_eq!(v, vec![123, 0]);
 
         v.clear();
-        push_val(&mut v, 23 * 256 + 78, 2);
+        push_value(&mut v, 23 * 256 + 78, 2);
         assert_eq!(v, vec![78, 23]);
     }
 
     #[test]
-    fn test_pop_val() {
+    fn test_pop_value() {
         let mut v: Vec<u8> = vec![1, 2, 3];
         
-        let mut i = pop_val(&mut v, 4);
-        assert!(!i.is_some());
+        let mut i = pop_value(&mut v, 4);
+        assert!(i.is_err());
 
         v.clear();
-        push_val(&mut v, 17 * 256 + 19, 2);
-        push_val(&mut v, 34, 1);
-        i = pop_val(&mut v, 2);
+        push_value(&mut v, 17 * 256 + 19, 2);
+        push_value(&mut v, 34, 1);
+        i = pop_value(&mut v, 2);
         assert_eq!(i.unwrap(), 17 * 256 + 19);
         assert_eq!(v.len(), 1);
 
-        i = pop_val(&mut v, 1);
+        i = pop_value(&mut v, 1);
         assert_eq!(i.unwrap(), 34);
         assert_eq!(v.len(), 0);
     }

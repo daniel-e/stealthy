@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::Read;
 
 use super::{blowfish, rsa};
+use super::delivery::{push_value, pop_value, push_slice};
 
 pub type ResultVec = Result<Vec<u8>, &'static str>;
 
@@ -36,13 +37,11 @@ impl Encryption for SymmetricEncryption {
     /// Encrypts the given data stored in a vector and returns the concatenated
     /// IV and ciphertext.
     fn encrypt(&self, v: &Vec<u8>) -> ResultVec {
-
         self.algorithm.encrypt(v)
     }
 
     /// Decrypts the given daa stored in a vector and returns the plaintext.
     fn decrypt(&self, v: &Vec<u8>) -> ResultVec {
-
         self.algorithm.decrypt(v)
     }
 }
@@ -51,20 +50,12 @@ impl Encryption for SymmetricEncryption {
 
 impl AsymmetricEncryption {
 
-    pub fn new(pubkey_file: &str, privkey_file: &str) -> Option<AsymmetricEncryption> {
+    pub fn new(pubkey_file: &str, privkey_file: &str) -> Result<AsymmetricEncryption, &'static str> {
 
-        match read_file(pubkey_file) {
-            Some(pubkey) => {
-                match read_file(privkey_file) {
-                    Some(privkey) => Some(AsymmetricEncryption {
-                            pub_key: pubkey,
-                            priv_key: privkey
-                        }),
-                    _ => None
-                }
-            }
-            _ => None
-        }
+        Ok(AsymmetricEncryption {
+            pub_key: try!(read_file(pubkey_file)),
+            priv_key: try!(read_file(privkey_file))
+        })
     }
 }
 
@@ -73,78 +64,44 @@ impl AsymmetricEncryption {
 impl Encryption for AsymmetricEncryption {
 
     fn encrypt(&self, v: &Vec<u8>) -> ResultVec {
-        // 1. generate a random key and encrypt with blowfish -> ciphertext1, iv, key
-        // 2. encrypt iv + key with public key -> ciphertext2
-        // 3. return ciphertext2 + ciphertext1
 
-        match blowfish::Blowfish::new() {
-            Err(e) => Err(e),
-            Ok(blowfish) => {
-                match blowfish.encrypt(v) {
-                    Ok(ci) => {
-                        let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
-                        let cipher_of_key = r.encrypt(blowfish.key());
+        // Encrypt the data with Blowfish.
+        let symenc = try!(blowfish::Blowfish::new());
+        let cipher = try!(symenc.encrypt(v));
 
-                        match cipher_of_key {
-                            Some(cok) => {
-                                let mut c = String::new();
-                                c.push_str(&to_hex(ci));  // TODO use more efficient encoding
-                                c.push_str(":");
-                                c.push_str(&to_hex(cok));
-                                Ok(c.into_bytes())
-                            }
-                            _ => { Ok(vec![]) } // TODO error handling
-                        }
-                    }
-                    _ => Err("todo")
-                }
-            }
-        }
+        // Encrypt the key used by Blowfish with RSA.
+        let ekey = try!(rsa::RSAenc::new(&self.pub_key, &self.priv_key).encrypt(&symenc.key()));
+
+        let mut v: Vec<u8> = Vec::new();
+        push_value(&mut v, cipher.len() as u64, 8); // length of ciphertext
+        push_slice(&mut v, &cipher);                // ciphertext
+        push_slice(&mut v, &ekey);                  // with RSA encrypted key
+        Ok(v)
     }
-
+ 
     fn decrypt(&self, v: &Vec<u8>) -> ResultVec {
 
-        match split(v) {
-            Some((ciphertext, cipher_key)) => {
-                let mut r = rsa::RSAenc::new(self.pub_key.clone(), self.priv_key.clone());
-                match r.decrypt(cipher_key) {
-                    Some(raw_key) => {
-                        match blowfish::Blowfish::from_key(raw_key) {
-                            Ok(b) => b.decrypt(&ciphertext),
-                            _ => Err("todo err")
-                        }
-                    }
-                    _ => Err("todo")
-                }
-            }
-            _ => Err("todo")
+        let mut data = v.clone();
+        let clen = try!(pop_value(&mut data, 8)) as usize;
+
+        if clen > data.len() {
+            return Err("Invalid ciphertext length.");
         }
+
+        let (cipher, cipher_key) = data.split_at(clen);
+
+        try!(
+            blowfish::Blowfish::from_key(
+                try!(
+                    rsa::RSAenc::new(&self.pub_key, &self.priv_key)
+                        .decrypt(cipher_key)
+                )
+            )
+        ).decrypt(cipher)
     }
 }
 
 // ------------------------------------------------------------------
-
-fn split(v: &Vec<u8>) -> Option<(Vec<u8>, Vec<u8>)> {
-    
-    match String::from_utf8(v.clone()) {
-        Ok(cipher) => {
-            let dec: Vec<&str> = cipher.split(':').collect();
-            if dec.len() != 2 {
-                return None;
-            }
-            match from_hex(dec[0].to_string()) {
-                Ok(ciphertext) => {
-                    match from_hex(dec[1].to_string()) {
-                        Ok(cipher_iv_key) => Some((ciphertext, cipher_iv_key)),
-                        _ => None
-                    }
-                }
-                _ => None
-            }
-        }
-        _ => None
-    }
-}
 
 pub fn from_hex(s: String) -> ResultVec {
 
@@ -174,27 +131,18 @@ pub fn from_hex(s: String) -> ResultVec {
     Ok(v)
 }
 
-pub fn to_hex(v: Vec<u8>) -> String {
-
-    let mut s = String::new();
-    for i in v {
-        s.push_str(&format!("{:02x}", i));
-    }
-    s
-}
-
-pub fn read_file(fname: &str) -> Option<String> {
+pub fn read_file(fname: &str) -> Result<String, &'static str> {
 
     let r = File::open(fname);
     match r {
         Ok(mut file) => {
             let mut s = String::new();
             match file.read_to_string(&mut s) {
-                Ok(_) => { Some(s) }
-                _ => { None }
+                Ok(_) => Ok(s),
+                _     => Err("Could not read file")
             }
         }
-        _ => { None }
+        _ => Err("Could not open file for reading.")
     }
 }
 
@@ -221,13 +169,6 @@ mod tests {
         assert_eq!(o, v);
     }
 
-    #[test]
-    fn test_to_hex() {
-        
-        let v: Vec<u8> = vec![0, 1, 9, 10, 15, 16];
-        assert_eq!("0001090a0f10", super::to_hex(v));
-    }
-
     // --------------------------------------------------------------
  
     use super::{Encryption, AsymmetricEncryption};
@@ -236,10 +177,10 @@ mod tests {
     fn test_asymmetric_encryption() {
         
         let a = AsymmetricEncryption::new("testdata/rsa_pub.pem", "testdata/rsa_priv.pem");
-        assert!(a.is_some());
+        assert!(a.is_ok());
 
         let b = AsymmetricEncryption::new("testdata/rsa_pub.pem", "abc");
-        assert!(b.is_none());
+        assert!(b.is_err());
 
     }
 
@@ -247,9 +188,9 @@ mod tests {
     fn test_asymmetric_encrypt_decrypt() {
         
         let a = AsymmetricEncryption::new("testdata/rsa_pub.pem", "testdata/rsa_priv.pem");
-        assert!(a.is_some());
+        assert!(a.is_ok());
         match a {
-            Some(a) => {
+            Ok(a) => {
                 let plain  = "hello".to_string().into_bytes();
                 let cipher = a.encrypt(&plain).unwrap();
                 let p      = a.decrypt(&cipher).unwrap();

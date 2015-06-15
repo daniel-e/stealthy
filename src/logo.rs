@@ -13,3 +13,19 @@ pub fn get_logo() -> String {
     s.push_str("                               |___/ \n");
     s
 }
+
+// ------------------------------------------------------------------------
+// TESTS
+// ------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+
+    use super::get_logo;
+
+    // Just a test for test coverage.
+    #[test]
+    fn test_get_logo() {
+        assert!(get_logo().len() > 20);
+    }
+}

@@ -131,7 +131,7 @@ impl Delivery {
     pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
 
         let mut queue          = self.pending.lock().unwrap();
-        let mut small_messages = self.split_message(&msg);
+        let mut small_messages = Self::split_message(&msg);
 
         // split messages and send them via the network layer
         for i in &small_messages.messages {
@@ -148,7 +148,7 @@ impl Delivery {
         Ok(id)
     }
 
-    fn split_message(&self, msg: &Message) -> SmallMessages {
+    fn split_message(msg: &Message) -> SmallMessages {
 
         let id = rand::random::<u64>();
         let mut parts: Vec<SmallMessage> = Vec::new();
@@ -179,11 +179,11 @@ impl Delivery {
     fn serialize(m: &SmallMessage) -> Vec<u8> {
 
         let mut v: Vec<u8> = Vec::new();
-        v.push(1);                          // version u8
+        v.push(1);                            // version u8
         push_value(&mut v, m.id, 8);          // id u64
         push_value(&mut v, m.n as u64, 4);    // number of messages u32
         push_value(&mut v, m.seq as u64, 4);  // seq u32
-        push_slice(&mut v, &m.buf);         // message: variable len
+        push_slice(&mut v, &m.buf);           // message: variable len
         v
     }
 
@@ -252,11 +252,8 @@ pub fn pop_value(src: &mut Vec<u8>, n: usize) -> Result<u64, &'static str> {
 mod tests {
 
     use super::{Delivery, MAX_MESSAGE_PART_SIZE, SmallMessage};
-    use std::iter::FromIterator;
-
     use ::Message;
 
-    // TODO
     /*
     #[test]
     fn test_new() {
@@ -264,24 +261,28 @@ mod tests {
         let d = Delivery::new();
         assert_eq!(d.pending.len(), 0);
     }
+    */
+
 
     #[test]
     fn test_split_small_message() {
         
         let data = "hallo".to_string().into_bytes();
         let msg  = Message::new("1.2.3.4".to_string(), data.clone());
-        let s    = Delivery::new();
-        let r    = s.split_message(&msg);
+        let r    = Delivery::split_message(&msg);
+
 
         // Check that a random id has been generated.
         assert!(r.id != 0);
         // Check that there is one message.
         assert!(r.messages.len() == 1);
+        // An empty vector for received acks.
+        assert!(r.acks.len() == 0);
+
         // Check that the sequence number of the first message is 1.
         assert!(r.messages[0].seq == 1);
         // Check that the first message is equal to the original message.
         assert_eq!(r.messages[0].buf, data);
-        
         assert_eq!(r.messages[0].id, r.id);
         assert_eq!(r.messages[0].n, 1);
     }
@@ -291,11 +292,13 @@ mod tests {
 
         let v = (0..MAX_MESSAGE_PART_SIZE).map(|x| x as u8).collect::<Vec<_>>();
         let m = Message::new("1.2.3.4".to_string(), v.clone());
-        let d = Delivery::new();
-        let r = d.split_message(&m);
+        let r = Delivery::split_message(&m);
 
+        assert_eq!(r.acks.len(), 0);
+        assert!(r.id != 0);
         assert_eq!(r.messages.len(), 1);
         assert_eq!(r.messages[0].buf, v);
+        assert_eq!(r.messages[0].seq, 1);
         assert_eq!(r.messages[0].id, r.id);
         assert_eq!(r.messages[0].n, 1);
     }
@@ -306,17 +309,18 @@ mod tests {
         // Create a message that should be divided into two pieces.
         let v = (0..MAX_MESSAGE_PART_SIZE + 1).map(|x| x as u8).collect::<Vec<_>>();
         let m = Message::new("1.2.3.4".to_string(), v.clone());
-        let d = Delivery::new();
-        let r = d.split_message(&m);
+        let r = Delivery::split_message(&m);
 
         assert!(r.id != 0);
         assert!(r.messages.len() == 2);
         assert!(r.messages[0].seq == 1);
         assert!(r.messages[0].id == r.id);
         assert!(r.messages[0].n == 2);
+
         assert!(r.messages[1].seq == 2);
         assert!(r.messages[1].id == r.id);
         assert!(r.messages[1].n == 2);
+
         assert!(r.messages[0].buf.len() == super::MAX_MESSAGE_PART_SIZE);
         assert!(r.messages[1].buf.len() == 1);
 
@@ -362,6 +366,7 @@ mod tests {
 
         // Check that version check does work.
         x = vec![2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        assert!(Delivery::deserialize(&x).is_none());
         x = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         assert!(Delivery::deserialize(&x).is_some());
 
@@ -369,7 +374,7 @@ mod tests {
         x = vec![1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         assert!(Delivery::deserialize(&x).is_some());
     }
-*/
+
     // ========================================================================
 
     use super::{push_slice, push_value, pop_value};

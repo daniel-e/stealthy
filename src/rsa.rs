@@ -1,6 +1,8 @@
+extern crate rand;
 extern crate libc;
 
-use std::ptr;
+use self::rand::{OsRng, Rng};
+use std::{iter, ptr};
 
 #[repr(C)]
 struct BIO;
@@ -58,15 +60,16 @@ extern {
 
     // https://www.openssl.org/docs/crypto/RSA_size.html
     fn RSA_size(rsa: *const RSA_) -> libc::c_int;
+
+    // https://www.openssl.org/docs/crypto/RSA_new.html
+    fn RSA_free(rsa: *mut RSA_);
+
+    // https://www.openssl.org/docs/crypto/rand.html
+    fn RAND_seed(buf: *const libc::c_void, len: libc::c_int);
 }
 
 const RSA_PKCS1_OAEP_PADDING: libc::c_int = 4;   // openssl/rsa.h
 
-
-enum CryptOperation {
-    Encrypt,
-    Decrypt
-}
 
 enum KeyType {
     PublicKey,
@@ -74,9 +77,18 @@ enum KeyType {
 }
 
 pub struct RSA {
-    // TODO free memory on desctructor
     rsapub: *mut RSA_,
     rsapriv: *mut RSA_,
+}
+
+impl Drop for RSA {
+
+    fn drop(&mut self) {
+        unsafe {
+            RSA_free(self.rsapub);
+            RSA_free(self.rsapriv);
+        }
+    }
 }
 
 impl RSA {
@@ -122,51 +134,70 @@ impl RSA {
         RSA::pem(pem, KeyType::PrivateKey)
     }
 
+    fn seed_rand() -> Result<(), &'static str> {
 
-    fn crypt(&self, msg: &[u8], op: CryptOperation) -> Result<Vec<u8>, &'static str> {
+        match OsRng::new() {
+            Ok(mut r) => {
+                let mut seed: [u8; 32] = [0; 32];
+                r.fill_bytes(&mut seed);
+                unsafe {
+                    RAND_seed(
+                        seed.as_ptr() as *const libc::c_void,
+                        seed.len() as libc::c_int
+                    );
+                    Ok(())
+                }
+            }
+            _ => Err("Could not get OsRng.")
+        }
+    }
 
-        // TODO check message size
-        // https://www.openssl.org/docs/crypto/RSA_public_encrypt.html
+    fn crypt(f: unsafe extern "C" fn(
+                flen: libc::c_int, from: *mut u8, to: *mut u8, rsa: *mut RSA_, padding: libc::c_int) -> libc::c_int, 
+             msg: &[u8], 
+             key: *mut RSA_) -> Result<Vec<u8>, &'static str> {
 
         unsafe {
-            let siz = RSA_size(self.rsapub);
+            let siz = RSA_size(key) as usize;
+            let mut buf = iter::repeat(0).take(siz).collect::<Vec<u8>>();
 
-            let mut to: Vec<u8> = vec![];
-            for _ in 0..siz {
-                to.push(0);
-            }
-
-            let ret = match op {
-                CryptOperation::Encrypt => {
-                    RSA_public_encrypt(
-                        msg.len() as libc::c_int, msg.as_ptr() as *mut u8, to.as_ptr() as *mut u8, 
-                        self.rsapub, RSA_PKCS1_OAEP_PADDING)
-                    }
-
-                CryptOperation::Decrypt => {
-                    RSA_private_decrypt(
-                        msg.len() as libc::c_int, msg.as_ptr() as *mut u8, to.as_ptr() as *mut u8, 
-                        self.rsapriv, RSA_PKCS1_OAEP_PADDING)
-                    }
-            };
+            let ret = f(
+                msg.len()    as libc::c_int, 
+                msg.as_ptr() as *mut u8, 
+                buf.as_ptr() as *mut u8, 
+                key, 
+                RSA_PKCS1_OAEP_PADDING
+            );
 
             match ret {
                 -1 => Err("Encryption or decryption with RSA failed."),
                 _  => {
-                    to.truncate(ret as usize);
-                    Ok(to)
+                    buf.truncate(ret as usize);
+                    Ok(buf)
                 }
             }
         }
     }
 
-
     pub fn encrypt(&self, msg: &[u8]) -> Result<Vec<u8>, &'static str> {
-        self.crypt(msg, CryptOperation::Encrypt)
+
+        // "rng must be seeded prior to calling this method"
+        try!(Self::seed_rand());
+
+        unsafe {
+            // For encryption message length must be less than siz - 41
+            // for RSA_PKCS1_OAEP_PADDING.
+            let siz = RSA_size(self.rsapub) as usize;
+            if msg.len() >= siz - 41 {
+                return Err("Message too large for RSA_PKCS1_OAEP_PADDING");
+            }
+
+            Self::crypt(RSA_public_encrypt, msg, self.rsapub)
+        }
     }
 
     pub fn decrypt(&self, cipher: &[u8]) -> Result<Vec<u8>, &'static str> {
-        self.crypt(cipher, CryptOperation::Decrypt)
+        Self::crypt(RSA_private_decrypt, cipher, self.rsapriv)
     }
 
     pub fn new(pubkey: &String, privkey: &String) -> Result<RSA, &'static str> {

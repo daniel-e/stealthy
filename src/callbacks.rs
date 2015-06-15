@@ -4,7 +4,7 @@ use term::color;
 use std::process::Command;
 
 use humaninterface::Output;
-use icmpmessaging::Message;
+use stealthy::Message;
 
 pub trait Callbacks : Output {
 
@@ -44,12 +44,14 @@ pub trait Callbacks : Output {
     /// they can be protected via cryptographic mechanisms.
     fn ack_msg(&mut self, _id: u64) {
 
-        self.println("ack".to_string(), color::BRIGHT_GREEN);
+        let fm = time::strftime("%R", &time::now()).unwrap();
+        self.println(format!("{} ack", fm), color::BRIGHT_GREEN);
     }
 
     fn err_msg(&mut self, msg: String) {
 
-        self.println(format!("error: {}", msg), color::BRIGHT_RED);
+        let fm = time::strftime("%R", &time::now()).unwrap();
+        self.println(format!("{} error: {}", fm, msg), color::BRIGHT_RED);
     }
 }
 

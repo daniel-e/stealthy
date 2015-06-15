@@ -9,7 +9,7 @@ use term::color;
 use self::ncurses::*;
 
 #[cfg(feature="usencurses")]
-use humaninterface::{Input, Output};
+use humaninterface::{Input, Output, UserInput, ControlType};
 #[cfg(feature="usencurses")]
 use callbacks::Callbacks;
 
@@ -25,7 +25,8 @@ unsafe impl Send for WindowWrapper { }
 #[cfg(feature="usencurses")]
 pub struct NcursesOut {
     win1: WindowWrapper,
-    win2: WindowWrapper
+    win2: WindowWrapper,
+    scroll_offset : i32,
 }
 
 #[cfg(feature="usencurses")]
@@ -83,8 +84,23 @@ impl NcursesOut {
 
         NcursesOut {
             win1: w1,
-            win2: w2
+            win2: w2,
+            scroll_offset: 0
         }
+    }
+
+    pub fn scroll_up(&mut self) {
+        self.scroll_n(1);
+    }
+
+    pub fn scroll_down(&mut self) {
+        self.scroll_n(-1);
+    }
+
+    fn scroll_n(&mut self, n: i32) {
+        self.scroll_offset += n;
+        wscrl(self.win1.win, n);
+        wrefresh(self.win1.win);
     }
 
     fn pos(&self) -> (i32, i32) {
@@ -103,6 +119,9 @@ impl Output for NcursesOut {
     }
 
     fn println(&mut self, s: String, color: color::Color) {
+
+        let n = -self.scroll_offset;
+        self.scroll_n(n);
 
         let attr = match color {
             color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
@@ -161,23 +180,52 @@ impl NcursesIn {
 #[cfg(feature="usencurses")]
 impl Input for NcursesIn {
 
-    fn read_line(&self) -> Option<String> {
+    fn read_line(&self) -> Option<UserInput> {
 
         let mut buf: Vec<u8> = Vec::new();
 
         self.clear_input_line();
         mv(self.maxy - 1, 0);
+        //addch('>' as chtype);
+        //addch('>' as chtype);
+        //addch(' ' as chtype);
         refresh();
+
+        let mut state = 0;
 
         loop {
             refresh();
             let c = getch();
 
+            if state == 2 {
+                state = 0;
+                if c == 65 {
+                    return Some(UserInput::Control(ControlType::ArrowUp));
+                } else if c == 66 {
+                    return Some(UserInput::Control(ControlType::ArrowDown));
+                } else {
+                    continue;
+                }
+            }
+            if state == 1 {
+                if c == 91 {
+                    state = 2;
+                    continue;
+                } else {
+                    state = 0;
+                    continue;
+                }
+            }
+
             match c as i32 {
+                27 => {
+                    state = 1;
+                }
+
                 10 => { // TODO constant for enter
                     let s = String::from_utf8(buf.clone());
                     match s {
-                        Ok(val) => { return Some(val); }
+                        Ok(val) => { return Some(UserInput::Line(val)); }
                         _ => { } // TODO
                     }
                 }
@@ -187,12 +235,6 @@ impl Input for NcursesIn {
 
                 4 => { // TODO constant for ctrl d
                     return None;
-                }
-
-                25 => { // TODO constant for ctrl y
-                }
-
-                5 => { //TODO constant for ctrl e
                 }
 
                 127 => { // TODO constant for backspace

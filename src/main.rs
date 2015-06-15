@@ -6,7 +6,7 @@ mod callbacks;
 
 extern crate getopts;
 extern crate term;
-extern crate icmpmessaging;
+extern crate stealthy;
 extern crate time;
 
 use std::{env, thread};
@@ -15,8 +15,8 @@ use std::sync::{Arc, Mutex};
 use getopts::Options;
 use term::color;
 
-use icmpmessaging::{Message, IncomingMessage, Errors, Layers};
-use humaninterface::{Input, Output};
+use stealthy::{Message, IncomingMessage, Errors, Layers};
+use humaninterface::{Input, Output, UserInput, ControlType};
 use callbacks::Callbacks;
 
 #[cfg(not(feature="usencurses"))]
@@ -58,23 +58,35 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
     // read from human interface until user enters control-d and send the
     // message via the network layer
     loop { match i.read_line() {
-            Some(s) => {
-                let txt = s.trim_right().to_string();
-                if txt.len() > 0 {
-        		    let msg = Message::new(dstip.clone(), txt.into_bytes());
-                    let mut out = o.lock().unwrap();
-                    let fm = time::strftime("%R", &time::now()).unwrap();
-                    out.println(format!("{} [you] says: {}", fm, s), color::WHITE);
-    	        	match l.send(msg) {
-    			        Ok(_) => {
-                            out.println(format!("transmitting..."), color::BLUE);
-    	        		}
-    			        Err(e) => { match e {
-            				Errors::MessageTooBig => { out.println(format!("main: message too big"), color::RED); }
-    	        			Errors::SendFailed => { out.println(format!("main: sending failed"), color::RED); }
-                            Errors::EncryptionError => {out.println(format!("main: encryption faild"), color::RED); }
-    			        }}
-            		}
+            Some(ui) => {
+                match ui {
+                    UserInput::Line(s) => {
+                        let txt = s.trim_right().to_string();
+                        if txt.len() > 0 {
+                		    let msg = Message::new(dstip.clone(), txt.into_bytes());
+                            let mut out = o.lock().unwrap();
+                            let fm = time::strftime("%R", &time::now()).unwrap();
+                            out.println(format!("{} [you] says: {}", fm, s), color::WHITE);
+    	                	match l.send(msg) {
+    			                Ok(_) => {
+                                    let fm = time::strftime("%R", &time::now()).unwrap();
+                                    out.println(format!("{} transmitting...", fm), color::BLUE);
+    	                		}
+    			                Err(e) => { match e {
+                    				Errors::MessageTooBig => { out.println(format!("Message too big."), color::RED); }
+    	                			Errors::SendFailed => { out.println(format!("Sending of message failed."), color::RED); }
+                                    Errors::EncryptionError => {out.println(format!("Encryption failed."), color::RED); }
+    			                }}
+                    		}
+                        }
+                    }
+                    UserInput::Control(what) => {
+                        let mut out = o.lock().unwrap();
+                        match what {
+                            ControlType::ArrowUp => out.scroll_up(),
+                            ControlType::ArrowDown => out.scroll_down()
+                        }
+                    }
                 }
             }
             _ => { break; }

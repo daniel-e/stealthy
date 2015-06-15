@@ -70,7 +70,6 @@ int send_icmp(const char* dstip, const char* buf, u_int16_t size)
 	// open socket and send packet
 	int sd = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (sd < 0) {
-		perror("socket() error");
 		return ret;
 	}
 
@@ -79,7 +78,6 @@ int send_icmp(const char* dstip, const char* buf, u_int16_t size)
 	s.sin_addr.s_addr = inet_addr(dstip);
 
 	if (sendto(sd, packet, sizeof(struct icmp) + size, 0, (struct sockaddr*) &s, sizeof(s)) < 0) {
-		perror("sendto() error");
 		return ret;
 	}
 	close(sd);
@@ -92,7 +90,6 @@ pcap_t* setup_pcap(const char* dev, const char* filter)
 	char errbuf[PCAP_ERRBUF_SIZE];
 	pcap_t* handle = pcap_open_live(dev, PCAP_ERRBUF_SIZE, 1, 1000, errbuf);
 	if (!handle) {
-		fprintf(stderr, "setup_pcap(): could not open device %s\n", dev);
 		return 0;
 	}
 
@@ -100,18 +97,15 @@ pcap_t* setup_pcap(const char* dev, const char* filter)
 	bpf_u_int32 mask;
 	bpf_u_int32 net;
 	if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1) {
-		fprintf(stderr, "Can't get netmask for device %s\n", dev);
 		net = 0;
 		mask = 0;
 	}
 
 	if (pcap_compile(handle, &bpf, filter, 0, net) == -1) {
-		fprintf(stderr, "could not set filter\n");
 		return 0;
 	}
 
 	if (pcap_setfilter(handle, &bpf) == -1) {
-		fprintf(stderr, "Couldn't install filter %s: %s\n", filter, pcap_geterr(handle));
 		return 0;
 	}
 	return handle;
@@ -180,7 +174,6 @@ int recv_callback(void* target, const char* dev, callback cb) {
 		args->target = target;
 		int r = pthread_create(&t, NULL, &do_callback, (void*) args);
 		if (r != 0) {
-			fprintf(stderr, "could not create thread");
 			return -1;
 		}
 	} else return -1;

@@ -134,8 +134,8 @@ impl Output for NcursesOut {
         };
         let (y, x) = self.pos();
         wattron(self.win1.win, attr as i32);
-        wprintw(self.win1.win, "\n");
-        wprintw(self.win1.win, &s);
+        waddstr(self.win1.win, "\n");
+        waddstr(self.win1.win, &s);
         wattroff(self.win1.win, attr as i32);
         mv(y, x);
         wrefresh(self.win1.win);

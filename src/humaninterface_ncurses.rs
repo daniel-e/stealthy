@@ -89,14 +89,6 @@ impl NcursesOut {
         }
     }
 
-    pub fn scroll_up(&mut self) {
-        self.scroll_n(1);
-    }
-
-    pub fn scroll_down(&mut self) {
-        self.scroll_n(-1);
-    }
-
     fn scroll_n(&mut self, n: i32) {
         self.scroll_offset += n;
         wscrl(self.win1.win, n);
@@ -134,13 +126,22 @@ impl Output for NcursesOut {
         };
         let (y, x) = self.pos();
         wattron(self.win1.win, attr as i32);
-        wprintw(self.win1.win, "\n");
-        wprintw(self.win1.win, &s);
+        waddstr(self.win1.win, "\n");
+        waddstr(self.win1.win, &s);
         wattroff(self.win1.win, attr as i32);
         mv(y, x);
         wrefresh(self.win1.win);
         wrefresh(self.win2.win);
     }
+
+    fn scroll_up(&mut self) {
+        self.scroll_n(1);
+    }
+
+    fn scroll_down(&mut self) {
+        self.scroll_n(-1);
+    }
+
 }
 
 #[cfg(feature="usencurses")]

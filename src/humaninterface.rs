@@ -19,5 +19,8 @@ pub trait Input {
 pub trait Output {
     fn close(&self);
     fn println(&mut self, s: String, color: color::Color);
+
+    fn scroll_up(&mut self) { }
+    fn scroll_down(&mut self) { }
 }
 

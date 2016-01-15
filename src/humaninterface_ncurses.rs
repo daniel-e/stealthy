@@ -244,8 +244,17 @@ impl Input for NcursesIn {
                         addch(' ' as chtype);
                         mv(self.maxy - 1, self.x() - 1);
                     }
-                    if buf.len() > 0 {
-                        buf.pop();
+
+                    // Remove the correct amount of UTF-8 characters.
+                    match String::from_utf8(buf.clone()) {
+                        Ok(mut val) => {
+                            val.pop();
+                            buf.pop();
+                            for _ in 0.. (buf.len() - val.len()) {
+                                buf.pop();
+                            }
+                        }
+                        _ => {}
                     }
                 }
 

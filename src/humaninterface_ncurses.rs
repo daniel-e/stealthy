@@ -125,10 +125,10 @@ impl Output for NcursesOut {
             _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD) 
         };
         let (y, x) = self.pos();
-        wattron(self.win1.win, attr as i32);
+        wattron(self.win1.win, attr as u64);
         waddstr(self.win1.win, "\n");
         waddstr(self.win1.win, &s);
-        wattroff(self.win1.win, attr as i32);
+        wattroff(self.win1.win, attr as u64);
         mv(y, x);
         wrefresh(self.win1.win);
         wrefresh(self.win2.win);

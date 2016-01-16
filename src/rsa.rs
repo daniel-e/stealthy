@@ -4,17 +4,23 @@ extern crate libc;
 use self::rand::{OsRng, Rng};
 use std::{iter, ptr};
 
+/*
 #[repr(C)]
 struct BIO;
 
 #[repr(C)]
-struct EVP_PKEY;
+struct EvpPkey;
 
 #[repr(C)]
-struct PEM_PASSWORD_CALLBACK;
+struct PemPasswordCallback;
+*/
+//#[repr(C)]
+//pub struct RSA_;
 
-#[repr(C)]
-pub struct RSA_;
+pub enum BIO {}
+pub enum EvpPkey {}
+pub enum PemPasswordCallback {}
+pub enum RSA_ {}
 
 #[link(name = "crypto")]
 extern {
@@ -27,20 +33,20 @@ extern {
     // https://www.openssl.org/docs/crypto/pem.html
     fn PEM_read_bio_PUBKEY(
         bp: *mut BIO, 
-        x: *mut *mut EVP_PKEY, 
-        cb: *mut PEM_PASSWORD_CALLBACK, u: *mut libc::c_void) -> *mut EVP_PKEY;
+        x: *mut *mut EvpPkey, 
+        cb: *mut PemPasswordCallback, u: *mut libc::c_void) -> *mut EvpPkey;
 
     // https://www.openssl.org/docs/crypto/pem.html
     fn PEM_read_bio_PrivateKey(
         bp: *mut BIO, 
-        x: *mut *mut EVP_PKEY, 
-        cb: *mut PEM_PASSWORD_CALLBACK, u: *mut libc::c_void) -> *mut EVP_PKEY;
+        x: *mut *mut EvpPkey, 
+        cb: *mut PemPasswordCallback, u: *mut libc::c_void) -> *mut EvpPkey;
 
-    // https://www.openssl.org/docs/crypto/EVP_PKEY_set1_RSA.html
-    fn EVP_PKEY_get1_RSA(pkey: *mut EVP_PKEY) -> *mut RSA_;
+    // https://www.openssl.org/docs/crypto/EvpPkey_set1_RSA.html
+    fn EVP_PKEY_get1_RSA(pkey: *mut EvpPkey) -> *mut RSA_;
 
-    // https://www.openssl.org/docs/crypto/EVP_PKEY_new.html
-    fn EVP_PKEY_free(pkey: *mut EVP_PKEY) -> libc::c_void;
+    // https://www.openssl.org/docs/crypto/EvpPkey_new.html
+    fn EVP_PKEY_free(pkey: *mut EvpPkey) -> libc::c_void;
 
     // https://www.openssl.org/docs/crypto/RSA_public_encrypt.html
     fn RSA_public_encrypt(

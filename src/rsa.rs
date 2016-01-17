@@ -4,19 +4,6 @@ extern crate libc;
 use self::rand::{OsRng, Rng};
 use std::{iter, ptr};
 
-/*
-#[repr(C)]
-struct BIO;
-
-#[repr(C)]
-struct EvpPkey;
-
-#[repr(C)]
-struct PemPasswordCallback;
-*/
-//#[repr(C)]
-//pub struct RSA_;
-
 pub enum BIO {}
 pub enum EvpPkey {}
 pub enum PemPasswordCallback {}

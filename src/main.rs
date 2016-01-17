@@ -61,6 +61,7 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
             Some(ui) => {
                 match ui {
                     UserInput::Line(s) => {
+
                         let txt = s.trim_right().to_string();
                         if txt.len() > 0 {
                 		    let msg = Message::new(dstip.clone(), txt.into_bytes());
@@ -101,7 +102,7 @@ fn main() {
     let args = if r.is_some() { r.unwrap() } else { return };
 
     let ret = 
-        if args.pub_priv_mode {
+        if args.hybrid_mode {
             // use asymmetric encryption
             Layers::asymmetric(&args.pubkey_file, &args.privkey_file, &args.device)  // network layer
         } else {
@@ -135,7 +136,7 @@ fn main() {
 struct Arguments {
     pub device: String,
     pub dstip: String,
-    pub pub_priv_mode: bool,
+    pub hybrid_mode: bool,
     pub secret_key: String,
     pub pubkey_file: String,
     pub privkey_file: String,
@@ -161,24 +162,24 @@ fn parse_arguments() -> Option<Arguments> {
 		Err(f) => { panic!(f.to_string()) }
 	};
 
-    let pub_priv_mode = matches.opt_present("r") || matches.opt_present("p");
+    let hybrid_mode = matches.opt_present("r") || matches.opt_present("p");
 
 	if matches.opt_present("h") ||
-            (pub_priv_mode && !(matches.opt_present("r") && matches.opt_present("p"))) {
+            (hybrid_mode && !(matches.opt_present("r") && matches.opt_present("p"))) {
             
 		let brief = format!("Usage: {} [options]", args[0]);
 		println!("{}", opts.usage(&brief));
-		None
-	} else {		
-        Some(Arguments {
-            device: matches.opt_str("i").unwrap_or("lo".to_string()),
-            dstip: matches.opt_str("d").unwrap_or("127.0.0.1".to_string()),
-            secret_key: matches.opt_str("e").unwrap_or(DEFAULT_SECRET_KEY.to_string()),
-            pub_priv_mode: pub_priv_mode,
-            pubkey_file: matches.opt_str("r").unwrap_or("".to_string()),
-            privkey_file: matches.opt_str("p").unwrap_or("".to_string()),
-        })
+		return None;
 	}
+
+    Some(Arguments {
+        device:       matches.opt_str("i").unwrap_or("lo".to_string()),
+        dstip:        matches.opt_str("d").unwrap_or("127.0.0.1".to_string()),
+        secret_key:   matches.opt_str("e").unwrap_or(DEFAULT_SECRET_KEY.to_string()),
+        hybrid_mode:  hybrid_mode,
+        pubkey_file:  matches.opt_str("r").unwrap_or("".to_string()),
+        privkey_file: matches.opt_str("p").unwrap_or("".to_string()),
+    })
 }
 
 

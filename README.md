@@ -1,11 +1,11 @@
 # Stealthy
-Stealthy is a small chat application for the console which uses ICMP echo requests (ping) for the communication with other clients. There are some advantages when ICMP echo request are used.  First, if a firewall is configured to block TCP connections there's a pretty good chance that this firewall is not configured to reject ping messages so that a communication is often possible even when you're behind a firewall. Second, the communication is hidden. Ping packets are often ignored by system administrators and will not be investigated. Thus, when using stealthy the fact that a communication is happening will often not be recognized.
+Stealthy is a small chat application for the console which uses ICMP echo requests (ping) for the communication with other clients because ICMP echo requests offer some advantages compared to TCP connections. First, if a firewall is configured to block TCP connections there's a pretty good chance that this firewall is not configured to reject ping messages so that a communication is often possible even when you're behind a firewall. Second, the communication is hidden. Ping packets are often ignored by system administrators and will not be investigated. Thus, when using stealthy the fact that a communication is happening will often not be recognized.
 
-**All communication is encrypted**! Currently you can choose between a pure symmetric encryption with Blowfish or an hybrid approach where Blowfish is used to encrypt the messages (for fast encryption with small overhead) and RSA is used to encrypt the encryption key that is used for the Blowfish encryption.
+**All communication is encrypted**! Currently you can choose between a pure symmetric encryption with Blowfish or an hybrid approach where Blowfish is used to encrypt the messages and RSA is used to encrypt the encryption key that is used for the Blowfish encryption.
 
 ## Running stealthy
 
-Stealthy always required two command line arguments:
+Stealthy requires at least two command line arguments:
 * `-i` specifies the network interface which is used to listen for incoming messages
 * `-d` specifies the IP address of the receiver
 
@@ -25,7 +25,7 @@ sudo ./stealthy -i eth0 -d 1.2.3.4 -e a1515134c543aafca4796a256839a6b2
 
 *btw: you could use to following command to create good keys: `cat /dev/urandom | xxd -p -l 16`*
 
-**Asymmetric encryption**
+**Hybrid encryption**
 
 There is one drawback that comes with the symmetric encryption mode. Both chat clients have to use the same key so you have to exchange the key with your chat partner before you can chat. Exchanging the key securely is often difficult or even not possible. Thus, stealthy also supports a hybrid encryption.
 
@@ -48,9 +48,9 @@ sudo ./stealthy -i eth0 -d 2.4.1.2 -r pubA -p privB
 
 For Linux you can download a binary which has been compiled for Linux Mint 17 and has been tested successfully for Linux Mint 17, 17.1 and Ubuntu 14.04, 15.04 and 15.10.
 
-[https://github.com/daniel-e/icmpmessaging-rs/releases/download/stealthy-0.0.1/stealthy](https://github.com/daniel-e/icmpmessaging-rs/releases/download/stealthy-0.0.1/stealthy)
+[https://github.com/daniel-e/stealthy/releases/download/stealthy-0.0.1/stealthy](https://github.com/daniel-e/stealthy/releases/download/stealthy-0.0.1/stealthy)
 
-### From Sources
+### From sources
 
 Before you can use stealthy you need some packages to be able to compile the sources successfully. When you're running Ubuntu you should install the following packages (if not already installed):
 
@@ -80,16 +80,23 @@ Now, that you have installed all requirements you can compile stealthy as follow
 
 ```bash
 # checkout the sources
-git clone https://github.com/daniel-e/icmpmessaging-rs.git
+git clone https://github.com/daniel-e/stealthy.git
 # build the sources
-cd icmpmessaging-rs
+cd stealthy
 cargo build
 ```
 
-You can now start stealthy with the command ```sudo ./target/debug/icmpmessaging```.
+You can now start stealthy with the command ```sudo ./target/debug/stealthy```.
+
+### From sources with Docker
+
+Checkout the sources.
 
 ## Limitations
 
-Stealthy needs to be executed as root. This is due to the fact that stealthy needs to send raw IP packets which is only possible when the process is in privilege mode.
+* Stealthy needs to be executed as root. This is due to the fact that stealthy needs to send raw IP packets which is only possible when the process is running in privilege mode.
 
-Stealthy currently works only on systems with a little-endian architecture, like Intel processors.
+* Stealthy currently works only on systems with a little-endian architecture, like Intel processors.
+
+* Both communication partners must not sit behind a NAT because each of them must know the IP address of the other.
+

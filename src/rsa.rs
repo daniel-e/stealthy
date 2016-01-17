@@ -93,10 +93,23 @@ impl Drop for RSA {
 
 impl RSA {
 
+    pub fn hash(pem: &String) -> Vec<u8> {
+        
+        let mut s = String::new();
+        for i in pem.split("\n")
+                .skip_while(|x| *x != "-----BEGIN PUBLIC KEY-----")
+                .skip_while(|x| *x == "-----BEGIN PUBLIC KEY-----")
+                .take_while(|x| *x != "-----END PUBLIC KEY-----") {
+            s.push_str(i);
+        }
+        // TODO
+        vec![]
+    }
+
     fn pem(pem: &String, kt: KeyType) -> Result<*mut RSA_, &'static str> {
 
         unsafe {
-            // the point to pem must be valid until BIO is freed.
+            // the pointer to pem must be valid until BIO is freed.
             let bio: *mut BIO = BIO_new_mem_buf(pem.as_ptr() as *const libc::c_void, pem.len() as libc::c_int);
             if bio.is_null() {
                 return Err("Could not initialize bio.");
@@ -254,4 +267,12 @@ mod tests {
         let p = String::from_utf8(rsa.decrypt(&cipher).unwrap()).unwrap();
         assert_eq!(p, plain);
     }
+
+    #[test]
+    fn test_hash() {
+
+        let s = read_file("testdata/rsa_pub.pem").unwrap();
+        RSA::hash(&s);
+    }
+
 }

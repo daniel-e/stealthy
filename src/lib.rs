@@ -4,6 +4,7 @@ mod crypto;
 mod delivery;
 mod packet;
 mod rsa;
+mod rsatools;
 
 use std::thread;
 use std::sync::Arc;
@@ -116,6 +117,10 @@ impl Layers {
             Ok(buf) => self.delivery_layer.send_msg(msg.set_payload(buf)),
             _ => Err(Errors::EncryptionError)
         }
+    }
+
+    pub fn encryption_key(&self) -> Vec<u8> {
+        self.encryption_layer.encryption_key()
     }
 
     // ------ private functions

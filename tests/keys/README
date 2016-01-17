@@ -5,9 +5,13 @@ openssl rsa -in rsa_priv.pem -pubout > rsa_pub.pem
 
 Compute the fingerprint of the public key
 ---------------------------------------------------------------------
+openssl rsa -in rsa_priv.pem -pubout -outform DER | openssl sha1 -c
+
 
 Variant a) if the private key is known
 openssl rsa -in rsa_priv.pem -outform DER -pubout | openssl sha1 -c
 
 Variant b) if the private key in not known
 openssl pkey -in rsa_pub.pem -inform PEM -outform DER -pubin | openssl sha1 -c
+
+

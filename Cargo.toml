@@ -11,6 +11,8 @@ libc = "*"
 time = "*"
 getopts = "*"
 term = "*"
+rust-crypto = "*"
+rustc-serialize = "*"
 
 [dependencies.ncurses]
 git = "https://github.com/jeaye/ncurses-rs.git"

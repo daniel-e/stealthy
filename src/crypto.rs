@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io::Read;
 
-use super::{blowfish, rsa};
+use super::{blowfish, rsa, rsatools};
 use super::delivery::{push_value, pop_value, push_slice};
 
 pub type ResultVec = Result<Vec<u8>, &'static str>;
@@ -9,6 +9,7 @@ pub type ResultVec = Result<Vec<u8>, &'static str>;
 pub trait Encryption : Send + Sync {
     fn encrypt(&self, v: &Vec<u8>) -> ResultVec;
     fn decrypt(&self, v: &Vec<u8>) -> ResultVec;
+    fn encryption_key(&self) -> Vec<u8>;
 }
 
 pub struct SymmetricEncryption {
@@ -43,6 +44,11 @@ impl Encryption for SymmetricEncryption {
     /// Decrypts the given daa stored in a vector and returns the plaintext.
     fn decrypt(&self, v: &Vec<u8>) -> ResultVec {
         self.algorithm.decrypt(v)
+    }
+
+    /// Returns the symmetric key used for encryption and decryption.
+    fn encryption_key(&self) -> Vec<u8> {
+        self.algorithm.key()
     }
 }
 
@@ -102,6 +108,11 @@ impl Encryption for AsymmetricEncryption {
                 )
             )
         ).decrypt(cipher)
+    }
+
+    /// Returns the public key.
+    fn encryption_key(&self) -> Vec<u8> {
+        rsatools::key_as_der(&self.pub_key)
     }
 }
 

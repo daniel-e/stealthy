@@ -86,19 +86,6 @@ impl Drop for RSA {
 
 impl RSA {
 
-    pub fn hash(pem: &String) -> Vec<u8> {
-        
-        let mut s = String::new();
-        for i in pem.split("\n")
-                .skip_while(|x| *x != "-----BEGIN PUBLIC KEY-----")
-                .skip_while(|x| *x == "-----BEGIN PUBLIC KEY-----")
-                .take_while(|x| *x != "-----END PUBLIC KEY-----") {
-            s.push_str(i);
-        }
-        // TODO
-        vec![]
-    }
-
     fn pem(pem: &String, kt: KeyType) -> Result<*mut RSA_, &'static str> {
 
         unsafe {

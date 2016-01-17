@@ -180,10 +180,10 @@ mod tests {
     #[test]
     fn test_asymmetric_encryption() {
         
-        let a = AsymmetricEncryption::new("testdata/rsa_pub.pem", "testdata/rsa_priv.pem");
+        let a = AsymmetricEncryption::new("tests/keys/rsa_pub.pem", "tests/keys/rsa_priv.pem");
         assert!(a.is_ok());
 
-        let b = AsymmetricEncryption::new("testdata/rsa_pub.pem", "abc");
+        let b = AsymmetricEncryption::new("tests/keys/rsa_pub.pem", "abc");
         assert!(b.is_err());
 
     }
@@ -191,7 +191,7 @@ mod tests {
     #[test]
     fn test_asymmetric_encrypt_decrypt() {
         
-        let a = AsymmetricEncryption::new("testdata/rsa_pub.pem", "testdata/rsa_priv.pem");
+        let a = AsymmetricEncryption::new("tests/keys/rsa_pub.pem", "tests/keys/rsa_priv.pem");
         assert!(a.is_ok());
         match a {
             Ok(a) => {

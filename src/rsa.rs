@@ -229,8 +229,8 @@ mod tests {
     #[test]
     fn test_new() {
 
-        let pubkey = read_file("testdata/rsa_pub.pem").unwrap();
-        let privkey = read_file("testdata/rsa_priv.pem").unwrap();
+        let pubkey = read_file("tests/keys/rsa_pub.pem").unwrap();
+        let privkey = read_file("tests/keys/rsa_priv.pem").unwrap();
 
         let rsa1 = RSA::new(&"abc".to_string(), &"def".to_string());
         assert!(rsa1.is_err());
@@ -246,8 +246,8 @@ mod tests {
     fn test_encrypt_decrypt() {
         // use cargo test -- --nocapture to see output of print
 
-        let pubkey = read_file("testdata/rsa_pub.pem").unwrap();
-        let privkey = read_file("testdata/rsa_priv.pem").unwrap();
+        let pubkey = read_file("tests/keys/rsa_pub.pem").unwrap();
+        let privkey = read_file("tests/keys/rsa_priv.pem").unwrap();
 
         let rsa = RSA::new(&pubkey, &privkey).unwrap();
         let plain = "hello".to_string();
@@ -264,7 +264,7 @@ mod tests {
     #[test]
     fn test_hash() {
 
-        let s = read_file("testdata/rsa_pub.pem").unwrap();
+        let s = read_file("tests/keys/rsa_pub.pem").unwrap();
         RSA::hash(&s);
     }
 

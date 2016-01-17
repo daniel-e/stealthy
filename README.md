@@ -40,6 +40,14 @@ sudo ./stealthy -i eth0 -d 1.2.3.4 -r pubB -p privA
 sudo ./stealthy -i eth0 -d 2.4.1.2 -r pubA -p privB
 ```
 
+To generate a key pair you can use the following command:
+
+```bash
+# create a 2048 bit private key
+openssl genrsa 2048 > rsa_priv.pem
+# compute the public key from the private key
+openssl rsa -in rsa_priv.pem -pubout > rsa_pub.pem
+```
 
 
 ## Installation

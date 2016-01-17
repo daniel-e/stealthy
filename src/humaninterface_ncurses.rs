@@ -89,14 +89,6 @@ impl NcursesOut {
         }
     }
 
-    pub fn scroll_up(&mut self) {
-        self.scroll_n(1);
-    }
-
-    pub fn scroll_down(&mut self) {
-        self.scroll_n(-1);
-    }
-
     fn scroll_n(&mut self, n: i32) {
         self.scroll_offset += n;
         wscrl(self.win1.win, n);
@@ -133,14 +125,23 @@ impl Output for NcursesOut {
             _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD) 
         };
         let (y, x) = self.pos();
-        wattron(self.win1.win, attr as i32);
-        wprintw(self.win1.win, "\n");
-        wprintw(self.win1.win, &s);
-        wattroff(self.win1.win, attr as i32);
+        wattron(self.win1.win, attr as u64);
+        waddstr(self.win1.win, "\n");
+        waddstr(self.win1.win, &s);
+        wattroff(self.win1.win, attr as u64);
         mv(y, x);
         wrefresh(self.win1.win);
         wrefresh(self.win2.win);
     }
+
+    fn scroll_up(&mut self) {
+        self.scroll_n(1);
+    }
+
+    fn scroll_down(&mut self) {
+        self.scroll_n(-1);
+    }
+
 }
 
 #[cfg(feature="usencurses")]
@@ -243,8 +244,17 @@ impl Input for NcursesIn {
                         addch(' ' as chtype);
                         mv(self.maxy - 1, self.x() - 1);
                     }
-                    if buf.len() > 0 {
-                        buf.pop();
+
+                    // Remove the correct amount of UTF-8 characters.
+                    match String::from_utf8(buf.clone()) {
+                        Ok(mut val) => {
+                            val.pop();
+                            buf.pop();
+                            for _ in 0.. (buf.len() - val.len()) {
+                                buf.pop();
+                            }
+                        }
+                        _ => {}
                     }
                 }
 

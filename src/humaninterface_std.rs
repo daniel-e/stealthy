@@ -7,7 +7,7 @@ use std::io;
 use term::color;
 
 #[cfg(not(feature="usencurses"))]
-use humaninterface::{Input, Output};
+use humaninterface::{Input, Output, UserInput};
 #[cfg(not(feature="usencurses"))]
 use callbacks::Callbacks;
 
@@ -35,11 +35,11 @@ impl StdIn {
 #[cfg(not(feature="usencurses"))]
 impl Input for StdIn {
 
-    fn read_line(&self) -> Option<String> {
+    fn read_line(&self) -> Option<UserInput> {
         let mut s = String::new();
         match io::stdin().read_line(&mut s) {
             Ok(n) => {
-                if n != 0 { Some(s) } else { None }
+                if n != 0 { Some(UserInput::Line(s)) } else { None }
             }
             _ => None
         }

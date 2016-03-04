@@ -26,7 +26,7 @@ use stealthy::{Message, IncomingMessage, Errors, Layers};
 use humaninterface::{Input, Output, UserInput, ControlType};
 use callbacks::Callbacks;
 use tools::{read_file, insert_delimiter};
-use rsatools::key_as_der;
+//use rsatools::key_as_der;
 
 #[cfg(not(feature="usencurses"))]
 use humaninterface_std::{StdIn, StdOut};

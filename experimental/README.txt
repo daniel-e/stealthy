@@ -1,3 +1,13 @@
+Stealthy enhancement proposal 
+
+SEP     : 0
+Title   : Chat via electro magnetic waves
+Status  : Draft
+Type    : Standard
+Creates : 2016/07/22
+
+
+
 STEALTHY PACKET TRANSMISSION OVER AIR
 ===============================================================================
 

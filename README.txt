@@ -48,6 +48,8 @@ STEALTHY PACKETS
 
 
  ACK packet
+ TODO: i think we do not need an ACK packet as TCP/IP is doing transmission
+       control for us
  
  +--------+--------+--------+--------+
  |   0    |   1    |   2    |   3    |

@@ -1,19 +1,49 @@
 Stealthy enhancement proposal 
 
-SEP     : 0
-Title   : Chat via electro magnetic waves
-Status  : Draft
-Type    : Standard
-Creates : 2016/07/22
+SEP    : 0
+Title  : Alternative communication infrastructure
+Status : Draft
+Type   : Standard
+Created: 2016/07/22
+Updated: 2016/07/25
 
+INTRODUCTION
+===============================================================================
+
+Currently stealthy relies on existing infrastructure (e.g. LAN or WLAN) to send
+messages to other chat partners. If this infrastructure does not exist (e.g.
+due to ip filters or network failures) stealthy cannot be used. Especially in
+those situations it is absolutely necessary that communication is possible. For
+example, if infrastructure is broken due to disasters communication is an
+important requirement to coordinate rescue. If someone blocks communication
+(e.g. by totalitarian regimes) communication could help to escape political
+persecution.
+
+Hence, stealthy should not only rely on existing infrastructure. Rather,
+stealthy needs an infrastructure that cannot be under the control of some third
+party (to mitigate the risk that an administrator can block the traffic) and
+that cannot be damaged by a disaster.
+
+This infrastructure should also be cheap and should not rely on any special
+hardware as this has the advantage to be available in countries with great
+poverty as well.
+
+The solution described in this proposal uses the sound card of a computer and
+a simple transmitter and receiver to send and receive data. The solution
+has the advantages that first, a sound card is integrated in almost all
+computers nowadays. It is quite robust and can be controlled very easily.
+Second, the transmitter and receiver are made up of standard components that
+are very cheap. Usually the components required for this solution can also be
+found in radios or other electronic devices.
 
 
 STEALTHY PACKET TRANSMISSION OVER AIR
 ===============================================================================
 
-* carrier frequency = 10MHz
+* carrier frequency = 1MHz
 * for each data byte: start bit + 8 data bits + 2 zero bits (11 bit)
-* start bit is used to signal the beginning of the transmission of 8 data bits and to reduce effects caused by clock drifts
+* start bit is used to signal the beginning of the transmission of 8 data bits and to
+  reduce effects caused by clock drifts
 * 11 bit in 11ms -> 90 byte per second
  
      S   0   1   0   1   1   0   0   1        

@@ -36,6 +36,49 @@ Second, the transmitter and receiver are made up of standard components that
 are very cheap. Usually the components required for this solution can also be
 found in radios or other electronic devices.
 
+The sender transmits the data using a carrier frequency of 1MHz. This has the
+advantage that the data can also be received by a standard medium wave radio.
+In this case only the transmitter has to be build. If the radio has a line-out
+output it could be connected with the line-in input of the sound card. If
+a line-out output does not exist the data could be received from the radio's
+speaker via a microphone connected to the sound card. 
+
+    Option 1: Connect radio's line-out with sound card's line-in
+   
+    +----------------+                        +----------------+
+    | radio          |                        |     sound card |
+    |                |                        |                |
+    |       line out o------------------------o line in        |
+    +----------------+                        +----------------+
+   
+    Option 2: Using a microphone
+   
+    +----------------+                        +----------------+
+    | radio          |                        |     sound card |
+    |           #### |  microphone            |                |
+    | speaker > #### |  O====.----------------o microphone in  |
+    +----------------+                        +----------------+
+   
+    Fig. 1: How to connect a radio with a sound card
+
+The drawback of the pretty low carrier frequency is the wavelength lambda which
+becomes quite large. For 1MHz the length lambda is about 300m. A 1/4 lambda
+antenna would have a length of 75m which is not practical for a small
+transmitter. The following table gives an overview of different possible antenna
+lenghts.
+
+    +---------+--------------------+
+    | Lambda  |  Length of antenna |
+    +---------+--------------------+
+    | 1/32    |  9.38m             |
+    | 1/64    |  4.68m             |
+    | 1/128   |  2.34m             |
+    | 1/256   |  1.17m             |
+    +---------+--------------------+
+
+    Table 1: Different antenna lenghts
+
+
 
 STEALTHY PACKET TRANSMISSION OVER AIR
 ===============================================================================

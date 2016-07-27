@@ -3,10 +3,11 @@ extern crate libc;
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
+use std::time::Duration;
 
 use super::{packet, IncomingMessage, Message, Errors};
 
-const RETRY_TIMEOUT: u32      = 15000;
+const RETRY_TIMEOUT: u64      = 15000;
 const MAX_MESSAGE_SIZE: usize = (10 * 1024);
 
 
@@ -217,8 +218,8 @@ impl Network {
 
 	fn init_retry(tx: Sender<u64>, id: packet::IdType) {
 
-		thread::spawn(move || { 
-			thread::sleep_ms(RETRY_TIMEOUT);
+		thread::spawn(move || {
+			thread::sleep(Duration::from_millis(RETRY_TIMEOUT));
 			match tx.send(id) {
 				Err(_) => { println!("init_retry: sending event through channel failed"); }
 				_ => { }

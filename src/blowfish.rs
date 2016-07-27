@@ -41,7 +41,7 @@ pub const KEY_LEN: usize = 16;
 pub const IV_LEN: usize = 8;
 pub const BLOCKSIZE: usize = 8;
 
-type ResultVec = Result<Vec<u8>, &'static str>;
+pub type ResultVec = Result<Vec<u8>, &'static str>;
 
 impl Blowfish {
 

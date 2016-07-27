@@ -1,0 +1,24 @@
+In this case only the transmitter has to be build. If the radio has a line-out
+output it could be connected with the line-in input of the sound card. If
+a line-out output does not exist the data could be received from the radio's
+speaker via a microphone connected to the sound card. 
+
+    Option 1: Connect radio's line-out with sound card's line-in
+   
+    +----------------+                        +----------------+
+    | radio          |                        |     sound card |
+    |                |                        |                |
+    |       line out o------------------------o line in        |
+    +----------------+                        +----------------+
+   
+    Option 2: Using a microphone
+   
+    +----------------+                        +----------------+
+    | radio          |                        |     sound card |
+    |           #### |  microphone            |                |
+    | speaker > #### |  O====.----------------o microphone in  |
+    +----------------+                        +----------------+
+   
+    Fig. 1: How to connect a radio with a sound card
+
+

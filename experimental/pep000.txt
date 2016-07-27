@@ -38,28 +38,6 @@ found in radios or other electronic devices.
 
 The sender transmits the data using a carrier frequency of 1MHz. This has the
 advantage that the data can also be received by a standard medium wave radio.
-In this case only the transmitter has to be build. If the radio has a line-out
-output it could be connected with the line-in input of the sound card. If
-a line-out output does not exist the data could be received from the radio's
-speaker via a microphone connected to the sound card. 
-
-    Option 1: Connect radio's line-out with sound card's line-in
-   
-    +----------------+                        +----------------+
-    | radio          |                        |     sound card |
-    |                |                        |                |
-    |       line out o------------------------o line in        |
-    +----------------+                        +----------------+
-   
-    Option 2: Using a microphone
-   
-    +----------------+                        +----------------+
-    | radio          |                        |     sound card |
-    |           #### |  microphone            |                |
-    | speaker > #### |  O====.----------------o microphone in  |
-    +----------------+                        +----------------+
-   
-    Fig. 1: How to connect a radio with a sound card
 
 The drawback of the pretty low carrier frequency is the wavelength lambda which
 becomes quite large. For 1MHz the length lambda is about 300m. A 1/4 lambda
@@ -78,6 +56,17 @@ lenghts.
 
     Table 1: Different antenna lenghts
 
+To transmit a byte of 8 bit 
+
+     S   0   1   0   1   1   0   0   1        
+   +---+   +---+   +-------+       +---+
+   |   |   |   |   |       |       |   |
+   |   |   |   |   |       |       |   |
+ --+   +---+   +---+       +-------+   +-------- ...
+   |   |   |   |   |   |   |   |   |   |   |   |
+    1ms
+
+
 
 
 STEALTHY PACKET TRANSMISSION OVER AIR
@@ -89,13 +78,6 @@ STEALTHY PACKET TRANSMISSION OVER AIR
   reduce effects caused by clock drifts
 * 11 bit in 11ms -> 90 byte per second
  
-     S   0   1   0   1   1   0   0   1        
-   +---+   +---+   +-------+       +---+
-   |   |   |   |   |       |       |   |
-   |   |   |   |   |       |       |   |
- --+   +---+   +---+       +-------+   +-------- ...
-   |   |   |   |   |   |   |   |   |   |   |   |
-    1ms
 
  TODO use some error correcting code?
 

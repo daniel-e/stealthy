@@ -1,6 +1,6 @@
 # Setup
 
-sudo ./main tun0
+sudo ./ipoverirc tun0
 sudo ifconfig tun0 192.168.2.17 netmask 255.255.255.0 up
 
 # Further readings

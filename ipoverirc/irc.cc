@@ -53,6 +53,8 @@ void send_line(const std::string& data)
 	std::cout << "sending <" << data.substr(0, 30) << "...>" << std::endl;
 	boost::asio::write(*sock_, boost::asio::buffer(data.data(), data.size()));
 	boost::asio::write(*sock_, boost::asio::buffer("\n", 1));
+	// flood detection protection
+	sleep(1);
 }
 
 void parse_buffer()

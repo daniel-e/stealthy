@@ -24,20 +24,31 @@ PING :bipartite.ny.us.SwiftIRC.net
 Reply with:
 PONG :bipartite.ny.us.SwiftIRC.net
 
-# Docker for testing
+# Testing in Docker
 
 sudo docker daemon
 sudo docker build --rm -t stealthy/ubuntu16.04 .
 
+Run the image:
 sudo docker run --privileged -v /home/dz:/host -t -i stealthy/ubuntu16.04 /bin/bash
 
-Guest:
-./main tun0
-ifconfig tun0 192.168.2.18 netmask 255.255.255.0 up
+git clone https://github.com/daniel-e/stealthy.git
+cd stealthy/ipoverirc/
+make
+> in screen:
+./ipoverirc tun0
+> in another screen window:
+ifconfig tun0 192.168.5.10 netmask 255.255.255.0 up
+cd ..
+cargo build
+./target/debug/stealthy -i tun0 -d 192.168.5.11
 
-Host:
-./main tun0
-ifconfig tun0 192.168.2.17 netmask 255.255.255.0 up
+Run a second image and do the same but configure the tun network device with another IP:
+[...]
+ifconfig tun0 192.168.5.11 netmask 255.255.255.0 up
+cd ..
+cargo build
+./target/debug/stealthy -i tun0 -d 192.168.5.10
 
 # Further readings
 

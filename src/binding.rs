@@ -44,7 +44,7 @@ extern {
 extern {
 	fn recv_callback(
         target: *mut Network,
-		dev: *const u8, 
+		dev: *const u8,
 		cb: extern fn(*mut Network, *const u8, u32, u32, *const u8)) -> libc::c_int;
 }
 
@@ -55,7 +55,7 @@ struct SharedData {
 	// are waiting for the acknowledge.
 	packets          : Vec<packet::Packet>,
 }
-	
+
 
 #[repr(C)]
 pub struct Network {
@@ -128,8 +128,8 @@ impl Network {
 
     fn contains(&self, id: packet::IdType) -> bool {
 
-		let shared = self.shared.clone();
-		let v = shared.lock().unwrap();
+        let shared = self.shared.clone();
+        let v = shared.lock().unwrap();
         for i in &v.packets {
             if i.id == id {
                 return true;
@@ -139,8 +139,9 @@ impl Network {
     }
 
     fn handle_new_message(&self, p: packet::Packet) {
-        
+
         if !self.contains(p.id) { // we are not the sender of the message
+
             let m = Message::new(p.ip.clone(), p.data.clone());
             match self.tx_msg.send(IncomingMessage::New(m)) {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
@@ -153,10 +154,11 @@ impl Network {
 
     fn handle_ack(&mut self, p: packet::Packet) {
 
-  		let shared = self.shared.clone();
-		let mut v = shared.lock().unwrap();
+        let shared = self.shared.clone();
+        let mut v = shared.lock().unwrap();
         let mut c = 0;
         let mut b: bool = false;
+
         for i in &v.packets {
             if i.id == p.id {
                 b = true;
@@ -184,7 +186,7 @@ impl Network {
 	/// The message is send via an ICMP echo request and the function
 	/// returns to the caller a handle which can be used by the caller
 	/// to identify the message. The message is now in the status
-	/// `transmitting`. As soon as an acknowledge is received the 
+	/// `transmitting`. As soon as an acknowledge is received the
 	/// configured callback function is called with the handle.
 	///
 	/// ip  = IPv4 of the receiver
@@ -208,7 +210,7 @@ impl Network {
 
 			if Network::transmit(p.clone()) {
 				Network::init_retry(self.tx.clone(), p.id);
-				Ok(p.id) 
+				Ok(p.id)
 			} else {
 				k.packets.pop();
 				Err(Errors::SendFailed)
@@ -228,7 +230,7 @@ impl Network {
 	}
 
 	fn transmit(p: packet::Packet) -> bool {
-	
+
 		let v  = p.serialize();
 		let ip = p.ip.clone() + "\0";
 		unsafe {
@@ -236,5 +238,3 @@ impl Network {
 		}
 	}
 }
-
-

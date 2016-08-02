@@ -14,7 +14,7 @@ extern crate time;
 extern crate crypto as cr;
 
 use std::{env, thread};
-use std::sync::mpsc::Receiver;
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use getopts::Options;
 use term::color;
@@ -42,9 +42,29 @@ type HiIn = NcursesIn;
 #[cfg(feature="usencurses")]
 type HiOut = NcursesOut;
 
+fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
+
+    let (tx, rx) = channel::<String>();
+
+    thread::spawn(move || {
+        loop { match rx.recv() {
+            Ok(msg) => {
+                o.lock().unwrap()
+                    .println(format!("status message: {:?}", msg), color::YELLOW);
+            }
+            Err(e) => {
+                o.lock().unwrap()
+                    .println(format!("status_message_loop: failed. {:?}", e), color::RED);
+            }
+        }
+    }});
+
+    tx
+}
+
 fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
 
-    thread::spawn(move || { 
+    thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
                 let mut out = o.lock().unwrap();
@@ -54,9 +74,9 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
                     IncomingMessage::Error(_, s) => { out.err_msg(s); }
                 }
             }
-            Err(e) => { 
+            Err(e) => {
                 o.lock().unwrap()
-                    .println(format!("recv_loop: failed to receive message. {:?}", e), color::RED); 
+                    .println(format!("recv_loop: failed to receive message. {:?}", e), color::RED);
             }
         }
     }});
@@ -110,24 +130,26 @@ fn main() {
 	let r = parse_arguments();
     let args = if r.is_some() { r.unwrap() } else { return };
 
-    let ret = 
+    let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
+    let i = HiIn::new();                           // human interface for input
+    let status_tx = status_message_loop(o.clone());
+
+    let ret =
         if args.hybrid_mode {
             // use asymmetric encryption
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device)  // network layer
+            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx)  // network layer
         } else {
             // use symmetric encryption
-            Layers::symmetric(&args.secret_key, &args.device)  // network layer
+            Layers::symmetric(&args.secret_key, &args.device, status_tx)  // network layer
         };
 
     if ret.is_err() {
+        // TODO is this message visible when in curses
         println!("Initialization failed.");
         return;
     }
 
     let layer = ret.unwrap();
-
-    let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
-    let i = HiIn::new();                           // human interface for input
 
     // this is the loop which handles messages received via rx
     recv_loop(o.clone(), layer.rx);
@@ -189,7 +211,7 @@ fn parse_arguments() -> Option<Arguments> {
 
 	if matches.opt_present("h") ||
             (hybrid_mode && !(matches.opt_present("r") && matches.opt_present("p") && matches.opt_present("q"))) {
-            
+
 		let brief = format!("Usage: {} [options]", args[0]);
 		println!("{}", opts.usage(&brief));
 		return None;
@@ -205,6 +227,3 @@ fn parse_arguments() -> Option<Arguments> {
         pubkey_file:  matches.opt_str("q").unwrap_or("".to_string()),
     })
 }
-
-
-

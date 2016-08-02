@@ -35,7 +35,7 @@ pub enum MessageType {
 
 
 impl Clone for MessageType {
-    fn clone(&self) -> MessageType { 
+    fn clone(&self) -> MessageType {
         match *self {
             MessageType::NewMessage => MessageType::NewMessage,
             MessageType::AckMessage => MessageType::AckMessage
@@ -64,7 +64,7 @@ impl Message {
 
 	pub fn ack(ip: String) -> Message { Message::create(ip, vec![], MessageType::AckMessage) }
 
-    pub fn set_payload(&self, buf: Vec<u8>) -> Message { 
+    pub fn set_payload(&self, buf: Vec<u8>) -> Message {
         Message::create(self.get_ip(), buf, self.get_type())
     }
 
@@ -87,27 +87,29 @@ impl Message {
 pub struct Layer {
     pub rx    : Receiver<IncomingMessage>,
     pub layers: Layers,
+    status_tx : Sender<String>,
 }
 
 
 pub struct Layers {
     encryption_layer: Arc<Box<Encryption>>,
-    delivery_layer  : Delivery
+    delivery_layer  : Delivery,
+    status_tx       : Sender<String>,
 }
 
 
 impl Layers {
 
-    pub fn symmetric(hexkey: &String, device: &String) -> Result<Layer, &'static str> {
+    pub fn symmetric(hexkey: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
 
-        Layers::init(Box::new(try!(SymmetricEncryption::new(hexkey))), device)
+        Layers::init(Box::new(try!(SymmetricEncryption::new(hexkey))), device, status_tx)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Result<Layer, &'static str> {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(
                 try!(AsymmetricEncryption::new(&pubkey_file, &privkey_file))
-            ), device
+            ), device, status_tx
         )
     }
 
@@ -125,7 +127,7 @@ impl Layers {
 
     // ------ private functions
 
-    fn init(e: Box<Encryption>, device: &String) -> Result<Layer, &'static str> {
+    fn init(e: Box<Encryption>, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
@@ -133,11 +135,12 @@ impl Layers {
         let (tx2, rx2) = channel();
         Ok(Layers::new(e,
             Delivery::new(Network::new(device, tx1), tx2, rx1),
-            rx2
+            rx2,
+            status_tx
         ))
     }
 
-    fn new(e: Box<Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>) -> Layer {
+    fn new(e: Box<Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>, status_tx: Sender<String>) -> Layer {
 
         // tx is used to send received messages to the application via rx
         let (tx, rx) = channel::<IncomingMessage>();
@@ -145,12 +148,14 @@ impl Layers {
         let l = Layers {
             encryption_layer: Arc::new(e),
             delivery_layer: d,
+            status_tx: status_tx.clone()
         };
 
         l.recv_loop(tx, rx_network);
         Layer {
             rx: rx,
-            layers: l
+            layers: l,
+            status_tx: status_tx.clone()
         }
     }
 
@@ -158,8 +163,10 @@ impl Layers {
     fn recv_loop(&self, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) {
 
         let enc = self.encryption_layer.clone();
+        let status_tx = self.status_tx.clone();
+
         thread::spawn(move || { loop { match rx.recv() {
-            Ok(msg) => match Layers::handle_message(msg, enc.clone()) {
+            Ok(msg) => match Layers::handle_message(msg, enc.clone(), status_tx.clone()) {
                 Some(m) => match tx.send(m) {
                     Err(_) => panic!("Channel closed."),
                     _ => { }
@@ -182,7 +189,9 @@ impl Layers {
 
     /// Decrypts incoming messages of type "new" or returns the message without
     /// modification if it is not of type "new".
-    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>) -> Option<IncomingMessage> {
+    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>, status_tx: Sender<String>) -> Option<IncomingMessage> {
+
+        status_tx.send(String::new("handle_message: received new message"));
 
         match m {
             IncomingMessage::New(msg) => {

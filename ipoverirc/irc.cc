@@ -28,7 +28,7 @@ std::string user;
 
 const std::string ircsrv = "irc.swiftirc.net";
 const std::string port = "7000";
-const std::string channel = "stealthyipoverirc";
+const std::string channel = "ipoverirc";
 
 tcp::socket* sock_;
 boost::asio::streambuf buf;
@@ -38,6 +38,8 @@ std::function<void(const std::string&)> callback_;
 
 std::string generate_nick();
 std::string generate_user();
+
+bool connected = false;
 
 void irc_connect() 
 {
@@ -69,17 +71,17 @@ void parse_buffer()
 			msg.erase(msg.size() - 1, 1);
 		}
 		data_in.erase(0, n + 1);
-		//std::cout << "GOT MSG <" << msg << ">" << std::endl;
 		if (msg.substr(0, 5) == "PING ") {
 			msg.erase(0, 5);
 			std::string pong_msg = std::string("PONG ") + msg;
 			send_line(pong_msg);
+		} else if (msg.find("PONG") != std::string::npos && msg.find(":IPOVERIRC") != std::string::npos) {
+			connected = true;
 		} else {
 			std::string q = std::string("PRIVMSG #") + channel + " :";
 			std::string::size_type n = msg.find(q);
 			if (n != std::string::npos) {
 				msg = msg.substr(n + 9 + channel.size() + 2);
-				//std::cout << "IP PACKET <" << msg << ">" << std::endl;
 				if (callback_) {
 					callback_(msg);
 				}
@@ -112,22 +114,41 @@ void send_msg(std::string& data)
 void irc_init(std::function<void(const std::string&)> f)
 {
 	callback_ = f;
-	irc_connect();
-	boost::asio::async_read_until(*sock_, buf, '\n', read_data);
-	static boost::thread service_thread(boost::bind(&boost::asio::io_service::run, &io_service));
 
-	sleep(1);
-	nick = generate_nick();
-	std::string nick_msg = std::string("NICK ") + nick;
-	send_line(nick_msg);
+	while (1) {
+		std::cout << "connecting..." << std::endl;
+		irc_connect();
+		boost::asio::async_read_until(*sock_, buf, '\n', read_data);
+		static boost::thread service_thread(boost::bind(&boost::asio::io_service::run, &io_service));
 
-	sleep(1);
-	user = generate_user();
-	std::string user_msg = std::string("USER ") + user + " 0 * :stealthy ip";
-	send_line(user_msg);
+		sleep(1);
+		nick = generate_nick();
+		std::string nick_msg = std::string("NICK ") + nick;
+		send_line(nick_msg);
 
-	sleep(1);
-	std::string join_msg = std::string("JOIN ") + ":#" + channel;
-	send_line(join_msg);
+		sleep(1);
+		user = generate_user();
+		std::string user_msg = std::string("USER ") + user + " 0 * :stealthy ip";
+		send_line(user_msg);
+
+		sleep(1);
+		std::string join_msg = std::string("JOIN ") + ":#" + channel;
+		send_line(join_msg);
+
+		sleep(1);
+		std::string ping_msg = "PING :IPOVERIRC";
+		send_line(ping_msg);
+
+		for (int i = 0; i < 10; ++i) {
+			if (connected) {
+				std::cout << "connected" << std::endl;
+				return;
+			}
+			std::cout << "." << std::flush;
+			sleep(1);
+		}
+		std::cout << "connection failed." << std::endl;
+		delete sock_;
+	}
 }
 

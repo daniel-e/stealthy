@@ -11,9 +11,9 @@ int fd_dev; // file descriptor for virtual network device
 
 // Callback function that is called if an IP packet has been received
 // from the IRC channel.
-void cb(const std::string& msg) 
+void cb(const std::string& msg)
 {
-	std::cout << "GOT IP PACKET " << msg.substr(0, 30) << "..." << std::endl;
+	std::cout << "got IP packet <" << msg.substr(0, 30) << "...>" << std::endl;
 
 	std::string out;
 	Base64::Decode(msg, &out);
@@ -24,6 +24,11 @@ void cb(const std::string& msg)
 
 int main(int argc, char** argv) 
 {
+	if (argc < 2) {
+		std::cerr << "usage: " << argv[0] << " devicename" << std::endl;
+		return -1;
+	}
+
 	// Connect to IRC.
 	std::cout << "connecting to IRC ..." << std::endl;
 	irc_init(cb);

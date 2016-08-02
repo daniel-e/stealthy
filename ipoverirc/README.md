@@ -9,7 +9,8 @@ Using the tool is quite easy.
 ```bash
 git clone https://github.com/daniel-e/stealthy.git
 cd stealthy/ipoverirc/
-make```
+make
+```
 
 ## Run and setup
 
@@ -23,5 +24,6 @@ This will create the network device tun0. To use this device you have to configu
 
 
 ```bash
-sudo ifconfig tun0 192.168.2.10 netmask 255.255.255 up```
+sudo ifconfig tun0 192.168.2.10 netmask 255.255.255 up
+```
 

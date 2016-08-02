@@ -25,17 +25,20 @@ void cb(const std::string& msg)
 int main(int argc, char** argv) 
 {
 	// Connect to IRC.
+	std::cout << "connecting to IRC ..." << std::endl;
 	irc_init(cb);
 
 	char buf[2048];
 	int  n;
 
+	std::cout << "creating network device " << argv[1] << " ..." << std::endl;
 	// Create the virtual network device.
 	if ((fd_dev = tun_alloc(argv[1])) < 0) {
 		perror("tun_alloc");
 		return 1;
 	}
 
+	std::cout << "running" << std::endl;
 	while (1) {
 		// read data from virtual network device
 		n = read(fd_dev, buf, sizeof(buf));

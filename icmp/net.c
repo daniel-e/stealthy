@@ -66,7 +66,7 @@ int send_icmp(const char* dstip, const char* buf, u_int16_t size)
 	i->id = htons(MAGIC);
 	i->seq = htons(seq);
 	i->sum = chksum(packet, sizeof(struct icmp) + size);
-	
+
 	// open socket and send packet
 	int sd = socket(PF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (sd < 0) {
@@ -111,20 +111,83 @@ pcap_t* setup_pcap(const char* dev, const char* filter)
 	return handle;
 }
 
-struct arguments 
+struct arguments
 {
 	pcap_t*  handle;
 	callback cb;
 	void*    target;
 };
 
+// TODO refactor: check_ip_packet and got_packet
+int check_ip_packet(const struct pcap_pkthdr* h, const u_char* packet)
+{
+	// at least 20 bytes are required
+	if (h->len < 20) {
+		return -1;
+	}
+
+	u_int16_t iphdrlen = *packet & 0xf;       // little endian
+	u_int8_t  proto    = *(packet + 9);       // protocol (should be 1)
+	u_int16_t iplen    = ntohs(*(u_int16_t*)(packet + 2));
+
+	// check length of packet
+	if (iplen < iphdrlen * 4) {
+		return -1;
+	}
+	// check protocol
+	if (proto != 1) {
+		return -1;
+	}
+
+	if (h->len < iphdrlen * 4 + sizeof(struct icmp)) {
+		return -1;
+	}
+
+	packet += iphdrlen * 4;
+	struct icmp* i = (struct icmp*) packet;
+
+	if (i->type != 0 && i->type != 8) { // check that ping or pong
+		return -1;
+	}
+
+	if (ntohs(i->id) != MAGIC) {
+		return -1;
+	}
+
+	int datalen = iplen - iphdrlen * 4 - sizeof(struct icmp);
+	int type    = (i->type == 0 ? PONG : PING);
+	packet += sizeof(struct icmp);
+
+	if (iphdrlen * 4 + sizeof(struct icmp) > iplen) {
+		return -1;
+	}
+
+	if (h->len < iphdrlen * 4 + sizeof(struct icmp) + datalen) {
+		return -1;
+	}
+
+	return 0;
+}
+
 void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 {
-	char buf[128];
+	struct    arguments* a = (struct arguments*) args;
+	char      buf[128];
+	u_int32_t size_ethernet = SIZE_ETHERNET;
 
-	if (!h->len || h->len < SIZE_ETHERNET + 20) return;
+	// check if this is already an IP packet; otherwise it could be an etheret
+	// frame
+	if (check_ip_packet(h, packet) == 0) {
+		size_ethernet = 0;
+	}
 
-	packet += SIZE_ETHERNET;
+	// at least 20 bytes are required
+	if (h->len < 20) {
+		a->cb(a->target, 0, 0, INVALID_LENGTH, 0);
+		return;
+	}
+
+	packet += size_ethernet;
 
 	u_int16_t iphdrlen = *packet & 0xf;       // little endian
 	u_int8_t  proto    = *(packet + 9);       // protocol (should be 1)
@@ -133,24 +196,50 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 
 	inet_ntop(AF_INET, &srcip, buf, sizeof(buf));
 
-	if (iplen < iphdrlen * 4) return;
-	if (proto != 1) return;
-	if (h->len < SIZE_ETHERNET + iphdrlen * 4 + sizeof(struct icmp)) return;
+	// check length of packet
+	if (iplen < iphdrlen * 4) {
+		a->cb(a->target, 0, 0, INVALID_IP_LENGTH, 0);
+		return;
+	}
+	// check protocol
+	if (proto != 1) {
+		a->cb(a->target, 0, 0, INVALID_PROTOCOL, 0);
+		return;
+	}
+
+	if (h->len < size_ethernet + iphdrlen * 4 + sizeof(struct icmp)) {
+		a->cb(a->target, 0, 0, INVALID, 0);
+		return;
+	}
 
 	packet += iphdrlen * 4;
 	struct icmp* i = (struct icmp*) packet;
 
-	if (i->type != 0 && i->type != 8) return; // no ping, no poing
-	if (ntohs(i->id) != MAGIC) return;
+	// check that ping or pong
+	if (i->type != 0 && i->type != 8) {
+		a->cb(a->target, 0, 0, INVALID, 0);
+		return;
+	}
+
+	if (ntohs(i->id) != MAGIC) {
+		a->cb(a->target, 0, 0, INVALID, 0);
+		return;
+	}
 
 	int datalen = iplen - iphdrlen * 4 - sizeof(struct icmp);
 	int type    = (i->type == 0 ? PONG : PING);
 	packet += sizeof(struct icmp);
 
-	if (iphdrlen * 4 + sizeof(struct icmp) > iplen) return;
-	if (h->len < SIZE_ETHERNET + iphdrlen * 4 + sizeof(struct icmp) + datalen) return;
+	if (iphdrlen * 4 + sizeof(struct icmp) > iplen) {
+		a->cb(a->target, 0, 0, INVALID, 0);
+		return;
+	}
 
-	struct arguments* a = (struct arguments*) args;
+	if (h->len < size_ethernet + iphdrlen * 4 + sizeof(struct icmp) + datalen) {
+		a->cb(a->target, 0, 0, INVALID, 0);
+		return;
+	}
+
 	a->cb(a->target, (const char*) packet, datalen, type, buf);
 }
 
@@ -179,4 +268,3 @@ int recv_callback(void* target, const char* dev, callback cb) {
 	} else return -1;
 	return 0;
 }
-

@@ -3,7 +3,11 @@
 
 enum {
 	PING,
-	PONG
+	PONG,
+	INVALID_LENGTH,
+	INVALID_IP_LENGTH,
+	INVALID_PROTOCOL,
+	INVALID
 };
 
 typedef const unsigned char* u8_ptr;

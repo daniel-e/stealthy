@@ -87,7 +87,6 @@ impl Message {
 pub struct Layer {
     pub rx    : Receiver<IncomingMessage>,
     pub layers: Layers,
-    status_tx : Sender<String>,
 }
 
 
@@ -134,7 +133,7 @@ impl Layers {
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
         Ok(Layers::new(e,
-            Delivery::new(Network::new(device, tx1), tx2, rx1),
+            Delivery::new(Network::new(device, tx1, status_tx.clone()), tx2, rx1),
             rx2,
             status_tx
         ))
@@ -155,7 +154,6 @@ impl Layers {
         Layer {
             rx: rx,
             layers: l,
-            status_tx: status_tx.clone()
         }
     }
 
@@ -191,7 +189,8 @@ impl Layers {
     /// modification if it is not of type "new".
     fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>, status_tx: Sender<String>) -> Option<IncomingMessage> {
 
-        status_tx.send(String::new("handle_message: received new message"));
+        // TODO error handling
+        status_tx.send(String::from("[Layers::handle_message()] decrypting message")).unwrap();
 
         match m {
             IncomingMessage::New(msg) => {

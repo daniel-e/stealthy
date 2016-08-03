@@ -49,8 +49,11 @@ fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
+                // TODO use s.th.  like debug, info, ...
+                /*
                 o.lock().unwrap()
-                    .println(format!("status message: {:?}", msg), color::YELLOW);
+                    .println(msg, color::YELLOW);
+                */
             }
             Err(e) => {
                 o.lock().unwrap()

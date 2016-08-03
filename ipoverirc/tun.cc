@@ -20,7 +20,7 @@ int tun_alloc(const char *dev)
 		return -1;
 
 	memset(&ifr, 0, sizeof(ifr));
-	ifr.ifr_flags = IFF_TUN; 
+	ifr.ifr_flags = IFF_TUN | IFF_NO_PI;
 	if(*dev)
 		strncpy(ifr.ifr_name, dev, IFNAMSIZ);
 

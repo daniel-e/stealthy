@@ -18,7 +18,7 @@ void cb(const std::string& msg)
 	std::string out;
 	Base64::Decode(msg, &out);
 	if (write(fd_dev, out.data(), out.size()) != out.size()) {
-		perror("write");
+		perror("write to network device");
 	}
 }
 

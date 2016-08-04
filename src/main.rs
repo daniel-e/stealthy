@@ -130,6 +130,7 @@ static mut global_state: Option<GlobalState> = None;
 
 // returns the uptime of stealthy in seconds
 fn uptime() -> i64 {
+    // TODO access to global state needs to be synchronized
     unsafe {
         time::get_time().sec - global_state.clone().unwrap().start_time.sec
     }
@@ -159,6 +160,26 @@ fn parse_command(txt: String, o: Arc<Mutex<HiOut>>) {
     };
 }
 
+fn send_message(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
+
+    let msg = Message::new(dstip, txt.clone().into_bytes());
+    // TODO no lock here -> if sending wants to write a message it could dead lock
+    let mut out = o.lock().unwrap();
+    let fm = time::strftime("%R", &time::now()).unwrap();
+    out.println(format!("{} [you] says: {}", fm, txt), color::WHITE);
+    match l.send(msg) {
+        Ok(_) => {
+            let fm = time::strftime("%R", &time::now()).unwrap();
+            out.println(format!("{} transmitting...", fm), color::BLUE);
+        }
+        Err(e) => { match e {
+            Errors::MessageTooBig => { out.println(format!("Message too big."), color::RED); }
+            Errors::SendFailed => { out.println(format!("Sending of message failed."), color::RED); }
+            Errors::EncryptionError => {out.println(format!("Encryption failed."), color::RED); }
+        }}
+    }
+}
+
 fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 
     // read from human interface until user enters control-d and send the
@@ -167,27 +188,12 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
             Some(ui) => {
                 match ui {
                     UserInput::Line(s) => {
-
                         let txt = s.trim_right().to_string();
                         if txt.len() > 0 {
                             if txt.starts_with("/") {
                                 parse_command(txt, o.clone());
                             } else {
-                                let msg = Message::new(dstip.clone(), txt.into_bytes());
-                                let mut out = o.lock().unwrap();
-                                let fm = time::strftime("%R", &time::now()).unwrap();
-                                out.println(format!("{} [you] says: {}", fm, s), color::WHITE);
-        	                	match l.send(msg) {
-        			                Ok(_) => {
-                                        let fm = time::strftime("%R", &time::now()).unwrap();
-                                        out.println(format!("{} transmitting...", fm), color::BLUE);
-        	                		}
-        			                Err(e) => { match e {
-                        				Errors::MessageTooBig => { out.println(format!("Message too big."), color::RED); }
-        	                			Errors::SendFailed => { out.println(format!("Sending of message failed."), color::RED); }
-                                        Errors::EncryptionError => {out.println(format!("Encryption failed."), color::RED); }
-        			                }}
-                        		}
+                                send_message(txt, o.clone(), &l, dstip.clone());
                             }
                         }
                     }

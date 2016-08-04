@@ -106,6 +106,7 @@ fn decode_uptime(t: i64) -> String {
 fn help_message(o: Arc<Mutex<HiOut>>) {
 
     let lines = vec![
+        "Commands always start with a slash:",
         "/help         - this help message",
         "/uptime, /up  - uptime"
     ];
@@ -153,7 +154,7 @@ fn parse_command(txt: String, o: Arc<Mutex<HiOut>>) {
         },
         _ => {
             o.lock().unwrap().
-                println(String::from("unknown command"), color::WHITE);
+                println(String::from("Unknown command. Type /help to see a list of commands."), color::WHITE);
         }
     };
 }

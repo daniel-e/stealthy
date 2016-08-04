@@ -50,6 +50,9 @@ fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
         loop { match rx.recv() {
             Ok(msg) => {
                 // TODO use s.th.  like debug, info, ...
+                if msg.starts_with("") { // dummy to use variable
+
+                }
                 /*
                 o.lock().unwrap()
                     .println(msg, color::YELLOW);
@@ -85,6 +88,76 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
     }});
 }
 
+fn decode_uptime(t: i64) -> String {
+
+    let days = t / 86400;
+    if days > 0 {
+        if days > 1 {
+            format!("{} days ({} seconds)", days, t)
+        } else {
+            format!("{} day ({} seconds)", days, t)
+        }
+    } else {
+        format!("{} seconds", t)
+    }
+}
+
+
+fn help_message(o: Arc<Mutex<HiOut>>) {
+
+    let lines = vec![
+        "/help         - this help message",
+        "/uptime, /up  - uptime"
+    ];
+
+    for v in lines {
+        output(v, o.clone());
+    }
+}
+
+fn output(msg: &str, o: Arc<Mutex<HiOut>>) {
+
+    o.lock().unwrap().println(String::from(msg), color::WHITE);
+}
+
+ #[derive(Clone, Debug)]
+pub struct GlobalState {
+    start_time: time::Timespec
+}
+
+static mut global_state: Option<GlobalState> = None;
+
+// returns the uptime of stealthy in seconds
+fn uptime() -> i64 {
+    unsafe {
+        time::get_time().sec - global_state.clone().unwrap().start_time.sec
+    }
+}
+
+fn init_global_state() {
+    unsafe {
+        global_state = Some(GlobalState {
+            start_time: time::get_time(),
+        })
+    };
+}
+
+fn parse_command(txt: String, o: Arc<Mutex<HiOut>>) {
+    match txt.as_str() {
+        "/help" => {
+            help_message(o.clone());
+        },
+        "/uptime" | "/up" => {
+            o.lock().unwrap().
+                println(format!("up {}", decode_uptime(uptime())), color::WHITE);
+        },
+        _ => {
+            o.lock().unwrap().
+                println(String::from("unknown command"), color::WHITE);
+        }
+    };
+}
+
 fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 
     // read from human interface until user enters control-d and send the
@@ -96,21 +169,25 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 
                         let txt = s.trim_right().to_string();
                         if txt.len() > 0 {
-                		    let msg = Message::new(dstip.clone(), txt.into_bytes());
-                            let mut out = o.lock().unwrap();
-                            let fm = time::strftime("%R", &time::now()).unwrap();
-                            out.println(format!("{} [you] says: {}", fm, s), color::WHITE);
-    	                	match l.send(msg) {
-    			                Ok(_) => {
-                                    let fm = time::strftime("%R", &time::now()).unwrap();
-                                    out.println(format!("{} transmitting...", fm), color::BLUE);
-    	                		}
-    			                Err(e) => { match e {
-                    				Errors::MessageTooBig => { out.println(format!("Message too big."), color::RED); }
-    	                			Errors::SendFailed => { out.println(format!("Sending of message failed."), color::RED); }
-                                    Errors::EncryptionError => {out.println(format!("Encryption failed."), color::RED); }
-    			                }}
-                    		}
+                            if txt.starts_with("/") {
+                                parse_command(txt, o.clone());
+                            } else {
+                                let msg = Message::new(dstip.clone(), txt.into_bytes());
+                                let mut out = o.lock().unwrap();
+                                let fm = time::strftime("%R", &time::now()).unwrap();
+                                out.println(format!("{} [you] says: {}", fm, s), color::WHITE);
+        	                	match l.send(msg) {
+        			                Ok(_) => {
+                                        let fm = time::strftime("%R", &time::now()).unwrap();
+                                        out.println(format!("{} transmitting...", fm), color::BLUE);
+        	                		}
+        			                Err(e) => { match e {
+                        				Errors::MessageTooBig => { out.println(format!("Message too big."), color::RED); }
+        	                			Errors::SendFailed => { out.println(format!("Sending of message failed."), color::RED); }
+                                        Errors::EncryptionError => {out.println(format!("Encryption failed."), color::RED); }
+        			                }}
+                        		}
+                            }
                         }
                     }
                     UserInput::Control(what) => {
@@ -129,6 +206,8 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 
 
 fn main() {
+    init_global_state();
+
     // parse command line arguments
 	let r = parse_arguments();
     let args = if r.is_some() { r.unwrap() } else { return };

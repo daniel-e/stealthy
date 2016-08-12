@@ -27,6 +27,10 @@ This will create the network device tun0. To use this device you have to configu
 sudo ifconfig tun0 192.168.2.10 netmask 255.255.255.0 up
 ```
 
+*That's it!*
+
+## Testing
+
 Now, you could do the same steps on a different computer and assign this computer the IP address 192.168.2.11. You could test the connection with ping:
 
 
@@ -52,4 +56,4 @@ In channel `#ipoverirc` on irc.swiftirc.net:7000 you will see the following mess
 <STEALTHYdgrdmdjlazlfmrxgkgbemy> RQAAVCmTAABAAcuwwKgCC8CoAgoAAO4bXtIAAw7OrVcAAAAALRYLAAAAAAAQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3
 ```
 
-Here, `STEALTHYhiiyurdgudlvidsqzxxpnz` sends the ICMP echo requests and STEALTHYdgrdmdjlazlfmrxgkgbemy answers with the ICMP echo reply.
+Here, `STEALTHYhiiyurdgudlvidsqzxxpnz` sends the ICMP echo requests and `STEALTHYdgrdmdjlazlfmrxgkgbemy` answers with the ICMP echo reply.

@@ -27,3 +27,29 @@ This will create the network device tun0. To use this device you have to configu
 sudo ifconfig tun0 192.168.2.10 netmask 255.255.255.0 up
 ```
 
+Now, you could do the same steps on a different computer and assign this computer the IP address 192.168.2.11. You could test the connection with ping:
+
+
+```bash
+xx@T:~$ ping -c3 192.168.2.11
+PING 192.168.2.11 (192.168.2.11) 56(84) bytes of data.
+64 bytes from 192.168.2.11: icmp_seq=1 ttl=64 time=1265 ms
+64 bytes from 192.168.2.11: icmp_seq=2 ttl=64 time=1182 ms
+64 bytes from 192.168.2.11: icmp_seq=3 ttl=64 time=1155 ms
+
+--- 192.168.2.11 ping statistics ---
+3 packets transmitted, 3 received, 0% packet loss, time 2008ms
+rtt min/avg/max/mdev = 1155.945/1201.323/1265.041/46.404 ms, pipe 2
+```
+
+In channel `#ipoverirc` on irc.swiftirc.net:7000 you will see the following messages:
+```
+<STEALTHYhiiyurdgudlvidsqzxxpnz> RQAAVEdDQABAAW4AwKgCCsCoAgsIAHg9XtIAAQzOrVcAAAAAnfYKAAAAAAAQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3
+<STEALTHYdgrdmdjlazlfmrxgkgbemy> RQAAVCkxAABAAcwSwKgCC8CoAgoAAIA9XtIAAQzOrVcAAAAAnfYKAAAAAAAQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3
+<STEALTHYhiiyurdgudlvidsqzxxpnz> RQAAVEd0QABAAW3PwKgCCsCoAgsIAA8hXtIAAg3OrVcAAAAABRILAAAAAAAQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3
+<STEALTHYdgrdmdjlazlfmrxgkgbemy> RQAAVCmDAABAAcvAwKgCC8CoAgoAABchXtIAAg3OrVcAAAAABRILAAAAAAAQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3
+<STEALTHYhiiyurdgudlvidsqzxxpnz> RQAAVEgWQABAAW0twKgCCsCoAgsIAOYbXtIAAw7OrVcAAAAALRYLAAAAAAAQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3
+<STEALTHYdgrdmdjlazlfmrxgkgbemy> RQAAVCmTAABAAcuwwKgCC8CoAgoAAO4bXtIAAw7OrVcAAAAALRYLAAAAAAAQERITFBUWFxgZGhscHR4fICEiIyQlJicoKSorLC0uLzAxMjM0NTY3
+```
+
+Here, `STEALTHYhiiyurdgudlvidsqzxxpnz` sends the ICMP echo requests and STEALTHYdgrdmdjlazlfmrxgkgbemy answers with the ICMP echo reply.

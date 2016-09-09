@@ -107,8 +107,9 @@ fn help_message(o: Arc<Mutex<HiOut>>) {
 
     let lines = vec![
         "Commands always start with a slash:",
-        "/help         - this help message",
-        "/uptime, /up  - uptime"
+        "/help           - this help message",
+        "/uptime, /up    - uptime",
+        "/cat <filename> - read and send content of UTF-8 encoded text file"
     ];
 
     for v in lines {
@@ -121,7 +122,7 @@ fn output(msg: &str, o: Arc<Mutex<HiOut>>) {
     o.lock().unwrap().println(String::from(msg), color::WHITE);
 }
 
- #[derive(Clone, Debug)]
+#[derive(Clone, Debug)]
 pub struct GlobalState {
     start_time: time::Timespec
 }
@@ -144,7 +145,25 @@ fn init_global_state() {
     };
 }
 
-fn parse_command(txt: String, o: Arc<Mutex<HiOut>>) {
+fn parse_command(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
+    // TODO: find more elegant solution for this
+    if txt.starts_with("/cat ") {
+        // TODO split_at works on bytes not characters
+        let (_, b) = txt.as_str().split_at(5);
+        match read_file(b) {
+            Ok(data) => {
+                o.lock().unwrap().
+                    println(String::from("Transmitting data ..."), color::WHITE);
+                send_message(String::from("\n") + data.as_str(), o, l, dstip);
+            },
+            _ => {
+                o.lock().unwrap().
+                    println(String::from("Could not read file."), color::WHITE);
+            }
+        }
+        return;
+    }
+
     match txt.as_str() {
         "/help" => {
             help_message(o.clone());
@@ -191,7 +210,7 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
                         let txt = s.trim_right().to_string();
                         if txt.len() > 0 {
                             if txt.starts_with("/") {
-                                parse_command(txt, o.clone());
+                                parse_command(txt, o.clone(), &l, dstip.clone());
                             } else {
                                 send_message(txt, o.clone(), &l, dstip.clone());
                             }

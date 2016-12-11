@@ -26,7 +26,9 @@ unsafe impl Send for WindowWrapper { }
 pub struct NcursesOut {
     win1: WindowWrapper,
     win2: WindowWrapper,
-    scroll_offset : i32,
+    scroll_offset: i32,
+    max_x: i32,
+    max_y: i32
 }
 
 #[cfg(feature="usencurses")]
@@ -69,36 +71,43 @@ impl NcursesOut {
         let mut max_y = 0;
         // the the maximum number of rows and columns
         // max_y - 1 is the last line on the screen
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
+        unsafe {
+            getmaxyx(stdscr, &mut max_y, &mut max_x);
+        }
 
-        let w1 = WindowWrapper { win: newwin(max_y - 2, max_x, 0, 0) };
+        let w1 = WindowWrapper { win: newpad(60, max_x) };
         let w2 = WindowWrapper { win: newwin(2, max_x, max_y - 1 - 1, 0) };
 
-        wbkgd(w1.win, ' ' as chtype | COLOR_PAIR(1) as chtype);
+//        wbkgd(w1.win, ' ' as chtype | COLOR_PAIR(1) as chtype);
         for x in 0..max_x {
             mvwaddch(w2.win, 0, x, '=' as chtype);
         }
         wrefresh(w2.win);
-        wrefresh(w1.win);
         scrollok(w1.win, true);
+        prefresh(w1.win, 0, 0, 0, 0, max_y - 3, max_x);
 
         NcursesOut {
             win1: w1,
             win2: w2,
-            scroll_offset: 0
+            scroll_offset: 0,
+            max_y: max_y,
+            max_x: max_x
         }
     }
 
     fn scroll_n(&mut self, n: i32) {
-        self.scroll_offset += n;
-        wscrl(self.win1.win, n);
-        wrefresh(self.win1.win);
+        if self.scroll_offset + n >= 0 && self.scroll_offset + n + self.max_y - 2 <= 60 {
+            self.scroll_offset += n;
+            prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
+        }
     }
 
     fn pos(&self) -> (i32, i32) {
         let mut x = 0;
         let mut y = 0;
-        getyx(stdscr, &mut y, &mut x);
+        unsafe {
+            getyx(stdscr, &mut y, &mut x);
+        }
         (y, x)
     }
 }
@@ -112,9 +121,6 @@ impl Output for NcursesOut {
 
     fn println(&mut self, s: String, color: color::Color) {
 
-        let n = -self.scroll_offset;
-        self.scroll_n(n);
-
         let attr = match color {
             color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
             color::RED          => COLOR_PAIR(COLOR_RED_ON_BKGD),
@@ -122,24 +128,24 @@ impl Output for NcursesOut {
             color::BRIGHT_RED   => COLOR_PAIR(COLOR_RED_ON_BKGD),
             color::GREEN        => COLOR_PAIR(COLOR_GREEN_ON_BKGD),
             color::BRIGHT_GREEN => COLOR_PAIR(COLOR_GREEN_ON_BKGD), // TODO bright
-            _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD) 
+            _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD)
         };
         let (y, x) = self.pos();
-        wattron(self.win1.win, attr as u64);
         waddstr(self.win1.win, "\n");
+        wattron(self.win1.win, attr as u64);
         waddstr(self.win1.win, &s);
         wattroff(self.win1.win, attr as u64);
         mv(y, x);
-        wrefresh(self.win1.win);
+        prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
         wrefresh(self.win2.win);
     }
 
     fn scroll_up(&mut self) {
-        self.scroll_n(1);
+        self.scroll_n(-1);
     }
 
     fn scroll_down(&mut self) {
-        self.scroll_n(-1);
+        self.scroll_n(1);
     }
 
 }
@@ -154,7 +160,9 @@ impl NcursesIn {
 
         let mut max_x = 0;
         let mut max_y = 0;
-        getmaxyx(stdscr, &mut max_y, &mut max_x);
+        unsafe {
+            getmaxyx(stdscr, &mut max_y, &mut max_x);
+        }
 
         NcursesIn {
             maxx: max_x,
@@ -172,11 +180,15 @@ impl NcursesIn {
     fn x(&self) -> i32 {
         let mut x = 0;
         let mut y = 0;
-        getyx(stdscr, &mut y, &mut x);
+        unsafe {
+            getyx(stdscr, &mut y, &mut x);
+        }
         x
     }
 
 }
+
+const K_BACKSPACE: i32 = 127;
 
 #[cfg(feature="usencurses")]
 impl Input for NcursesIn {
@@ -238,7 +250,8 @@ impl Input for NcursesIn {
                     return None;
                 }
 
-                127 => { // TODO constant for backspace
+                K_BACKSPACE => {
+                    // Remove character by overwriting with whitespace.
                     if self.x() > 0 {
                         mv(self.maxy - 1, self.x() - 1);
                         addch(' ' as chtype);
@@ -258,12 +271,14 @@ impl Input for NcursesIn {
                     }
                 }
 
+                // If no special key add it to the input buffer.
                 _ => {
-                    addch(c as chtype);
-                    buf.push(c as u8);
+                    addch(c as chtype); // write it to the screen
+                    buf.push(c as u8);  // add it to the buffer
                 }
             }
 
+            // If end of line has been reached ...
             if self.x() == self.maxx - 1 {
                 self.clear_input_line();
                 mv(self.maxy - 1, 0);
@@ -271,5 +286,3 @@ impl Input for NcursesIn {
         }
     }
 }
-
-

@@ -48,6 +48,8 @@ static COLOR_BLUE_ON_BKGD: i16 = 4;
 #[cfg(feature="usencurses")]
 static COLOR_GREEN_ON_BKGD: i16 = 5;
 
+const BUFFER_LINES: i32 = 1000;
+
 #[cfg(feature="usencurses")]
 impl NcursesOut {
 
@@ -75,10 +77,9 @@ impl NcursesOut {
             getmaxyx(stdscr, &mut max_y, &mut max_x);
         }
 
-        let w1 = WindowWrapper { win: newpad(60, max_x) };
+        let w1 = WindowWrapper { win: newpad(BUFFER_LINES, max_x) };
         let w2 = WindowWrapper { win: newwin(2, max_x, max_y - 1 - 1, 0) };
 
-//        wbkgd(w1.win, ' ' as chtype | COLOR_PAIR(1) as chtype);
         for x in 0..max_x {
             mvwaddch(w2.win, 0, x, '=' as chtype);
         }
@@ -96,8 +97,18 @@ impl NcursesOut {
     }
 
     fn scroll_n(&mut self, n: i32) {
-        if self.scroll_offset + n >= 0 && self.scroll_offset + n + self.max_y - 2 <= 60 {
+        if self.scroll_offset + n >= 0 && self.scroll_offset + n + self.max_y - 2 <= BUFFER_LINES {
             self.scroll_offset += n;
+            prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
+        }
+    }
+
+    fn jump_to_cursor(&mut self) {
+        let mut x = 0;
+        let mut y = 0;
+        getyx(self.win1.win, &mut y, &mut x);
+        if y > self.max_y - 3 {
+            self.scroll_offset = y - (self.max_y - 3);
             prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
         }
     }
@@ -135,6 +146,7 @@ impl Output for NcursesOut {
         wattron(self.win1.win, attr as u64);
         waddstr(self.win1.win, &s);
         wattroff(self.win1.win, attr as u64);
+        self.jump_to_cursor();
         mv(y, x);
         prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
         wrefresh(self.win2.win);
@@ -145,7 +157,12 @@ impl Output for NcursesOut {
     }
 
     fn scroll_down(&mut self) {
-        self.scroll_n(1);
+        let mut x = 0;
+        let mut y = 0;
+        getyx(self.win1.win, &mut y, &mut x);
+        if y - self.scroll_offset > self.max_y - 3 {
+            self.scroll_n(1);
+        }
     }
 
 }

@@ -73,9 +73,7 @@ impl NcursesOut {
         let mut max_y = 0;
         // the the maximum number of rows and columns
         // max_y - 1 is the last line on the screen
-        unsafe {
-            getmaxyx(stdscr, &mut max_y, &mut max_x);
-        }
+        getmaxyx(stdscr(), &mut max_y, &mut max_x);
 
         let w1 = WindowWrapper { win: newpad(BUFFER_LINES, max_x) };
         let w2 = WindowWrapper { win: newwin(2, max_x, max_y - 1 - 1, 0) };
@@ -116,9 +114,7 @@ impl NcursesOut {
     fn pos(&self) -> (i32, i32) {
         let mut x = 0;
         let mut y = 0;
-        unsafe {
-            getyx(stdscr, &mut y, &mut x);
-        }
+        getyx(stdscr(), &mut y, &mut x);
         (y, x)
     }
 }
@@ -177,9 +173,7 @@ impl NcursesIn {
 
         let mut max_x = 0;
         let mut max_y = 0;
-        unsafe {
-            getmaxyx(stdscr, &mut max_y, &mut max_x);
-        }
+        getmaxyx(stdscr(), &mut max_y, &mut max_x);
 
         NcursesIn {
             maxx: max_x,
@@ -197,9 +191,7 @@ impl NcursesIn {
     fn x(&self) -> i32 {
         let mut x = 0;
         let mut y = 0;
-        unsafe {
-            getyx(stdscr, &mut y, &mut x);
-        }
+        getyx(stdscr(), &mut y, &mut x);
         x
     }
 

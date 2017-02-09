@@ -129,19 +129,19 @@ pub struct GlobalState {
     start_time: time::Timespec
 }
 
-static mut global_state: Option<GlobalState> = None;
+static mut GLOBAL_STATE: Option<GlobalState> = None;
 
 // returns the uptime of stealthy in seconds
 fn uptime() -> i64 {
     // TODO access to global state needs to be synchronized
     unsafe {
-        time::get_time().sec - global_state.clone().unwrap().start_time.sec
+        time::get_time().sec - GLOBAL_STATE.clone().unwrap().start_time.sec
     }
 }
 
 fn init_global_state() {
     unsafe {
-        global_state = Some(GlobalState {
+        GLOBAL_STATE = Some(GlobalState {
             start_time: time::get_time(),
         })
     };

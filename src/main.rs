@@ -18,6 +18,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use getopts::Options;
 use term::color;
+use std::fs::File;
+use std::io::{BufRead, BufReader};
 
 use cr::sha1::Sha1;
 use cr::digest::Digest;
@@ -296,6 +298,26 @@ struct Arguments {
     pub pubkey_file: String,
 }
 
+fn get_key_from_home() -> Option<String> {
+    match env::home_dir() {
+        Some(mut path) => {
+            path.push(".stealthy/key");
+            match File::open(path) {
+                Ok(f) => {
+                    let mut reader = BufReader::new(f);
+                    let mut key = String::new();
+                    match reader.read_line(&mut key) {
+                        Ok(_) => Some(key.trim().to_string()),
+                        _ => None
+                    }
+                }
+                _ => None
+            }
+        },
+        None => None
+    }
+}
+
 fn parse_arguments() -> Option<Arguments> {
 
     static DEFAULT_SECRET_KEY: &'static str = "11111111111111111111111111111111";
@@ -327,10 +349,16 @@ fn parse_arguments() -> Option<Arguments> {
 		return None;
 	}
 
+    // 1) If option -e is given use this key.
+    // 2) If key exists in home directory use this key.
+    // 3) Use default key.
+    let key = matches.opt_str("e")
+        .unwrap_or(get_key_from_home().unwrap_or(DEFAULT_SECRET_KEY.to_string()));
+
     Some(Arguments {
         device:       matches.opt_str("i").unwrap_or("lo".to_string()),
         dstip:        matches.opt_str("d").unwrap_or("127.0.0.1".to_string()),
-        secret_key:   matches.opt_str("e").unwrap_or(DEFAULT_SECRET_KEY.to_string()),
+        secret_key:   key,
         hybrid_mode:  hybrid_mode,
         rcpt_pubkey_file:  matches.opt_str("r").unwrap_or("".to_string()),
         privkey_file: matches.opt_str("p").unwrap_or("".to_string()),

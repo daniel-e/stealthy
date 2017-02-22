@@ -60,9 +60,13 @@ pub struct Message {
 
 
 impl Message {
-	pub fn new(ip: String, buf: Vec<u8>) -> Message { Message::create(ip, buf, MessageType::NewMessage) }
+	pub fn new(ip: String, buf: Vec<u8>) -> Message {
+        Message::create(ip, buf, MessageType::NewMessage)
+    }
 
-	pub fn ack(ip: String) -> Message { Message::create(ip, vec![], MessageType::AckMessage) }
+	pub fn ack(ip: String) -> Message {
+        Message::create(ip, vec![], MessageType::AckMessage)
+    }
 
     pub fn set_payload(&self, buf: Vec<u8>) -> Message {
         Message::create(self.get_ip(), buf, self.get_type())

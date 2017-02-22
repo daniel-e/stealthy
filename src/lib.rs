@@ -5,6 +5,7 @@ mod delivery;
 mod packet;
 mod rsa;
 mod rsatools;
+mod frontend;
 
 use std::thread;
 use std::sync::Arc;

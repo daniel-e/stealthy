@@ -1,10 +1,10 @@
 extern crate time;
 
-use term::color;
 use std::process::Command;
 
-use humaninterface::Output;
-use stealthy::Message;
+use frontend::term::color;
+use frontend::humaninterface::Output;
+use super::super::Message;
 
 pub trait Callbacks : Output {
 
@@ -16,7 +16,7 @@ pub trait Callbacks : Output {
         let fm = time::strftime("%R", &time::now()).unwrap();
 
         match s {
-            Ok(s)  => { 
+            Ok(s)  => {
                 self.println(format!("{} [{}] says: {}", fm, ip, s), color::YELLOW);
 
                 // TODO configure the command
@@ -28,8 +28,8 @@ pub trait Callbacks : Output {
                     self.println(format!("calling notify-send failed"), color::RED);
                 }
             }
-            Err(_) => { 
-                self.println(format!("[{}] {} error: could not decode message", ip, fm), color::BRIGHT_RED); 
+            Err(_) => {
+                self.println(format!("[{}] {} error: could not decode message", ip, fm), color::BRIGHT_RED);
             }
         }
     }
@@ -54,5 +54,3 @@ pub trait Callbacks : Output {
         self.println(format!("{} error: {}", fm, msg), color::BRIGHT_RED);
     }
 }
-
-

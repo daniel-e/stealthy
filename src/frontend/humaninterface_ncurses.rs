@@ -4,14 +4,14 @@ extern crate term;
 extern crate ncurses;
 
 #[cfg(feature="usencurses")]
-use term::color;
+use self::term::color;
 #[cfg(feature="usencurses")]
 use self::ncurses::*;
 
 #[cfg(feature="usencurses")]
-use humaninterface::{Input, Output, UserInput, ControlType};
+use frontend::humaninterface::{Input, Output, UserInput, ControlType};
 #[cfg(feature="usencurses")]
-use callbacks::Callbacks;
+use super::callbacks::Callbacks;
 
 #[cfg(feature="usencurses")]
 struct WindowWrapper {

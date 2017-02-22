@@ -1,6 +1,4 @@
-extern crate term;
-
-use term::color;
+use frontend::term::color;
 
 pub enum ControlType {
     ArrowUp,
@@ -23,4 +21,3 @@ pub trait Output {
     fn scroll_up(&mut self) { }
     fn scroll_down(&mut self) { }
 }
-

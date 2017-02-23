@@ -4,7 +4,7 @@ use std::process::Command;
 
 use frontend::term::color;
 use frontend::humaninterface::Output;
-use super::super::Message;
+use ::misc::Message;
 
 pub trait Callbacks : Output {
 

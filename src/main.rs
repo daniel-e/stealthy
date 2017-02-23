@@ -12,19 +12,11 @@ mod misc;
 mod binding;
 mod packet;
 
-extern crate getopts;
-extern crate stealthy;
-
-extern crate crypto as cr;
-
-use misc::{Message, IncomingMessage, Layers, Errors};
+use misc::Layers;
 use tools::read_file;
 use options::parse_arguments;
 use frontend::{Gui, WHITE, GREEN, YELLOW};
 use crypto::hash_of;
-
-//use rsatools::key_as_der;
-
 
 fn main() {
     // parse command line arguments

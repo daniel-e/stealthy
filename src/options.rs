@@ -1,7 +1,9 @@
+extern crate getopts;
+
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::env;
-use getopts::Options;
+use self::getopts::Options;
 
 pub struct Arguments {
     pub device: String,

@@ -16,12 +16,12 @@ use frontend::humaninterface::{Output, Input, UserInput, ControlType};
 use frontend::callbacks::Callbacks;
 
 // TODO refactor those dependencies
-use super::IncomingMessage;
-use super::Message;
-use super::Layers;
-use super::globalstate::GlobalState;
+use ::misc::IncomingMessage;
+use ::misc::Message;
+use ::misc::Layers;
+use ::misc::Errors;
+use ::globalstate::GlobalState;
 use super::tools::read_file;
-use super::Errors;
 
 #[cfg(not(feature="usencurses"))]
 use humaninterface_std::{StdIn, StdOut};

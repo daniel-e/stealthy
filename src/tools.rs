@@ -15,17 +15,3 @@ pub fn read_file(fname: &str) -> Result<String, &'static str> {
         _ => Err("Could not open file for reading.")
     }
 }
-
-pub fn insert_delimiter(s: &str) -> String {
-    match s.is_empty() {
-        true  => String::from(""),
-        false => {
-            let (head, tail) = s.split_at(2);
-            let r = insert_delimiter(tail);
-            match r.is_empty() {
-                true  => String::from(head),
-                false => String::from(head) + ":" + &r
-            }
-        }
-    }
-}

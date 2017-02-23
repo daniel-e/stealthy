@@ -22,7 +22,7 @@ unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
 
 pub enum MessageType {
     NewMessage,
-    AckMessage
+    //AckMessage
 }
 
 
@@ -30,7 +30,7 @@ impl Clone for MessageType {
     fn clone(&self) -> MessageType {
         match *self {
             MessageType::NewMessage => MessageType::NewMessage,
-            MessageType::AckMessage => MessageType::AckMessage
+            //MessageType::AckMessage => MessageType::AckMessage
         }
     }
 }
@@ -56,9 +56,9 @@ impl Message {
         Message::create(ip, buf, MessageType::NewMessage)
     }
 
-	pub fn ack(ip: String) -> Message {
-        Message::create(ip, vec![], MessageType::AckMessage)
-    }
+	// pub fn ack(ip: String) -> Message {
+    //     Message::create(ip, vec![], MessageType::AckMessage)
+    // }
 
     pub fn set_payload(&self, buf: Vec<u8>) -> Message {
         Message::create(self.get_ip(), buf, self.get_type())

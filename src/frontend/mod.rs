@@ -37,20 +37,63 @@ type HiIn = NcursesIn;
 #[cfg(feature="usencurses")]
 type HiOut = NcursesOut;
 
+pub use self::color::WHITE;
+pub use self::color::GREEN;
+pub use self::color::YELLOW;
+
 pub struct Gui {
     pub o: Arc<Mutex<HiOut>>,
-    pub i: HiIn,
-    pub status_tx: Sender<String>
+    pub status_tx: Sender<String>,
+    i: HiIn,
 }
 
-pub fn gui() -> Gui {
-    let o = Arc::new(Mutex::new(HiOut::new()));
-    Gui {
-        o: o.clone(), // human interface for output
-        i: HiIn::new(), // human interface for input
-        status_tx: status_message_loop(o.clone())
+impl Gui {
+    pub fn new() -> Gui {
+        let o = Arc::new(Mutex::new(HiOut::new()));
+        Gui {
+            o: o.clone(), // interface for output
+            i: HiIn::new(), // interface for input
+            status_tx: status_message_loop(o.clone())
+        }
+    }
+
+    pub fn println(&self, s: String, c: color::Color) {
+        let mut out = self.o.lock().unwrap();
+        out.println(s, c);
+    }
+
+    pub fn input_loop(&self, l: Layers, dstip: String, state: &GlobalState) {
+
+        // read from human interface until user enters control-d and send the
+        // message via the network layer
+        loop { match self.i.read_line() {
+                Some(ui) => {
+                    match ui {
+                        UserInput::Line(s) => {
+                            let txt = s.trim_right().to_string();
+                            if txt.len() > 0 {
+                                if txt.starts_with("/") {
+                                    parse_command(txt, self.o.clone(), &l, dstip.clone(), state);
+                                } else {
+                                    send_message(txt, self.o.clone(), &l, dstip.clone());
+                                }
+                            }
+                        }
+                        UserInput::Control(what) => {
+                            let mut out = self.o.lock().unwrap();
+                            match what {
+                                ControlType::ArrowUp => out.scroll_up(),
+                                ControlType::ArrowDown => out.scroll_down()
+                            }
+                        }
+                    }
+                }
+                _ => { break; }
+        }}
+        self.o.lock().unwrap().close();
     }
 }
+
 
 pub fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
 
@@ -173,36 +216,6 @@ pub fn send_message(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String
     }
 }
 
-pub fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String, state: &GlobalState) {
-
-    // read from human interface until user enters control-d and send the
-    // message via the network layer
-    loop { match i.read_line() {
-            Some(ui) => {
-                match ui {
-                    UserInput::Line(s) => {
-                        let txt = s.trim_right().to_string();
-                        if txt.len() > 0 {
-                            if txt.starts_with("/") {
-                                parse_command(txt, o.clone(), &l, dstip.clone(), state);
-                            } else {
-                                send_message(txt, o.clone(), &l, dstip.clone());
-                            }
-                        }
-                    }
-                    UserInput::Control(what) => {
-                        let mut out = o.lock().unwrap();
-                        match what {
-                            ControlType::ArrowUp => out.scroll_up(),
-                            ControlType::ArrowDown => out.scroll_down()
-                        }
-                    }
-                }
-            }
-            _ => { break; }
-    }}
-    o.lock().unwrap().close();
-}
 
 fn decode_uptime(t: i64) -> String {
 

@@ -1,8 +1,14 @@
 use std::fs::File;
 use std::io::Read;
 
-use super::{blowfish, rsa, rsatools};
-use super::delivery::{push_value, pop_value, push_slice};
+use ::blowfish;
+use ::rsa;
+use ::rsatools;
+use ::delivery::{push_value, pop_value, push_slice};
+
+extern crate crypto as cr;
+use self::cr::sha1::Sha1;
+use self::cr::digest::Digest;
 
 pub type ResultVec = Result<Vec<u8>, &'static str>;
 
@@ -19,6 +25,26 @@ pub struct SymmetricEncryption {
 pub struct AsymmetricEncryption {
     pub_key: String,
     priv_key: String
+}
+
+fn insert_delimiter(s: &str) -> String {
+    match s.is_empty() {
+        true  => String::from(""),
+        false => {
+            let (head, tail) = s.split_at(2);
+            let r = insert_delimiter(tail);
+            match r.is_empty() {
+                true  => String::from(head),
+                false => String::from(head) + ":" + &r
+            }
+        }
+    }
+}
+
+pub fn hash_of(d: Vec<u8>) -> String {
+    let mut h = Sha1::new();
+    h.input(d.as_slice());
+    insert_delimiter(&h.result_str())
 }
 
 // ---------------------------------
@@ -88,7 +114,7 @@ impl Encryption for AsymmetricEncryption {
         push_slice(&mut v, &ekey);                  // with RSA encrypted key
         Ok(v)
     }
- 
+
     fn decrypt(&self, v: &Vec<u8>) -> ResultVec {
 
         let mut data = v.clone();
@@ -112,7 +138,7 @@ impl Encryption for AsymmetricEncryption {
 
     /// Returns the public key.
     fn encryption_key(&self) -> Vec<u8> {
-        rsatools::key_as_der(&self.pub_key)
+        rsatools::key_as_der(self.pub_key.clone())
     }
 }
 
@@ -171,7 +197,7 @@ mod tests {
 
     #[test]
     fn test_from_hex() {
-        
+
         let mut r = super::from_hex("0".to_string());
         assert!(r.is_err());
 
@@ -185,12 +211,12 @@ mod tests {
     }
 
     // --------------------------------------------------------------
- 
+
     use super::{Encryption, AsymmetricEncryption};
 
     #[test]
     fn test_asymmetric_encryption() {
-        
+
         let a = AsymmetricEncryption::new("tests/keys/rsa_pub.pem", "tests/keys/rsa_priv.pem");
         assert!(a.is_ok());
 
@@ -201,7 +227,7 @@ mod tests {
 
     #[test]
     fn test_asymmetric_encrypt_decrypt() {
-        
+
         let a = AsymmetricEncryption::new("tests/keys/rsa_pub.pem", "tests/keys/rsa_priv.pem");
         assert!(a.is_ok());
         match a {

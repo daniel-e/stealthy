@@ -1,7 +1,15 @@
 mod logo;
 mod tools;
-mod rsatools;
 mod options;
+mod frontend;
+mod globalstate;
+mod crypto;
+mod blowfish;
+mod rsa;
+mod rsatools;
+mod delivery;
+mod binding;
+mod packet;
 
 extern crate getopts;
 extern crate term;
@@ -9,22 +17,15 @@ extern crate stealthy;
 
 extern crate crypto as cr;
 
-use cr::sha1::Sha1;
-use cr::digest::Digest;
-
 use stealthy::{Message, IncomingMessage, Errors, Layers};
-use tools::{read_file, insert_delimiter};
+use tools::read_file;
 use options::parse_arguments;
-use term::color;
 
-mod frontend;
-mod globalstate;
 use globalstate::GlobalState;
-use frontend::humaninterface::Output;
+use frontend::{Gui, WHITE, GREEN, YELLOW};
+use crypto::hash_of;
 
 //use rsatools::key_as_der;
-
-
 
 fn main() {
     let state = GlobalState::new();
@@ -33,11 +34,7 @@ fn main() {
 	let r = parse_arguments();
     let args = if r.is_some() { r.unwrap() } else { return };
 
-    let gui = frontend::gui();
-
-    //let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
-    //let i = HiIn::new();                           // human interface for input
-    //let status_tx = status_message_loop(o.clone());
+    let gui = Gui::new();
 
     let status_tx = gui.status_tx.clone();
 
@@ -59,28 +56,15 @@ fn main() {
     let layer = ret.unwrap();
 
     // this is the loop which handles messages received via rx
-    let o = gui.o.clone();
-    frontend::recv_loop(o.clone(), layer.rx);
+    frontend::recv_loop(gui.o.clone(), layer.rx);
 
-    {
-        let mut out = o.lock().unwrap();
-        out.println(logo::get_logo(), color::GREEN);
-        out.println(format!("device is {}, destination ip is {}", args.device, args.dstip), color::WHITE);
-        if args.hybrid_mode {
-            let mut h = Sha1::new();
-
-            h.input(&layer.layers.encryption_key());
-            let s = insert_delimiter(&h.result_str());
-            out.println(format!("Hash of encryption key : {}", s), color::YELLOW);
-
-            h.reset();
-            h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
-            let q = insert_delimiter(&h.result_str());
-            out.println(format!("Hash of your public key: {}", q), color::YELLOW);
-        }
-        out.println(format!("You can now start writing ...\n"), color::WHITE);
+    gui.println(logo::get_logo(), GREEN);
+    gui.println(format!("device is {}, destination ip is {}", args.device, args.dstip), WHITE);
+    if args.hybrid_mode {
+        gui.println(format!("Hash of encryption key : {}", hash_of(layer.layers.encryption_key())), YELLOW);
+        gui.println(format!("Hash of your public key: {}", hash_of(
+            rsatools::key_as_der(read_file(&args.pubkey_file).unwrap()))), YELLOW);
     }
-
-    let i = gui.i;
-    frontend::input_loop(o.clone(), i, layer.layers, args.dstip, &state);
+    gui.println(format!("You can now start writing ...\n"), WHITE);
+    gui.input_loop(layer.layers, args.dstip, &state);
 }

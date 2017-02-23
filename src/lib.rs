@@ -56,9 +56,9 @@ pub enum Errors {
 
 pub struct Message {
     /// Contains the destination ip for outgoing messages, source ip from incoming messages.
-	ip : String,
+	pub ip : String,
     typ: MessageType,
-	buf: Vec<u8>,
+	pub buf: Vec<u8>,
 }
 
 

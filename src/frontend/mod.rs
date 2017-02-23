@@ -3,7 +3,7 @@ extern crate time;
 
 use self::term::color;
 
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
@@ -11,16 +11,17 @@ pub mod humaninterface;
 mod humaninterface_ncurses;
 mod humaninterface_std;
 mod callbacks;
+mod globalstate;
 
 use frontend::humaninterface::{Output, Input, UserInput, ControlType};
 use frontend::callbacks::Callbacks;
+use frontend::globalstate::GlobalState;
 
 // TODO refactor those dependencies
 use ::misc::IncomingMessage;
 use ::misc::Message;
 use ::misc::Layers;
 use ::misc::Errors;
-use ::globalstate::GlobalState;
 use super::tools::read_file;
 
 #[cfg(not(feature="usencurses"))]
@@ -94,27 +95,28 @@ impl Gui {
         }}
         self.o.lock().unwrap().close();
     }
-}
 
-
-pub fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
-
-    thread::spawn(move || {
-        loop { match rx.recv() {
-            Ok(msg) => {
-                let mut out = o.lock().unwrap();
-                match msg {
-                    IncomingMessage::New(msg) =>    { out.new_msg(msg); }
-                    IncomingMessage::Ack(id)  =>    { out.ack_msg(id); }
-                    IncomingMessage::Error(_, s) => { out.err_msg(s); }
+    pub fn get_channel(&self) -> Sender<IncomingMessage> {
+        let (tx, rx) = channel();
+        let o = self.o.clone();
+        thread::spawn(move || {
+            loop { match rx.recv() {
+                Ok(msg) => {
+                    let mut out = o.lock().unwrap();
+                    match msg {
+                        IncomingMessage::New(msg) =>    { out.new_msg(msg); }
+                        IncomingMessage::Ack(id)  =>    { out.ack_msg(id); }
+                        IncomingMessage::Error(_, s) => { out.err_msg(s); }
+                    }
+                }
+                Err(e) => {
+                    let mut out = o.lock().unwrap();
+                    out.println(format!("recv_loop: failed to receive message. {:?}", e), color::RED);
                 }
             }
-            Err(e) => {
-                o.lock().unwrap()
-                    .println(format!("recv_loop: failed to receive message. {:?}", e), color::RED);
-            }
-        }
-    }});
+        }});
+        tx
+    }
 }
 
 pub fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {

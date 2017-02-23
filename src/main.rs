@@ -2,18 +2,31 @@ mod logo;
 mod tools;
 mod options;
 mod frontend;
-mod globalstate;
 mod crypt;
 mod delivery;
 mod misc;
 mod binding;
 mod packet;
 
-use misc::Layers;
+use std::sync::mpsc::Receiver;
+use std::thread;
+use misc::{Layers, IncomingMessage};
 use tools::read_file;
 use options::parse_arguments;
 use frontend::{Gui, WHITE, GREEN, YELLOW};
 use crypt::{hash_of, rsatools};
+
+pub fn recv_loop(gui: &Gui, rx: Receiver<IncomingMessage>) {
+    let tx = gui.get_channel();
+    thread::spawn(move || {
+        loop {
+            match rx.recv() {
+                Ok(msg) => tx.send(msg).unwrap(),
+                Err(e)  => { panic!("failed to receive message: {:?}", e); }
+            }
+        }
+    });
+}
 
 fn main() {
     // parse command line arguments
@@ -42,7 +55,7 @@ fn main() {
     let layer = ret.unwrap();
 
     // this is the loop which handles messages received via rx
-    frontend::recv_loop(gui.o.clone(), layer.rx);
+    recv_loop(&gui, layer.rx);
 
     gui.println(logo::get_logo(), GREEN);
     gui.println(format!("device is {}, destination ip is {}", args.device, args.dstip), WHITE);

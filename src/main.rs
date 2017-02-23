@@ -3,10 +3,7 @@ mod tools;
 mod options;
 mod frontend;
 mod globalstate;
-mod crypto;
-mod blowfish;
-mod rsa;
-mod rsatools;
+mod crypt;
 mod delivery;
 mod misc;
 mod binding;
@@ -16,7 +13,7 @@ use misc::Layers;
 use tools::read_file;
 use options::parse_arguments;
 use frontend::{Gui, WHITE, GREEN, YELLOW};
-use crypto::hash_of;
+use crypt::{hash_of, rsatools};
 
 fn main() {
     // parse command line arguments

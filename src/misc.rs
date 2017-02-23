@@ -2,7 +2,7 @@ use std::thread;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crypto::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
+use crypt::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
 use delivery::Delivery;
 use binding::Network;
 

@@ -1,14 +1,15 @@
 use std::fs::File;
 use std::io::Read;
 
-use ::blowfish;
-use ::rsa;
-use ::rsatools;
+mod blowfish;
+mod rsa;
+pub mod rsatools;
+
 use ::delivery::{push_value, pop_value, push_slice};
 
-extern crate crypto as cr;
-use self::cr::sha1::Sha1;
-use self::cr::digest::Digest;
+extern crate crypto;
+use self::crypto::sha1::Sha1;
+use self::crypto::digest::Digest;
 
 pub type ResultVec = Result<Vec<u8>, &'static str>;
 

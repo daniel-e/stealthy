@@ -4,6 +4,7 @@ name = "stealthy"
 version = "0.0.1"
 authors = ["unknown"]
 build = "build.rs"
+links = "pcap"
 
 [dependencies]
 rand = "*"

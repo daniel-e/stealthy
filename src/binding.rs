@@ -8,7 +8,7 @@ use std::time::Duration;
 //use std::fs::{File, OpenOptions};
 //use std::io::Write;
 
-use super::{packet, IncomingMessage, Message, Errors};
+use ::{packet, IncomingMessage, Message, Errors};
 
 const RETRY_TIMEOUT: u64      = 15000;
 const MAX_MESSAGE_SIZE: usize = (10 * 1024);

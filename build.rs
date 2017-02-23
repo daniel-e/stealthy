@@ -41,6 +41,5 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", out_dir);
     println!("cargo:rustc-link-lib=static=icmp");
+    println!("cargo:rustc-link-lib=dylib=pcap");
 }
-
-

@@ -6,7 +6,7 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 
-use super::{Message, IncomingMessage, Errors};
+use misc::{Message, IncomingMessage, Errors};
 use binding::Network;    // Implemenation for network layer
 
 struct SmallMessage {

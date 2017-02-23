@@ -8,6 +8,7 @@ mod blowfish;
 mod rsa;
 mod rsatools;
 mod delivery;
+mod misc;
 mod binding;
 mod packet;
 
@@ -16,13 +17,14 @@ extern crate stealthy;
 
 extern crate crypto as cr;
 
-use stealthy::{Message, IncomingMessage, Layers, Errors};
+use misc::{Message, IncomingMessage, Layers, Errors};
 use tools::read_file;
 use options::parse_arguments;
 use frontend::{Gui, WHITE, GREEN, YELLOW};
 use crypto::hash_of;
 
 //use rsatools::key_as_der;
+
 
 fn main() {
     // parse command line arguments

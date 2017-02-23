@@ -5,6 +5,9 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::time::Duration;
 
+//use std::fs::{File, OpenOptions};
+//use std::io::Write;
+
 use super::{packet, IncomingMessage, Message, Errors};
 
 const RETRY_TIMEOUT: u64      = 15000;
@@ -27,6 +30,9 @@ pub fn string_from_cstr(cstr: *const u8) -> String {
 
 /// Callback function called by the ICMP C library.
 extern "C" fn callback(target: *mut Network, buf: *const u8, len: u32, typ: u32, srcip: *const u8) {
+
+	// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
+	// f.write_fmt(format_args!("binding::callback()\n")).unwrap();
 
 	match typ {
 		// for values look into the enum in icmp/net.h
@@ -86,6 +92,9 @@ impl Network {
 	/// Constructs a new `Network`.
 	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>) -> Box<Network> {
 
+		// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
+		// f.write_fmt(format_args!("Network::new()\n")).unwrap();
+
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : vec![],
 		}));
@@ -129,9 +138,15 @@ impl Network {
 			let r = recv_callback(&mut *self, sdev.as_ptr(), callback);
 			match r {
 				-1 => {
+					// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
+					// f.write_fmt(format_args!("A\n")).unwrap();
+
 					self.status_tx.send(String::from("[Network::init_callback] failed")).unwrap();
 				},
 				_ => {
+					// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
+					// f.write_fmt(format_args!("B\n")).unwrap();
+
 					self.status_tx.send(String::from("[Network::init_callback] network initialized)")).unwrap();
 				}
 			}
@@ -139,6 +154,9 @@ impl Network {
 	}
 
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
+
+		// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
+		// f.write_fmt(format_args!("bla\n")).unwrap();
 
 		if len == 0 {
 			// TODO: hack: ip is the reason for the invalid packet
@@ -151,6 +169,9 @@ impl Network {
 
 		// TODO error handling
 		self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
+
+		// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
+		// f.write_fmt(format_args!("bla\n")).unwrap();
 
 		let r = packet::Packet::deserialize(buf, len, ip);
 		match r {

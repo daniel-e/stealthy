@@ -1,4 +1,5 @@
 extern crate term;
+extern crate time;
 
 use self::term::color;
 
@@ -6,14 +7,21 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
+pub mod humaninterface;
 mod humaninterface_ncurses;
-mod humaninterface;
 mod humaninterface_std;
 mod callbacks;
 
-use frontend::humaninterface::Output;
+use frontend::humaninterface::{Output, Input, UserInput, ControlType};
 use frontend::callbacks::Callbacks;
+
+// TODO refactor those dependencies
 use super::IncomingMessage;
+use super::Message;
+use super::Layers;
+use super::globalstate::GlobalState;
+use super::tools::read_file;
+use super::Errors;
 
 #[cfg(not(feature="usencurses"))]
 use humaninterface_std::{StdIn, StdOut};
@@ -109,4 +117,103 @@ pub fn help_message(o: Arc<Mutex<HiOut>>) {
 fn output(msg: &str, o: Arc<Mutex<HiOut>>) {
 
     o.lock().unwrap().println(String::from(msg), color::WHITE);
+}
+
+pub fn parse_command(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String, state: &GlobalState) {
+    // TODO: find more elegant solution for this
+    if txt.starts_with("/cat ") {
+        // TODO split_at works on bytes not characters
+        let (_, b) = txt.as_str().split_at(5);
+        match read_file(b) {
+            Ok(data) => {
+                o.lock().unwrap().
+                    println(String::from("Transmitting data ..."), color::WHITE);
+                send_message(String::from("\n") + data.as_str(), o, l, dstip);
+            },
+            _ => {
+                o.lock().unwrap().
+                    println(String::from("Could not read file."), color::WHITE);
+            }
+        }
+        return;
+    }
+
+    match txt.as_str() {
+        "/help" => {
+            help_message(o.clone());
+        },
+        "/uptime" | "/up" => {
+            o.lock().unwrap().
+                println(format!("up {}", decode_uptime(state.uptime())), color::WHITE);
+        },
+        _ => {
+            o.lock().unwrap().
+                println(String::from("Unknown command. Type /help to see a list of commands."), color::WHITE);
+        }
+    };
+}
+
+pub fn send_message(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
+
+    let msg = Message::new(dstip, txt.clone().into_bytes());
+    // TODO no lock here -> if sending wants to write a message it could dead lock
+    let mut out = o.lock().unwrap();
+    let fm = time::strftime("%R", &time::now()).unwrap();
+    out.println(format!("{} [you] says: {}", fm, txt), color::WHITE);
+    match l.send(msg) {
+        Ok(_) => {
+            let fm = time::strftime("%R", &time::now()).unwrap();
+            out.println(format!("{} transmitting...", fm), color::BLUE);
+        }
+        Err(e) => { match e {
+            Errors::MessageTooBig => { out.println(format!("Message too big."), color::RED); }
+            Errors::SendFailed => { out.println(format!("Sending of message failed."), color::RED); }
+            Errors::EncryptionError => {out.println(format!("Encryption failed."), color::RED); }
+        }}
+    }
+}
+
+pub fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String, state: &GlobalState) {
+
+    // read from human interface until user enters control-d and send the
+    // message via the network layer
+    loop { match i.read_line() {
+            Some(ui) => {
+                match ui {
+                    UserInput::Line(s) => {
+                        let txt = s.trim_right().to_string();
+                        if txt.len() > 0 {
+                            if txt.starts_with("/") {
+                                parse_command(txt, o.clone(), &l, dstip.clone(), state);
+                            } else {
+                                send_message(txt, o.clone(), &l, dstip.clone());
+                            }
+                        }
+                    }
+                    UserInput::Control(what) => {
+                        let mut out = o.lock().unwrap();
+                        match what {
+                            ControlType::ArrowUp => out.scroll_up(),
+                            ControlType::ArrowDown => out.scroll_down()
+                        }
+                    }
+                }
+            }
+            _ => { break; }
+    }}
+    o.lock().unwrap().close();
+}
+
+fn decode_uptime(t: i64) -> String {
+
+    let days = t / 86400;
+    if days > 0 {
+        if days > 1 {
+            format!("{} days ({} seconds)", days, t)
+        } else {
+            format!("{} day ({} seconds)", days, t)
+        }
+    } else {
+        format!("{} seconds", t)
+    }
 }

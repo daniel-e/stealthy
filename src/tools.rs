@@ -1,6 +1,6 @@
 use std::fs::File;
 use std::io::Read;
- 
+
 pub fn read_file(fname: &str) -> Result<String, &'static str> {
 
     let r = File::open(fname);
@@ -29,4 +29,3 @@ pub fn insert_delimiter(s: &str) -> String {
         }
     }
 }
-

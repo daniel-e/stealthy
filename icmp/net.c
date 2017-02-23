@@ -252,6 +252,7 @@ static void* do_callback(void* args)
 	return 0;
 }
 
+// Is called by bindings::Network.
 int recv_callback(void* target, const char* dev, callback cb) {
 
 	pcap_t* handle = setup_pcap(dev, "icmp && icmp[icmptype] = 8");

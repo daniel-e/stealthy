@@ -6,6 +6,8 @@ mod packet;
 mod rsa;
 mod rsatools;
 mod frontend;
+mod globalstate;
+mod tools;
 
 use std::thread;
 use std::sync::Arc;

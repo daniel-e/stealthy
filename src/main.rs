@@ -66,5 +66,6 @@ fn main() {
             rsatools::key_as_der(read_file(&args.pubkey_file).unwrap()))), YELLOW);
     }
     gui.println(format!("You can now start writing ...\n"), WHITE);
+
     gui.input_loop(layer.layers, args.dstip, &state);
 }

@@ -44,7 +44,6 @@ pub use self::color::YELLOW;
 
 pub struct Gui {
     pub o: Arc<Mutex<HiOut>>,
-    pub status_tx: Sender<String>,
     i: HiIn,
     state: GlobalState,
 }
@@ -55,7 +54,6 @@ impl Gui {
         Gui {
             o: o.clone(), // interface for output
             i: HiIn::new(), // interface for input
-            status_tx: status_message_loop(o.clone()),
             state: GlobalState::new(),
         }
     }
@@ -117,32 +115,6 @@ impl Gui {
         }});
         tx
     }
-}
-
-pub fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
-
-    let (tx, rx) = channel::<String>();
-
-    thread::spawn(move || {
-        loop { match rx.recv() {
-            Ok(msg) => {
-                // TODO use s.th.  like debug, info, ...
-                if msg.starts_with("") { // dummy to use variable
-
-                }
-                /*
-                o.lock().unwrap()
-                    .println(msg, color::YELLOW);
-                */
-            }
-            Err(e) => {
-                o.lock().unwrap()
-                    .println(format!("status_message_loop: failed. {:?}", e), color::RED);
-            }
-        }
-    }});
-
-    tx
 }
 
 pub fn help_message(o: Arc<Mutex<HiOut>>) {

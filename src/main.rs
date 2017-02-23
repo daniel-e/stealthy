@@ -35,27 +35,17 @@ fn main() {
 
     let gui = Gui::new();
 
-    let status_tx = gui.status_tx.clone();
-
     let ret =
         if args.hybrid_mode {
-            // use asymmetric encryption
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx)  // network layer
+            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device)
         } else {
-            // use symmetric encryption
-            Layers::symmetric(&args.secret_key, &args.device, status_tx)  // network layer
+            Layers::symmetric(&args.secret_key, &args.device)
         };
 
-    if ret.is_err() {
-        // TODO is this message visible when in curses
-        println!("Initialization failed.");
-        return;
-    }
-
-    let layer = ret.unwrap();
-
-    // this is the loop which handles messages received via rx
-    recv_loop(&gui, layer.rx);
+    let layer = match ret {
+        Ok(r) => r,
+        _ => { panic!("Initialization failed."); }
+    };
 
     gui.println(logo::get_logo(), GREEN);
     gui.println(format!("device is {}, destination ip is {}", args.device, args.dstip), WHITE);
@@ -66,5 +56,6 @@ fn main() {
     }
     gui.println(format!("You can now start writing ...\n"), WHITE);
 
+    recv_loop(&gui, layer.rx);
     gui.input_loop(layer.layers, args.dstip);
 }

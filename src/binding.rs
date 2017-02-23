@@ -83,15 +83,14 @@ struct SharedData {
 
 #[repr(C)]
 pub struct Network {
-	tx               : Sender<packet::IdType>,
-    tx_msg           : Sender<IncomingMessage>,
-	shared           : Arc<Mutex<SharedData>>,
-	status_tx        : Sender<String>,
+	tx: Sender<packet::IdType>,
+    tx_msg: Sender<IncomingMessage>,
+	shared: Arc<Mutex<SharedData>>,
 }
 
 impl Network {
 	/// Constructs a new `Network`.
-	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>) -> Box<Network> {
+	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>) -> Box<Network> {
 
 		// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
 		// f.write_fmt(format_args!("Network::new()\n")).unwrap();
@@ -108,7 +107,6 @@ impl Network {
 			shared: s.clone(),
             tx_msg: tx_msg,
 			tx: tx,
-			status_tx: status_tx
 		});
 
 		n.init_callback(dev);
@@ -141,14 +139,10 @@ impl Network {
 				-1 => {
 					// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
 					// f.write_fmt(format_args!("A\n")).unwrap();
-
-					self.status_tx.send(String::from("[Network::init_callback] failed")).unwrap();
 				},
 				_ => {
 					// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
 					// f.write_fmt(format_args!("B\n")).unwrap();
-
-					self.status_tx.send(String::from("[Network::init_callback] network initialized)")).unwrap();
 				}
 			}
 		}
@@ -168,9 +162,6 @@ impl Network {
 			return;
 		}
 
-		// TODO error handling
-		self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
-
 		// let mut f = OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log").unwrap();
 		// f.write_fmt(format_args!("bla\n")).unwrap();
 
@@ -178,17 +169,13 @@ impl Network {
 		match r {
 			Some(p) => {
                 if p.is_new_message() {
-					self.status_tx.send(String::from("[Network::recv_packet()] new message")).unwrap();
                     self.handle_new_message(p);
                 } else if p.is_ack() {
-					self.status_tx.send(String::from("[Network::recv_packet()] ack")).unwrap();
                     self.handle_ack(p);
                 } else {
-					self.status_tx.send(String::from("[Network::recv_packet()] unknown packet type")).unwrap();
                 }
 			},
 			None => {
-				self.status_tx.send(String::from("[Network::recv_packet()] deserialization failed")).unwrap();
 			}
 		}
 	}

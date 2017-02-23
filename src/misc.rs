@@ -89,22 +89,21 @@ pub struct Layer {
 pub struct Layers {
     encryption_layer: Arc<Box<Encryption>>,
     delivery_layer  : Delivery,
-    status_tx       : Sender<String>,
 }
 
 
 impl Layers {
 
-    pub fn symmetric(hexkey: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
+    pub fn symmetric(hexkey: &String, device: &String) -> Result<Layer, &'static str> {
 
-        Layers::init(Box::new(try!(SymmetricEncryption::new(hexkey))), device, status_tx)
+        Layers::init(Box::new(try!(SymmetricEncryption::new(hexkey))), device)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(
                 try!(AsymmetricEncryption::new(&pubkey_file, &privkey_file))
-            ), device, status_tx
+            ), device
         )
     }
 
@@ -122,28 +121,25 @@ impl Layers {
 
     // ------ private functions
 
-    fn init(e: Box<Encryption>, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
+    fn init(e: Box<Encryption>, device: &String) -> Result<Layer, &'static str> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
         Ok(Layers::new(e,
-            Delivery::new(Network::new(device, tx1, status_tx.clone()), tx2, rx1),
-            rx2,
-            status_tx
+            Delivery::new(Network::new(device, tx1), tx2, rx1), rx2
         ))
     }
 
-    fn new(e: Box<Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>, status_tx: Sender<String>) -> Layer {
+    fn new(e: Box<Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>) -> Layer {
 
         // tx is used to send received messages to the application via rx
         let (tx, rx) = channel::<IncomingMessage>();
 
         let l = Layers {
             encryption_layer: Arc::new(e),
-            delivery_layer: d,
-            status_tx: status_tx.clone()
+            delivery_layer: d
         };
 
         l.recv_loop(tx, rx_network);
@@ -157,10 +153,9 @@ impl Layers {
     fn recv_loop(&self, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) {
 
         let enc = self.encryption_layer.clone();
-        let status_tx = self.status_tx.clone();
 
         thread::spawn(move || { loop { match rx.recv() {
-            Ok(msg) => match Layers::handle_message(msg, enc.clone(), status_tx.clone()) {
+            Ok(msg) => match Layers::handle_message(msg, enc.clone()) {
                 Some(m) => match tx.send(m) {
                     Err(_) => panic!("Channel closed."),
                     _ => { }
@@ -183,10 +178,7 @@ impl Layers {
 
     /// Decrypts incoming messages of type "new" or returns the message without
     /// modification if it is not of type "new".
-    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>, status_tx: Sender<String>) -> Option<IncomingMessage> {
-
-        // TODO error handling
-        status_tx.send(String::from("[Layers::handle_message()] decrypting message")).unwrap();
+    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>) -> Option<IncomingMessage> {
 
         match m {
             IncomingMessage::New(msg) => {

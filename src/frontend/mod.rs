@@ -45,6 +45,7 @@ pub struct Gui {
     pub o: Arc<Mutex<HiOut>>,
     pub status_tx: Sender<String>,
     i: HiIn,
+    state: GlobalState,
 }
 
 impl Gui {
@@ -53,7 +54,8 @@ impl Gui {
         Gui {
             o: o.clone(), // interface for output
             i: HiIn::new(), // interface for input
-            status_tx: status_message_loop(o.clone())
+            status_tx: status_message_loop(o.clone()),
+            state: GlobalState::new(),
         }
     }
 
@@ -62,7 +64,7 @@ impl Gui {
         out.println(s, c);
     }
 
-    pub fn input_loop(&self, l: Layers, dstip: String, state: &GlobalState) {
+    pub fn input_loop(&self, l: Layers, dstip: String) {
 
         // read from human interface until user enters control-d and send the
         // message via the network layer
@@ -73,7 +75,7 @@ impl Gui {
                             let txt = s.trim_right().to_string();
                             if txt.len() > 0 {
                                 if txt.starts_with("/") {
-                                    parse_command(txt, self.o.clone(), &l, dstip.clone(), state);
+                                    parse_command(txt, self.o.clone(), &l, dstip.clone(), &self.state);
                                 } else {
                                     send_message(txt, self.o.clone(), &l, dstip.clone());
                                 }

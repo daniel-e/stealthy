@@ -12,24 +12,19 @@ mod binding;
 mod packet;
 
 extern crate getopts;
-extern crate term;
 extern crate stealthy;
 
 extern crate crypto as cr;
 
-use stealthy::{Message, IncomingMessage, Errors, Layers};
+use stealthy::{Message, IncomingMessage, Layers, Errors};
 use tools::read_file;
 use options::parse_arguments;
-
-use globalstate::GlobalState;
 use frontend::{Gui, WHITE, GREEN, YELLOW};
 use crypto::hash_of;
 
 //use rsatools::key_as_der;
 
 fn main() {
-    let state = GlobalState::new();
-
     // parse command line arguments
 	let r = parse_arguments();
     let args = if r.is_some() { r.unwrap() } else { return };
@@ -67,5 +62,5 @@ fn main() {
     }
     gui.println(format!("You can now start writing ...\n"), WHITE);
 
-    gui.input_loop(layer.layers, args.dstip, &state);
+    gui.input_loop(layer.layers, args.dstip);
 }

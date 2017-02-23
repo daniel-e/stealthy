@@ -46,12 +46,12 @@ impl Clone for MessageType {
     }
 }
 
-
 pub enum Errors {
 	MessageTooBig,
 	SendFailed,
     EncryptionError
 }
+
 
 
 pub struct Message {

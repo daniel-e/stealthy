@@ -9,7 +9,6 @@ use std::sync::mpsc::{Receiver, Sender};
 use super::{Message, IncomingMessage, Errors};
 use binding::Network;    // Implemenation for network layer
 
-
 struct SmallMessage {
     buf: Vec<u8>,
     seq: u32,
@@ -55,7 +54,7 @@ impl Delivery {
         let queue    = self.pending.clone();
         let incoming = self.incoming.clone();
 
-		thread::spawn(move || { loop { 
+		thread::spawn(move || { loop {
             match rx.recv() {
                 Ok(msg) => {
                     match msg {
@@ -204,7 +203,7 @@ impl Delivery {
         let id: u64 = pop_value(&mut v, 8).unwrap();         // id
         let n: u32 = pop_value(&mut v, 4).unwrap() as u32;   // number of messages
         let seq: u32 = pop_value(&mut v, 4).unwrap() as u32; // seq
-        
+
         Some(SmallMessage {
             buf: v.clone(),
             seq: seq,
@@ -215,8 +214,8 @@ impl Delivery {
 }
 
 pub fn push_slice(v: &mut Vec<u8>, arr: &[u8]) {
-    for i in arr { 
-        v.push(*i) 
+    for i in arr {
+        v.push(*i)
     }
 }
 
@@ -257,7 +256,7 @@ mod tests {
     /*
     #[test]
     fn test_new() {
-        
+
         let d = Delivery::new();
         assert_eq!(d.pending.len(), 0);
     }
@@ -266,7 +265,7 @@ mod tests {
 
     #[test]
     fn test_split_small_message() {
-        
+
         let data = "hallo".to_string().into_bytes();
         let msg  = Message::new("1.2.3.4".to_string(), data.clone());
         let r    = Delivery::split_message(&msg);
@@ -402,7 +401,7 @@ mod tests {
     #[test]
     fn test_pop_value() {
         let mut v: Vec<u8> = vec![1, 2, 3];
-        
+
         let mut i = pop_value(&mut v, 4);
         assert!(i.is_err());
 
@@ -418,4 +417,3 @@ mod tests {
         assert_eq!(v.len(), 0);
     }
 }
-

@@ -28,31 +28,37 @@ pub fn recv_loop(gui: &Gui, rx: Receiver<IncomingMessage>) {
     });
 }
 
+pub fn send_msg(layer: Layers, rx: Receiver<String>) {
+    thread::spawn(move || {
+        loop {
+            match rx.recv() {
+                Ok(s)  => XXX
+                Err(e) => { panic!("failed to receive message: {:?}", e); }
+            }
+        }
+    });
+}
+
 fn main() {
-    // parse command line arguments
 	let r = parse_arguments();
     let args = if r.is_some() { r.unwrap() } else { return };
 
-    let gui = Gui::new();
-
-    let ret =
-        if args.hybrid_mode {
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device)
-        } else {
-            Layers::symmetric(&args.secret_key, &args.device)
-        };
-
-    let layer = match ret {
-        Ok(r) => r,
+    let layer = match match args.hybrid_mode {
+        true  => Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device),
+        false => Layers::symmetric(&args.secret_key, &args.device)
+    } {
+        Ok(ly) => ly,
         _ => { panic!("Initialization failed."); }
     };
+
+    let gui = Gui::new();
 
     gui.println(logo::get_logo(), GREEN);
     gui.println(format!("device is {}, destination ip is {}", args.device, args.dstip), WHITE);
     if args.hybrid_mode {
         gui.println(format!("Hash of encryption key : {}", hash_of(layer.layers.encryption_key())), YELLOW);
-        gui.println(format!("Hash of your public key: {}", hash_of(
-            rsatools::key_as_der(read_file(&args.pubkey_file).unwrap()))), YELLOW);
+        gui.println(format!("Hash of your public key: {}",
+            hash_of(rsatools::key_as_der(read_file(&args.pubkey_file).unwrap()))), YELLOW);
     }
     gui.println(format!("You can now start writing ...\n"), WHITE);
 

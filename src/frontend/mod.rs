@@ -58,9 +58,10 @@ impl Gui {
         }
     }
 
-    pub fn println(&self, s: String, c: color::Color) {
+    pub fn println(&self, s: String, c: color::Color) -> &Gui {
         let mut out = self.o.lock().unwrap();
         out.println(s, c);
+        self
     }
 
     pub fn input_loop(&self, l: Layers, dstip: String) {

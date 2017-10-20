@@ -1,0 +1,2 @@
+cargo build
+sudo ./target/debug/stealthy -i lo -d 127.0.0.1

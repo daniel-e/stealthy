@@ -43,15 +43,18 @@ pub trait Callbacks : Output {
     /// it is important that acknowledges are handled on a higher layer where
     /// they can be protected via cryptographic mechanisms.
     fn ack_msg(&mut self, _id: u64) {
-
         let fm = time::strftime("%R", &time::now()).unwrap();
         self.println(format!("{} ack", fm), color::BRIGHT_GREEN);
     }
 
     fn err_msg(&mut self, msg: String) {
-
         let fm = time::strftime("%R", &time::now()).unwrap();
         self.println(format!("{} error: {}", fm, msg), color::BRIGHT_RED);
+    }
+
+    fn new_file(&mut self, msg: Message, filename: String) {
+        let fm = time::strftime("%R", &time::now()).unwrap();
+        self.println(format!("{} [{}] received file: {}", fm, msg.get_ip(), filename), color::BRIGHT_GREEN);
     }
 }
 

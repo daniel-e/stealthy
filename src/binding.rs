@@ -138,6 +138,7 @@ impl Network {
 		}
 	}
 
+	// This method is called with the encrypted content in buf.
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
 
 		if len == 0 {
@@ -153,6 +154,8 @@ impl Network {
 		self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
 
 		let r = packet::Packet::deserialize(buf, len, ip);
+		// The payload in the packet in r is still encrypted.
+
 		match r {
 			Some(p) => {
 				if p.is_file_upload() {
@@ -185,31 +188,17 @@ impl Network {
         false
     }
 
+	// Packet could be one of a lot of packets.
 	fn handle_file_upload(&self, p: packet::Packet) {
 
 		if !self.contains(p.id) { // we are not the sender of the message
-			/*
-			let pos = p.data.iter().position(|x| *x == 0 as u8);
-			if pos.is_none() {
-				// invalid format; TODO error
-				return;
-			}
-			let px = p.clone();  // TODO waste of resources
-			let (fname, data) = p.data.split_at(5); //pos.unwrap() + 1);
-			let mut v = fname.to_vec();
-			v.pop(); // remove NUL byte
-			println!("PPPPPPPPPPP {} {}", &p.ip, p.data.len());
-			let filename = String::from_utf8(v).expect("XXXXXXXX"); // TODO error */
-			// TODO look into file_upload -
-			//let m = Message::file_upload(p.ip.clone(), filename, data.to_vec());
-			println!("AAAAAAA {}", p.data.len());
+			let m = Message::new(p.ip.clone(), p.data.clone());
 
-
-			// XXXXXXXXXX DOES NOT WORK
-			let m = Message::file_upload(p.ip.clone(), String::from("bla"), vec![1, 2]);
-			match self.tx_msg.send(IncomingMessage::New(m)) {
+			// Send message to receiver of the last argument of Delivery::new(..., rx) which
+			// is handled in Delivers::init_rx().
+			match self.tx_msg.send(IncomingMessage::FileUpload(m)) {
 				Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
-				_      => { println!("DDDD"); }
+				_      => { }
 			}
 			Network::transmit(packet::Packet::create_ack(p));
 			// TODO error

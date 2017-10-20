@@ -23,7 +23,7 @@ pub enum IncomingMessage {
     New(Message),
     Ack(u64),
     Error(ErrorType, String),
-    FileUpload(Message)  // filename, data
+    FileUpload(Message)
 }
 
 unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
@@ -88,6 +88,29 @@ impl Message {
     pub fn get_ip(&self) -> String { self.ip.clone() }
 
     pub fn get_type(&self) -> MessageType { self.typ.clone() }
+
+    pub fn get_filename(&self) -> Option<String> {
+        let pos = self.get_payload().iter().position(|x| *x == 0 as u8);
+        if pos.is_none() {
+            // invalid format; TODO error
+            return None;
+        }
+        let payload = self.get_payload();
+        let (fname, _) = payload.split_at(pos.unwrap());
+        let filename = String::from_utf8(fname.to_vec()).expect("XXXXXXXX"); // TODO error
+        Some(filename)
+    }
+
+    pub fn get_filedata(&self) -> Option<Vec<u8>> {
+        let pos = self.get_payload().iter().position(|x| *x == 0 as u8);
+        if pos.is_none() {
+            // invalid format; TODO error
+            return None;
+        }
+        let payload = self.get_payload();
+        let (_, data) = payload.split_at(pos.unwrap() + 1);
+        Some(data.to_vec())
+    }
 
     fn create(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
 		Message {
@@ -212,8 +235,15 @@ impl Layers {
                     Ok(buf) => Some(IncomingMessage::New(msg.set_payload(buf))),
                     _ => None
                 }
-            }
-            _ => Some(m)
+            },
+            IncomingMessage::FileUpload(msg) => {
+                match enc.decrypt(&msg.buf) {
+                    Ok(buf) => Some(IncomingMessage::FileUpload(msg.set_payload(buf))),
+                    _ => None
+                }
+            },
+            IncomingMessage::Ack(_) => Some(m),
+            IncomingMessage::Error(_, _) => Some(m)
         }
     }
 }

@@ -35,7 +35,7 @@ const MAX_MESSAGE_PART_SIZE: usize = 128;
 impl Delivery {
 
     /// Via rx1 this layer receives incoming messages from the
-    /// network layer.
+    /// network layer (message with encrypted payload).
     pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) -> Delivery {
 
         let d = Delivery {
@@ -49,6 +49,39 @@ impl Delivery {
         d
     }
 
+    fn insert_packet(incoming: Arc<Mutex<HashMap<u64, Vec<SmallMessage>>>>, small_msg: SmallMessage) -> Option<Vec<u8>> {
+        let id    = small_msg.id;
+        let n     = small_msg.n;
+        let mut i = incoming.lock().unwrap();
+
+        // If an id for the packet(s) does not already exist in the incoming data structure
+        // insert an empty vector to collect all packets of this stream.
+        if !i.contains_key(&id) {
+            i.insert(id, Vec::new());
+        }
+
+        // Get the vector for the current id to add the received packet to this vector.
+        if let Some(v) = i.get_mut(&id) {
+            v.push(small_msg);
+            // TODO performance bottleneck XXX
+            v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
+        }
+
+        // TODO check that IP is the same
+        // TODO performance bottleneck
+
+        // Get all sequence numbers of the packets already received for the current stream id.
+        let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
+        let b = (1..n + 1).collect::<Vec<u32>>();
+
+        if a == b { // all packets received
+            let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
+            i.remove(&id);
+            return Some(buf);
+        }
+        None
+    }
+
     fn init_rx(&self, rx: Receiver<IncomingMessage>) {
 
         let tx       = self.tx.clone();
@@ -59,32 +92,34 @@ impl Delivery {
             match rx.recv() {
                 Ok(msg) => {
                     match msg {
+                        IncomingMessage::Error(_errortype, _msg) => {
+                            // TODO implement
+                        },
+                        // msg could be just one of many messages. The stream of single messages is merged in this struct.
+                        IncomingMessage::FileUpload(m) => {
+                            match Delivery::deserialize(&m.buf) {
+                                Some(small_msg) => {
+                                    let r = Delivery::insert_packet(incoming.clone(), small_msg);
+                                    if r.is_some() {
+                                        // The payload is still encrypted.
+                                        if tx.send(IncomingMessage::FileUpload(Message::new(m.ip, r.unwrap()))).is_err() {
+                                            // TODO error handling
+                                        }
+                                    }
+                                }
+                                _ => { } // TODO error handling
+                            }
+                        },
                         IncomingMessage::New(m) => { // TODO beautify
                             match Delivery::deserialize(&m.buf) {
                                 Some(small_msg) => {
-                                    let id    = small_msg.id;
-                                    let n     = small_msg.n;
-                                    let mut i = incoming.lock().unwrap();
-
-                                    if !i.contains_key(&id) {
-                                        i.insert(id, Vec::new());
-                                    }
-
-                                    if let Some(v) = i.get_mut(&id) {
-                                        v.push(small_msg);
-                                        v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
-                                    }
-
-                                    // TODO check that IP is the same
-                                    let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
-                                    let b = (1..n + 1).collect::<Vec<u32>>();
-
-                                    if a == b {
-                                        let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
-                                        i.remove(&id);
-                                        if tx.send(IncomingMessage::New(Message::new(m.ip, buf))).is_err() {
+                                    let r = Delivery::insert_packet(incoming.clone(), small_msg);
+                                    if r.is_some() {
+                                        // The payload is still encrypted.
+                                        if tx.send(IncomingMessage::New(Message::new(m.ip, r.unwrap()))).is_err() {
                                             // TODO error handling
                                         }
+
                                     }
                                 }
                                 _ => { } // TODO error handling
@@ -120,7 +155,6 @@ impl Delivery {
                                 }
                             }
                         }
-                        _ => { } // TODO should not occur
                     }
                 }
                 _ => { } // TODO error handling

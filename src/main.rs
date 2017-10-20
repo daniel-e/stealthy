@@ -27,7 +27,7 @@ use cr::digest::Digest;
 use stealthy::{Message, IncomingMessage, Errors, Layers};
 use humaninterface::{Input, Output, UserInput, ControlType};
 use callbacks::Callbacks;
-use tools::{read_file, insert_delimiter};
+use tools::{read_file, insert_delimiter, read_bin_file};
 //use rsatools::key_as_der;
 
 #[cfg(not(feature="usencurses"))]
@@ -75,14 +75,17 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
+                println!("XXXXXXXXX");
                 let mut out = o.lock().unwrap();
                 match msg {
                     IncomingMessage::New(msg) =>    { out.new_msg(msg); }
                     IncomingMessage::Ack(id)  =>    { out.ack_msg(id); }
                     IncomingMessage::Error(_, s) => { out.err_msg(s); }
+                    IncomingMessage::FileUpload(msg) => { println!("BBBBBBBB {}", msg.get_payload().len()); }
                 }
             }
             Err(e) => {
+                println!("XXXXXXXXXC");
                 o.lock().unwrap()
                     .println(format!("recv_loop: failed to receive message. {:?}", e), color::RED);
             }
@@ -168,6 +171,20 @@ fn parse_command(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
         return;
     }
 
+    if txt.starts_with("/upload ") {
+        let (_, b) = txt.as_str().split_at(8);
+        match read_bin_file(b) {
+            Ok(data) => {
+                o.lock().unwrap().println(format!("Sending file '{}' with {} bytes.", b, data.len()), color::YELLOW);
+                send_file(data, b.to_string(), o, l, dstip);
+            },
+            Err(s) => {
+                o.lock().unwrap().println(String::from(s), color::WHITE);
+            }
+        }
+        return;
+    }
+
     match txt.as_str() {
         "/help" => {
             help_message(o.clone());
@@ -183,6 +200,29 @@ fn parse_command(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
     };
 }
 
+fn send_file(data: Vec<u8>, fname: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
+
+    let msg = Message::file_upload(dstip, fname.clone(), data);
+
+    // TODO no lock here -> if sending wants to write a message it could dead lock
+    let mut out = o.lock().unwrap();
+    let fm = time::strftime("%R", &time::now()).unwrap();
+    out.println(format!("{} [you] send file: {}", fm, fname), color::WHITE);
+
+    // send message
+    match l.send(msg) {
+        Ok(_) => {
+            let fm = time::strftime("%R", &time::now()).unwrap();
+            out.println(format!("{} transmitting...", fm), color::BLUE);
+        }
+        Err(e) => { match e {
+            Errors::MessageTooBig => { out.println(format!("Message too big."), color::RED); }
+            Errors::SendFailed => { out.println(format!("Sending of message failed."), color::RED); }
+            Errors::EncryptionError => {out.println(format!("Encryption failed."), color::RED); }
+        }}
+    }
+}
+
 fn send_message(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
 
     let msg = Message::new(dstip, txt.clone().into_bytes());
@@ -190,6 +230,8 @@ fn send_message(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
     let mut out = o.lock().unwrap();
     let fm = time::strftime("%R", &time::now()).unwrap();
     out.println(format!("{} [you] says: {}", fm, txt), color::WHITE);
+
+    // send message
     match l.send(msg) {
         Ok(_) => {
             let fm = time::strftime("%R", &time::now()).unwrap();

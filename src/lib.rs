@@ -23,6 +23,7 @@ pub enum IncomingMessage {
     New(Message),
     Ack(u64),
     Error(ErrorType, String),
+    FileUpload(Message)  // filename, data
 }
 
 unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
@@ -30,7 +31,8 @@ unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
 
 pub enum MessageType {
     NewMessage,
-    AckMessage
+    AckMessage,
+    FileUpload
 }
 
 
@@ -38,7 +40,8 @@ impl Clone for MessageType {
     fn clone(&self) -> MessageType {
         match *self {
             MessageType::NewMessage => MessageType::NewMessage,
-            MessageType::AckMessage => MessageType::AckMessage
+            MessageType::AckMessage => MessageType::AckMessage,
+            MessageType::FileUpload => MessageType::FileUpload
         }
     }
 }
@@ -60,6 +63,13 @@ pub struct Message {
 
 
 impl Message {
+    pub fn file_upload(ip: String, fname: String, data: Vec<u8>) -> Message {
+        let mut buffer = Vec::from(fname.as_bytes());
+        buffer.push(0);
+        buffer.extend(data.iter());
+        Message::create(ip, buffer, MessageType::FileUpload)
+    }
+
 	pub fn new(ip: String, buf: Vec<u8>) -> Message {
         Message::create(ip, buf, MessageType::NewMessage)
     }

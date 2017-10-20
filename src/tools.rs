@@ -1,6 +1,22 @@
 use std::fs::File;
 use std::io::Read;
- 
+
+pub fn read_bin_file(fname: &str) -> Result<Vec<u8>, String> {
+
+    let r = File::open(fname);
+    match r {
+        Ok(mut file) => {
+            let mut v : Vec<u8> = vec![];
+            match file.read_to_end(&mut v) {
+                Ok(_) => Ok(v),
+                _ => Err(format!("Could not read file {}", fname))
+            }
+
+        }
+        _ => Err(format!("Could not open file '{}' for reading.", fname))
+    }
+}
+
 pub fn read_file(fname: &str) -> Result<String, &'static str> {
 
     let r = File::open(fname);

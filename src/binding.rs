@@ -5,10 +5,10 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::time::Duration;
 
-use super::{packet, IncomingMessage, Message, Errors};
+use super::{packet, IncomingMessage, Message, Errors, MessageType};
 
 const RETRY_TIMEOUT: u64      = 15000;
-const MAX_MESSAGE_SIZE: usize = (10 * 1024);
+const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);
 
 
 pub fn string_from_cstr(cstr: *const u8) -> String {
@@ -155,7 +155,9 @@ impl Network {
 		let r = packet::Packet::deserialize(buf, len, ip);
 		match r {
 			Some(p) => {
-                if p.is_new_message() {
+				if p.is_file_upload() {
+					self.handle_file_upload(p);
+				} else if p.is_new_message() {
 					self.status_tx.send(String::from("[Network::recv_packet()] new message")).unwrap();
                     self.handle_new_message(p);
                 } else if p.is_ack() {
@@ -183,10 +185,40 @@ impl Network {
         false
     }
 
+	fn handle_file_upload(&self, p: packet::Packet) {
+
+		if !self.contains(p.id) { // we are not the sender of the message
+			/*
+			let pos = p.data.iter().position(|x| *x == 0 as u8);
+			if pos.is_none() {
+				// invalid format; TODO error
+				return;
+			}
+			let px = p.clone();  // TODO waste of resources
+			let (fname, data) = p.data.split_at(5); //pos.unwrap() + 1);
+			let mut v = fname.to_vec();
+			v.pop(); // remove NUL byte
+			println!("PPPPPPPPPPP {} {}", &p.ip, p.data.len());
+			let filename = String::from_utf8(v).expect("XXXXXXXX"); // TODO error */
+			// TODO look into file_upload -
+			//let m = Message::file_upload(p.ip.clone(), filename, data.to_vec());
+			println!("AAAAAAA {}", p.data.len());
+
+
+			// XXXXXXXXXX DOES NOT WORK
+			let m = Message::file_upload(p.ip.clone(), String::from("bla"), vec![1, 2]);
+			match self.tx_msg.send(IncomingMessage::New(m)) {
+				Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
+				_      => { println!("DDDD"); }
+			}
+			Network::transmit(packet::Packet::create_ack(p));
+			// TODO error
+		}
+	}
+
     fn handle_new_message(&self, p: packet::Packet) {
 
         if !self.contains(p.id) { // we are not the sender of the message
-
             let m = Message::new(p.ip.clone(), p.data.clone());
             match self.tx_msg.send(IncomingMessage::New(m)) {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
@@ -244,7 +276,10 @@ impl Network {
 		if buf.len() > MAX_MESSAGE_SIZE {
 			Err(Errors::MessageTooBig)
 		} else {
-			let p = packet::Packet::new(buf.clone(), ip.clone());
+			let p = match msg.typ {
+				MessageType::FileUpload => packet::Packet::file_upload(buf.clone(), ip.clone()),
+				_                       => packet::Packet::new(buf.clone(), ip.clone())
+			};
 
 			// We push the message before we send the message in case that
 			// the callback for ack is called before the message is in the

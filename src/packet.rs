@@ -4,8 +4,9 @@ extern crate time;
 pub type IdType = (u64);
 
 pub enum PacketType {
-        NewMessage = 16,
-        AckMessage = 17,
+    NewMessage = 16,
+    AckMessage = 17,
+	FileUpload = 18,
 }
 
 pub struct Packet {
@@ -27,6 +28,21 @@ impl Packet {
     pub fn is_ack(&self) -> bool {
         self.typ == (PacketType::AckMessage as u8)
     }
+
+	pub fn is_file_upload(&self) -> bool {
+		self.typ == (PacketType::FileUpload as u8)
+	}
+
+	pub fn file_upload(data: Vec<u8>, ip: String) -> Packet {
+		let r = rand::random::<u64>();
+		Packet {
+			data: data,
+			id: r,
+			created: time::PreciseTime::now(),
+			ip: ip,
+			typ: PacketType::FileUpload as u8,
+		}
+	}
 
 	// data = message
 	pub fn new(data: Vec<u8>, ip: String) -> Packet {
@@ -79,11 +95,9 @@ impl Packet {
   }
 
     fn valid_type(typ: u8) -> bool {
-        if typ == (PacketType::NewMessage as u8) || typ == (PacketType::AckMessage as u8) {
-            true
-        } else {
-            false
-        }
+		typ == (PacketType::NewMessage as u8) ||
+			typ == (PacketType::AckMessage as u8) ||
+			typ == (PacketType::FileUpload as u8)
     }
 
 	pub fn deserialize(buf: *const u8, len: u32, ip: String) -> Option<Packet> {

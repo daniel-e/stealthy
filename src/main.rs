@@ -10,6 +10,7 @@ extern crate getopts;
 extern crate term;
 extern crate stealthy;
 extern crate time;
+extern crate rand;
 
 extern crate crypto as cr;
 
@@ -19,7 +20,8 @@ use std::sync::{Arc, Mutex};
 use getopts::Options;
 use term::color;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
+use rand::{thread_rng, Rng};
 
 use cr::sha1::Sha1;
 use cr::digest::Digest;
@@ -70,6 +72,15 @@ fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
     tx
 }
 
+fn write_data(fname: &str, data: Vec<u8>) -> bool {
+    match File::create(fname) {
+        Ok(mut f) => {
+            f.write_all(&data).is_ok()
+        },
+        _ => false
+    }
+}
+
 fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || {
@@ -77,18 +88,28 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
             Ok(msg) => {
                 let mut out = o.lock().unwrap();
                 match msg {
-                    IncomingMessage::New(msg) =>    { out.new_msg(msg); }
-                    IncomingMessage::Ack(id)  =>    { out.ack_msg(id); }
+                    IncomingMessage::New(msg)        => { out.new_msg(msg); }
+                    IncomingMessage::Ack(id)         => { out.ack_msg(id); }
                     IncomingMessage::Error(_, s)     => { out.err_msg(s); }
                     IncomingMessage::FileUpload(msg) => {
-                        let fname = msg.get_filename();
-                        if fname.is_some() {
-                            let f = fname.unwrap();
-                            let p = f.iter().position(|x| *x == 0 as u8);
-                            match p {
-                                Some)
-                            }
-                            out.new_file(msg, fname.unwrap());
+                        match msg.get_filename() {
+                            Some(fname) => {
+                                let fdata = msg.get_filedata();
+                                let r: String = thread_rng().gen_ascii_chars().take(10).collect();
+                                let dst = format!("/tmp/stealthy_{}_{}", r, &fname);
+                                out.new_file(msg, fname);
+                                match fdata {
+                                    Some(data) => {
+                                        if write_data(&dst, data) {
+                                            out.write_msg(format!("File written to '{}'.", dst));
+                                        } else {
+                                            out.err_msg(format!("Could not write data of received file upload."));
+                                        }
+                                    },
+                                    _ => { out.err_msg(format!("Could not get data of received file upload.")); }
+                                }
+                            },
+                            _ => { out.err_msg(format!("Could not get filename of received file upload.")); }
                         }
                     }
                 }
@@ -207,10 +228,19 @@ fn parse_command(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
     };
 }
 
+fn without_dirs(fname: &str) -> String {
+
+    let mut parts: Vec<&str> = fname.split("/").collect();
+    parts
+        .pop()
+        .expect("expected one element in vector")
+        .to_string()
+}
+
 fn send_file(data: Vec<u8>, fname: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
 
     let n = data.len();
-    let msg = Message::file_upload(dstip, fname.clone(), data);
+    let msg = Message::file_upload(dstip, without_dirs(&fname), data);
 
     // TODO no lock here -> if sending wants to write a message it could dead lock
     let mut out = o.lock().unwrap();

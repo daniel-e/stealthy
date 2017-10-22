@@ -243,14 +243,14 @@ fn send_file(data: Vec<u8>, fname: String, o: Arc<Mutex<HiOut>>, l: &Layers, dst
     let msg = Message::file_upload(dstip, without_dirs(&fname), data);
 
     // TODO no lock here -> if sending wants to write a message it could dead lock
-    let mut out = o.lock().unwrap();
+    let mut out = o.lock().expect("send_file: lock failed");
     let fm = time::strftime("%R", &time::now()).unwrap();
     out.println(format!("{} [you] sending file '{}' with {} bytes...", fm, fname, n), color::YELLOW);
 
     // send message
     match l.send(msg) {
         Ok(_) => {
-            let fm = time::strftime("%R", &time::now()).unwrap();
+            let fm = time::strftime("%R", &time::now()).expect("send_file: strftime failed");
             out.println(format!("{} transmitting...", fm), color::BLUE);
         }
         Err(e) => { match e {

@@ -153,7 +153,7 @@ impl Layers {
 
         match self.encryption_layer.encrypt(&msg.buf) {
             Ok(buf) => self.delivery_layer.send_msg(msg.set_payload(buf)),
-            _ => Err(Errors::EncryptionError)
+            _       => Err(Errors::EncryptionError)
         }
     }
 

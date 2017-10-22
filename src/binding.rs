@@ -141,32 +141,42 @@ impl Network {
 	// This method is called with the encrypted content in buf.
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
 
+		println!("TTT Z");
+
 		if len == 0 {
 			// TODO: hack: ip is the reason for the invalid packet
 			/*
 			self.status_tx.send(
 				format!("[Network::recv_packet()] received invalid packet: {}", ip)).unwrap();
 			*/
+			println!("TTT Y");
 			return;
 		}
 
 		// TODO error handling
-		self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
+		//self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
 
+		println!("TTT X");
 		let r = packet::Packet::deserialize(buf, len, ip);
 		// The payload in the packet in r is still encrypted.
-
+		println!("TTT W");
 		match r {
 			Some(p) => {
 				if p.is_file_upload() {
+					println!("TTT a");
 					self.handle_file_upload(p);
 				} else if p.is_new_message() {
+					println!("TTT b");
 					self.status_tx.send(String::from("[Network::recv_packet()] new message")).unwrap();
                     self.handle_new_message(p);
                 } else if p.is_ack() {
-					self.status_tx.send(String::from("[Network::recv_packet()] ack")).unwrap();
-                    self.handle_ack(p);
+					println!("TTT A");
+					//self.status_tx.send(String::from("[Network::recv_packet()] ack")).expect("bindings:ack failed");
+					println!("TTT B");
+                    //self.handle_ack(p);
+					println!("TTT C");
                 } else {
+					println!("TTT c");
 					self.status_tx.send(String::from("[Network::recv_packet()] unknown packet type")).unwrap();
                 }
 			},
@@ -178,20 +188,27 @@ impl Network {
 
     fn contains(&self, id: packet::IdType) -> bool {
 
+		println!("TTT contains A");
         let shared = self.shared.clone();
-        let v = shared.lock().unwrap();
+		println!("TTT contains A1");
+        let v = shared.lock().expect("binding::contains: lock failes");
+		println!("TTT contains B");
         for i in &v.packets {
             if i.id == id {
+				println!("TTT contains C");
                 return true;
             }
         }
+		println!("TTT contains D");
         false
     }
 
 	// Packet could be one of a lot of packets.
 	fn handle_file_upload(&self, p: packet::Packet) {
 
+		println!("TTT handle_file_upload A");
 		if !self.contains(p.id) { // we are not the sender of the message
+			println!("TTT handle_file_upload B");
 			let m = Message::new(p.ip.clone(), p.data.clone());
 
 			// Send message to receiver of the last argument of Delivery::new(..., rx) which
@@ -203,6 +220,7 @@ impl Network {
 			Network::transmit(packet::Packet::create_ack(p));
 			// TODO error
 		}
+		println!("TTT handle_file_upload C");
 	}
 
     fn handle_new_message(&self, p: packet::Packet) {
@@ -220,25 +238,31 @@ impl Network {
 
     fn handle_ack(&mut self, p: packet::Packet) {
 
+		println!("TTT binding A");
+
         let shared = self.shared.clone();
-        let mut v = shared.lock().unwrap();
+        let mut v = shared.lock().expect("binding::handle_ack: lock failed");
         let mut c = 0;
         let mut b: bool = false;
 
-        for i in &v.packets {
+        for i in &v.packets { // search the id
             if i.id == p.id {
                 b = true;
                 break;
             }
             c += 1;
         }
+		println!("TTT binding B");
         if b {
+			println!("TTT binding C");
             v.packets.swap_remove(c);
+			println!("TTT binding D");
             match self.tx_msg.send(IncomingMessage::Ack(p.id)) {
                 Err(_) => println!("handle_ack: could not deliver ack to upper layer"),
                 _      => { }
             }
         }
+		println!("TTT binding E");
   }
 
 	/// message format:
@@ -274,7 +298,7 @@ impl Network {
 			// the callback for ack is called before the message is in the
 			// queue.
 			let v = self.shared.clone();
-			let mut k = v.lock().unwrap();
+			let mut k = v.lock().expect("binding::send_msg: lock failed");
 			k.packets.push(p.clone());
 
 			if Network::transmit(p.clone()) {

@@ -9,7 +9,7 @@ use std::sync::mpsc::{Receiver, Sender};
 use super::{Message, IncomingMessage, Errors};
 use binding::Network;    // Implemenation for network layer
 
-
+#[derive(Clone)]
 struct SmallMessage {
     buf: Vec<u8>,
     seq: u32,
@@ -17,6 +17,7 @@ struct SmallMessage {
     n  : u32,
 }
 
+#[derive(Clone)]
 struct SmallMessages {
     messages: Vec<SmallMessage>,
     acks: Vec<u64>,  /// pending acks
@@ -61,24 +62,48 @@ impl Delivery {
         }
 
         // Get the vector for the current id to add the received packet to this vector.
+        let mut k = 0;
         if let Some(v) = i.get_mut(&id) {
             v.push(small_msg);
-            // TODO performance bottleneck XXX
-            v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
+            k = v.len();
+            if k >= n as usize {
+                v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
+            }
         }
 
-        // TODO check that IP is the same
-        // TODO performance bottleneck
+        if k >= n as usize {
+            // Get all sequence numbers of the packets already received for the current stream id.
+            let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
+            let b = (1..n + 1).collect::<Vec<u32>>();
 
-        // Get all sequence numbers of the packets already received for the current stream id.
-        let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
-        let b = (1..n + 1).collect::<Vec<u32>>();
-
-        if a == b { // all packets received
-            let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
-            i.remove(&id);
-            return Some(buf);
+            if a == b {
+                // all packets received
+                let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
+                i.remove(&id);
+                return Some(buf);
+            }
         }
+
+        /*
+                // Get the vector for the current id to add the received packet to this vector.
+                if let Some(v) = i.get_mut(&id) {
+                    v.push(small_msg);
+                    // TODO performance bottleneck XXX
+                    v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
+                }
+
+                // TODO check that IP is the same
+                // TODO performance bottleneck
+
+                // Get all sequence numbers of the packets already received for the current stream id.
+                let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
+                let b = (1..n + 1).collect::<Vec<u32>>();
+
+                if a == b { // all packets received
+                    let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
+                    i.remove(&id);
+                    return Some(buf);
+                }*/
         None
     }
 
@@ -126,7 +151,9 @@ impl Delivery {
                             }
                         }
                         IncomingMessage::Ack(id) => { // TODO beautify
-                            let mut q = queue.lock().unwrap();  // lock guard on Vec<SmallMessages>
+                            println!("TTT received ACK");
+                            let mut q = queue.lock().expect("delivery: lock failed");  // lock guard on Vec<SmallMessages>
+                            println!("TTT received ACK 0");
                             let mut idx = 0;
                             let mut pos = 0;
                             let mut b = false;
@@ -144,7 +171,9 @@ impl Delivery {
                                 }
                                 idx += 1;
                             }
+                            println!("TTT received ACK 1");
                             if b {
+                                println!("TTT received ACK 2");
                                 q[idx].acks.swap_remove(pos);
                                 if q[idx].acks.len() == 0 { // received all akcs
                                     let iid = q[idx].id.clone();
@@ -164,8 +193,14 @@ impl Delivery {
 
     pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
 
-        let mut queue          = self.pending.lock().unwrap();
         let mut small_messages = Self::split_message(&msg);
+
+        //{
+            let mut queue = self.pending.lock().expect("delivery::send_msg: pending failed");
+            //queue.push(small_messages.clone());
+        //}
+
+        println!("TTT sending {} messages", small_messages.messages.len());
 
         // split messages and send them via the network layer
         for i in &small_messages.messages {
@@ -176,6 +211,8 @@ impl Delivery {
                 Err(e) => { return Err(e); }
             }
         }
+
+        println!("TTT sent {} messages", small_messages.messages.len());
 
         let id = small_messages.id;
         queue.push(small_messages);

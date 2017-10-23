@@ -239,7 +239,10 @@ impl Layers {
             IncomingMessage::FileUpload(msg) => {
                 match enc.decrypt(&msg.buf) {
                     Ok(buf) => Some(IncomingMessage::FileUpload(msg.set_payload(buf))),
-                    _ => None
+                    _ => {
+                        println!("decryption failed");
+                        None
+                    }
                 }
             },
             IncomingMessage::Ack(_) => Some(m),

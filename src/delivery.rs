@@ -26,7 +26,7 @@ struct SmallMessages {
 
 pub struct Delivery {
     pending      : Arc<Mutex<Vec<SmallMessages>>>,
-    incoming     : Arc<Mutex<HashMap<u64, Vec<SmallMessage>>>>,
+    incoming     : Arc<Mutex<HashMap<u64, HashMap<u32, SmallMessage>>>>,
     tx           : Sender<IncomingMessage>,
     network_layer: Box<Network>
 }
@@ -50,60 +50,44 @@ impl Delivery {
         d
     }
 
-    fn insert_packet(incoming: Arc<Mutex<HashMap<u64, Vec<SmallMessage>>>>, small_msg: SmallMessage) -> Option<Vec<u8>> {
-        let id    = small_msg.id;
-        let n     = small_msg.n;
+    fn insert_packet(incoming: Arc<Mutex<HashMap<u64, HashMap<u32, SmallMessage>>>>, small_msg: SmallMessage) -> Option<Vec<u8>> {
+        let id= small_msg.id;
+        let n= small_msg.n;
+        let seq = small_msg.seq;
         let mut i = incoming.lock().unwrap();
 
         // If an id for the packet(s) does not already exist in the incoming data structure
         // insert an empty vector to collect all packets of this stream.
         if !i.contains_key(&id) {
-            i.insert(id, Vec::new());
+            i.insert(id, HashMap::new());
         }
 
         // Get the vector for the current id to add the received packet to this vector.
         let mut k = 0;
         if let Some(v) = i.get_mut(&id) {
-            v.push(small_msg);
-            k = v.len();
-            if k >= n as usize {
-                v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
+            if v.contains_key(&seq) {
+                return None;
             }
+            v.insert(seq, small_msg);
+            k = v.len();
+            println!("TTT insert {}", k);
         }
 
-        if k >= n as usize {
+        if k as u32 >= n {
             // Get all sequence numbers of the packets already received for the current stream id.
-            let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
+            let mut a = i.get(&id).unwrap().iter().map(|(ky, vl)| *ky).collect::<Vec<u32>>();
+            a.sort();
             let b = (1..n + 1).collect::<Vec<u32>>();
 
+            println!("TTT insert A {} {} {} {}", a.len(), b.len(), a[0], b[0]);
             if a == b {
                 // all packets received
-                let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
+                let buf = i.get(&id).unwrap().iter().flat_map(|(ky, vl)| vl.buf.iter()).map(|&x| x).collect();
                 i.remove(&id);
+                println!("TTT insert ok");
                 return Some(buf);
             }
         }
-
-        /*
-                // Get the vector for the current id to add the received packet to this vector.
-                if let Some(v) = i.get_mut(&id) {
-                    v.push(small_msg);
-                    // TODO performance bottleneck XXX
-                    v.sort_by(|a, b| a.seq.cmp(&b.seq)); // sort by seq number
-                }
-
-                // TODO check that IP is the same
-                // TODO performance bottleneck
-
-                // Get all sequence numbers of the packets already received for the current stream id.
-                let a = i.get(&id).unwrap().iter().map(|x| x.seq).collect::<Vec<u32>>();
-                let b = (1..n + 1).collect::<Vec<u32>>();
-
-                if a == b { // all packets received
-                    let buf = i.get(&id).unwrap().iter().flat_map(|x| x.buf.iter()).map(|&x| x).collect();
-                    i.remove(&id);
-                    return Some(buf);
-                }*/
         None
     }
 
@@ -127,6 +111,7 @@ impl Delivery {
                                     let r = Delivery::insert_packet(incoming.clone(), small_msg);
                                     if r.is_some() {
                                         // The payload is still encrypted.
+                                        println!("TTT received all");
                                         if tx.send(IncomingMessage::FileUpload(Message::new(m.ip, r.unwrap()))).is_err() {
                                             // TODO error handling
                                         }
@@ -150,10 +135,10 @@ impl Delivery {
                                 _ => { } // TODO error handling
                             }
                         }
-                        IncomingMessage::Ack(id) => { // TODO beautify
-                            println!("TTT received ACK");
+                        IncomingMessage::Ack(id) => { // TODO beautify + performance for uploads
+                            //println!("TTT received ACK");
                             let mut q = queue.lock().expect("delivery: lock failed");  // lock guard on Vec<SmallMessages>
-                            println!("TTT received ACK 0");
+                            //println!("TTT received ACK 0");
                             let mut idx = 0;
                             let mut pos = 0;
                             let mut b = false;
@@ -171,9 +156,9 @@ impl Delivery {
                                 }
                                 idx += 1;
                             }
-                            println!("TTT received ACK 1");
+                            //println!("TTT received ACK 1");
                             if b {
-                                println!("TTT received ACK 2");
+                                //println!("TTT received ACK 2");
                                 q[idx].acks.swap_remove(pos);
                                 if q[idx].acks.len() == 0 { // received all akcs
                                     let iid = q[idx].id.clone();
@@ -200,7 +185,7 @@ impl Delivery {
             //queue.push(small_messages.clone());
         //}
 
-        println!("TTT sending {} messages", small_messages.messages.len());
+        //println!("TTT sending {} messages", small_messages.messages.len());
 
         // split messages and send them via the network layer
         for i in &small_messages.messages {

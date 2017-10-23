@@ -1,4 +1,5 @@
 extern crate libc;
+extern crate time;
 
 use std::thread;
 use std::sync::{Arc, Mutex};
@@ -7,7 +8,7 @@ use std::time::Duration;
 
 use super::{packet, IncomingMessage, Message, Errors, MessageType};
 
-const RETRY_TIMEOUT: u64      = 15000;
+const RETRY_TIMEOUT: i64      = 10 * 15000;  // TODO
 const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);
 
 
@@ -70,7 +71,7 @@ extern {
 struct SharedData {
 	// Packets that have been transmitted and for which we
 	// are waiting for the acknowledge.
-	packets          : Vec<packet::Packet>,
+	packets          : Vec<(packet::Packet, i64)>,
 }
 
 
@@ -80,6 +81,11 @@ pub struct Network {
     tx_msg           : Sender<IncomingMessage>,
 	shared           : Arc<Mutex<SharedData>>,
 	status_tx        : Sender<String>,
+}
+
+fn current_millis() -> i64 {
+	let t = time::now().to_timespec();
+	t.sec * 1000 +  (t.nsec / 1000 / 1000) as i64
 }
 
 impl Network {
@@ -106,20 +112,38 @@ impl Network {
 		n
 	}
 
-	fn init_retry_event_receiver(&self, rx: Receiver<packet::IdType>, k: Arc<Mutex<SharedData>>) {
-        let tx = self.tx.clone();
-		thread::spawn(move || { loop { match rx.recv() {
-			Ok(id) => {
-				let v = k.lock().unwrap();
-                for i in &v.packets {
-                    if i.id == id {
-                        Network::transmit(i.clone());
-                        Network::init_retry(tx.clone(), id);
-                    }
-                }
+	fn init_retry_event_receiver(&mut self, rx: Receiver<packet::IdType>, k: Arc<Mutex<SharedData>>) {
+        //let tx = self.tx.clone();
+		thread::spawn(move || { loop {
+			thread::sleep(Duration::from_millis(1000));
+			let mut r = vec![];
+			{
+				let mut v = k.lock().unwrap();
+				for &mut (ref mut i, ref mut t) in &mut v.packets {
+					if current_millis() > *t + RETRY_TIMEOUT {
+						r.push(i.clone());
+						*t = current_millis();
+					}
+				}
 			}
-			_ => { println!("error in receiving"); }
-		}}});
+			for i in r {
+				println!("resend");
+				Network::transmit(i);
+			}
+		}});
+
+//		thread::spawn(move || { loop { match rx.recv() {
+//			Ok(id) => {
+//				let v = k.lock().unwrap();
+//                for i in &v.packets {
+//                    if i.id == id {
+//                        Network::transmit(i.clone());
+//                        Network::init_retry(tx.clone(), id);
+//                    }
+//                }
+//			}
+//			_ => { println!("error in receiving"); }
+//		}}});
 	}
 
 	fn init_callback(&mut self, dev: &String) {
@@ -141,42 +165,31 @@ impl Network {
 	// This method is called with the encrypted content in buf.
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
 
-		println!("TTT Z");
-
 		if len == 0 {
 			// TODO: hack: ip is the reason for the invalid packet
 			/*
 			self.status_tx.send(
 				format!("[Network::recv_packet()] received invalid packet: {}", ip)).unwrap();
 			*/
-			println!("TTT Y");
 			return;
 		}
 
 		// TODO error handling
 		//self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
 
-		println!("TTT X");
 		let r = packet::Packet::deserialize(buf, len, ip);
 		// The payload in the packet in r is still encrypted.
-		println!("TTT W");
 		match r {
 			Some(p) => {
 				if p.is_file_upload() {
-					println!("TTT a");
 					self.handle_file_upload(p);
 				} else if p.is_new_message() {
-					println!("TTT b");
 					self.status_tx.send(String::from("[Network::recv_packet()] new message")).unwrap();
                     self.handle_new_message(p);
                 } else if p.is_ack() {
-					println!("TTT A");
 					//self.status_tx.send(String::from("[Network::recv_packet()] ack")).expect("bindings:ack failed");
-					println!("TTT B");
-                    //self.handle_ack(p);
-					println!("TTT C");
+                    self.handle_ack(p);
                 } else {
-					println!("TTT c");
 					self.status_tx.send(String::from("[Network::recv_packet()] unknown packet type")).unwrap();
                 }
 			},
@@ -188,27 +201,21 @@ impl Network {
 
     fn contains(&self, id: packet::IdType) -> bool {
 
-		println!("TTT contains A");
         let shared = self.shared.clone();
-		println!("TTT contains A1");
         let v = shared.lock().expect("binding::contains: lock failes");
-		println!("TTT contains B");
-        for i in &v.packets {
+        for &(ref i, _t) in &v.packets {
             if i.id == id {
-				println!("TTT contains C");
                 return true;
             }
         }
-		println!("TTT contains D");
         false
     }
 
 	// Packet could be one of a lot of packets.
 	fn handle_file_upload(&self, p: packet::Packet) {
 
-		println!("TTT handle_file_upload A");
+		//println!("TTT upload");
 		if !self.contains(p.id) { // we are not the sender of the message
-			println!("TTT handle_file_upload B");
 			let m = Message::new(p.ip.clone(), p.data.clone());
 
 			// Send message to receiver of the last argument of Delivery::new(..., rx) which
@@ -217,10 +224,10 @@ impl Network {
 				Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
 				_      => { }
 			}
+			//println!("TTT upload ACK");
 			Network::transmit(packet::Packet::create_ack(p));
 			// TODO error
 		}
-		println!("TTT handle_file_upload C");
 	}
 
     fn handle_new_message(&self, p: packet::Packet) {
@@ -238,31 +245,27 @@ impl Network {
 
     fn handle_ack(&mut self, p: packet::Packet) {
 
-		println!("TTT binding A");
-
+		//println!("TTT handle_ack");
         let shared = self.shared.clone();
         let mut v = shared.lock().expect("binding::handle_ack: lock failed");
         let mut c = 0;
         let mut b: bool = false;
 
-        for i in &v.packets { // search the id
+        for &(ref i, _t) in &v.packets { // search the id
             if i.id == p.id {
                 b = true;
                 break;
             }
             c += 1;
         }
-		println!("TTT binding B");
         if b {
-			println!("TTT binding C");
+			//println!("TTT removing");
             v.packets.swap_remove(c);
-			println!("TTT binding D");
             match self.tx_msg.send(IncomingMessage::Ack(p.id)) {
                 Err(_) => println!("handle_ack: could not deliver ack to upper layer"),
                 _      => { }
             }
         }
-		println!("TTT binding E");
   }
 
 	/// message format:
@@ -294,15 +297,19 @@ impl Network {
 				_                       => packet::Packet::new(buf.clone(), ip.clone())
 			};
 
+			//thread::sleep(Duration::from_millis(100));
+
 			// We push the message before we send the message in case that
 			// the callback for ack is called before the message is in the
 			// queue.
 			let v = self.shared.clone();
 			let mut k = v.lock().expect("binding::send_msg: lock failed");
-			k.packets.push(p.clone());
+			k.packets.push((p.clone(), current_millis()));
+
+			//println!("TTT sending {}", k.packets.len());
 
 			if Network::transmit(p.clone()) {
-				Network::init_retry(self.tx.clone(), p.id);
+				//Network::init_retry(self.tx.clone(), p.id);
 				Ok(p.id)
 			} else {
 				k.packets.pop();
@@ -311,16 +318,16 @@ impl Network {
 		}
 	}
 
-	fn init_retry(tx: Sender<u64>, id: packet::IdType) {
-
-		thread::spawn(move || {
-			thread::sleep(Duration::from_millis(RETRY_TIMEOUT));
-			match tx.send(id) {
-				Err(_) => { println!("init_retry: sending event through channel failed"); }
-				_ => { }
-			}
-		});
-	}
+//	fn init_retry(tx: Sender<u64>, id: packet::IdType) {
+//
+//		thread::spawn(move || {
+//			thread::sleep(Duration::from_millis(RETRY_TIMEOUT));
+//			match tx.send(id) {
+//				Err(_) => { println!("init_retry: sending event through channel failed"); }
+//				_ => { }
+//			}
+//		});
+//	}
 
 	fn transmit(p: packet::Packet) -> bool {
 

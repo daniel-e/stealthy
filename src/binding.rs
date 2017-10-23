@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use super::{packet, IncomingMessage, Message, Errors, MessageType};
 
-const RETRY_TIMEOUT: i64      = 10 * 15000;  // TODO
+const RETRY_TIMEOUT: i64      = 15000;  // TODO
 const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);
 
 
@@ -112,7 +112,8 @@ impl Network {
 		n
 	}
 
-	fn init_retry_event_receiver(&mut self, rx: Receiver<packet::IdType>, k: Arc<Mutex<SharedData>>) {
+	// TODO rx is not used anymore -> remove it
+	fn init_retry_event_receiver(&mut self, _rx: Receiver<packet::IdType>, k: Arc<Mutex<SharedData>>) {
         //let tx = self.tx.clone();
 		thread::spawn(move || { loop {
 			thread::sleep(Duration::from_millis(1000));
@@ -306,13 +307,13 @@ impl Network {
 				let mut n = 0;
 				{
 					let v = self.shared.clone();
-					let mut k = v.lock().expect("binding::send_msg: lock failed");
-					n = k.packets.len();
+					let k = v.lock().expect("binding::send_msg: lock failed");
+					n += k.packets.len();
 				}
 				if n < 1000 {
 					break;
 				}
-				println!("TTT n = {}", n);
+				//println!("TTT n = {}", n);
 				thread::sleep(Duration::from_millis(100));
 			}
 

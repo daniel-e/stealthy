@@ -70,23 +70,23 @@ impl Delivery {
             }
             v.insert(seq, small_msg);
             k = v.len();
-            println!("TTT insert {}", k);
+            //println!("TTT insert {}", k);
         }
 
         if k as u32 >= n {
             // Get all sequence numbers of the packets already received for the current stream id.
-            let mut a = i.get(&id).unwrap().iter().map(|(ky, vl)| *ky).collect::<Vec<u32>>();
+            let mut a = i.get(&id).unwrap().iter().map(|(ky, _vl)| *ky).collect::<Vec<u32>>();
             a.sort();
             let b = (1..n + 1).collect::<Vec<u32>>();
 
-            println!("TTT insert A {} {} {} {}", a.len(), b.len(), a[0], b[0]);
+            //println!("TTT insert A {} {} {} {}", a.len(), b.len(), a[0], b[0]);
             if a == b {
                 // all packets received
                 let buf = b.iter().flat_map(|seq| i.get(&id).unwrap().get(&seq).unwrap().buf.iter()).map(|&x| x).collect();
 
                 //let buf = i.get(&id).unwrap().iter().flat_map(|(ky, vl)| vl.buf.iter()).map(|&x| x).collect();
                 i.remove(&id);
-                println!("TTT insert ok");
+                //println!("TTT insert ok");
                 return Some(buf);
             }
         }
@@ -113,7 +113,7 @@ impl Delivery {
                                     let r = Delivery::insert_packet(incoming.clone(), small_msg);
                                     if r.is_some() {
                                         // The payload is still encrypted.
-                                        println!("TTT received all");
+                                        //println!("TTT received all");
                                         if tx.send(IncomingMessage::FileUpload(Message::new(m.ip, r.unwrap()))).is_err() {
                                             // TODO error handling
                                         }
@@ -199,7 +199,7 @@ impl Delivery {
             }
         }
 
-        println!("TTT sent {} messages", small_messages.messages.len());
+        //println!("TTT sent {} messages", small_messages.messages.len());
 
         let id = small_messages.id;
         queue.push(small_messages);

@@ -1,7 +1,7 @@
 extern crate rand;
 
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
@@ -20,7 +20,8 @@ struct SmallMessage {
 #[derive(Clone)]
 struct SmallMessages {
     messages: Vec<SmallMessage>,
-    acks: Vec<u64>,  /// pending acks
+    //acks: Vec<u64>,  /// pending acks
+    acks: HashSet<u64>,  /// pending acks
     id: u64
 }
 
@@ -138,30 +139,18 @@ impl Delivery {
                             }
                         }
                         IncomingMessage::Ack(id) => { // TODO beautify + performance for uploads
-                            //println!("TTT received ACK");
                             let mut q = queue.lock().expect("delivery: lock failed");  // lock guard on Vec<SmallMessages>
-                            //println!("TTT received ACK 0");
                             let mut idx = 0;
-                            let mut pos = 0;
                             let mut b = false;
                             for i in q.iter() {
-                                pos = 0;
-                                for j in &i.acks {
-                                    if *j == id {
-                                        b = true;
-                                        break;
-                                    }
-                                    pos += 1;
-                                }
-                                if b {
+                                if i.acks.contains(&id) {
+                                    b = true;
                                     break;
                                 }
                                 idx += 1;
                             }
-                            //println!("TTT received ACK 1");
                             if b {
-                                //println!("TTT received ACK 2");
-                                q[idx].acks.swap_remove(pos);
+                                q[idx].acks.remove(&id);
                                 if q[idx].acks.len() == 0 { // received all akcs
                                     let iid = q[idx].id.clone();
                                     q.swap_remove(idx);
@@ -194,7 +183,8 @@ impl Delivery {
             let message = msg.set_payload(Delivery::serialize(i));
 
             match self.network_layer.send_msg(message) {
-                Ok(id) => { small_messages.acks.push(id); }
+                //Ok(id) => { small_messages.acks.push(id); }
+                Ok(id) => { small_messages.acks.insert(id); }
                 Err(e) => { return Err(e); }
             }
         }
@@ -228,7 +218,7 @@ impl Delivery {
         SmallMessages {
             messages: parts,
             id: id,
-            acks: vec![]
+            acks: HashSet::new() //vec![]
         }
     }
 

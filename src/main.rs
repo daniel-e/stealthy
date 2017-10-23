@@ -141,11 +141,12 @@ fn help_message(o: Arc<Mutex<HiOut>>) {
 
     let lines = vec![
         "Commands always start with a slash:",
-        "/help           - this help message",
-        "arrow up        - scroll to older messages",
-        "arrow down      - scroll to latest messages",
-        "/uptime, /up    - uptime",
-        "/cat <filename> - send content of an UTF-8 encoded text file"
+        "/help               - this help message",
+        "arrow up            - scroll to older messages",
+        "arrow down          - scroll to latest messages",
+        "/uptime, /up        - uptime",
+        "/cat <filename>     - send content of an UTF-8 encoded text file",
+        "/uplaod <filename>  - send binary file"
     ];
 
     for v in lines {

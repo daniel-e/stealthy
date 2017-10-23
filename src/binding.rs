@@ -302,6 +302,20 @@ impl Network {
 			// We push the message before we send the message in case that
 			// the callback for ack is called before the message is in the
 			// queue.
+			loop {
+				let mut n = 0;
+				{
+					let v = self.shared.clone();
+					let mut k = v.lock().expect("binding::send_msg: lock failed");
+					n = k.packets.len();
+				}
+				if n < 1000 {
+					break;
+				}
+				println!("TTT n = {}", n);
+				thread::sleep(Duration::from_millis(100));
+			}
+
 			let v = self.shared.clone();
 			let mut k = v.lock().expect("binding::send_msg: lock failed");
 			k.packets.push((p.clone(), current_millis()));

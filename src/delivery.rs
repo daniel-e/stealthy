@@ -82,7 +82,9 @@ impl Delivery {
             println!("TTT insert A {} {} {} {}", a.len(), b.len(), a[0], b[0]);
             if a == b {
                 // all packets received
-                let buf = i.get(&id).unwrap().iter().flat_map(|(ky, vl)| vl.buf.iter()).map(|&x| x).collect();
+                let buf = b.iter().flat_map(|seq| i.get(&id).unwrap().get(&seq).unwrap().buf.iter()).map(|&x| x).collect();
+
+                //let buf = i.get(&id).unwrap().iter().flat_map(|(ky, vl)| vl.buf.iter()).map(|&x| x).collect();
                 i.remove(&id);
                 println!("TTT insert ok");
                 return Some(buf);

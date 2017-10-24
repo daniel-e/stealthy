@@ -350,6 +350,9 @@ fn main() {
     {
         let mut out = o.lock().unwrap();
         out.println(logo::get_logo(), color::GREEN);
+        out.println(format!("Welcome to stealthy! The most secure ICMP messenger."), color::YELLOW);
+        out.println(format!("Type /help to get a list of available commands."), color::YELLOW);
+        out.println(format!(""), color::WHITE);
         out.println(format!("device is {}, destination ip is {}", args.device, args.dstip), color::WHITE);
         if args.hybrid_mode {
             let mut h = Sha1::new();
@@ -363,7 +366,7 @@ fn main() {
             let q = insert_delimiter(&h.result_str());
             out.println(format!("Hash of your public key: {}", q), color::YELLOW);
         }
-        out.println(format!("You can now start writing ...\n"), color::WHITE);
+        out.println(format!("Happy chatting...\n"), color::WHITE);
     }
 
     input_loop(o.clone(), i, layer.layers, args.dstip);

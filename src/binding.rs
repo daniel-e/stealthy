@@ -6,7 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::time::Duration;
 
-use super::{packet, IncomingMessage, Message, Errors, MessageType};
+use super::{IncomingMessage, Message, Errors, MessageType};
+use super::packet::{Packet, IdType};
 
 const RETRY_TIMEOUT: i64      = 15000;  // TODO
 const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);
@@ -71,13 +72,13 @@ extern {
 struct SharedData {
 	// Packets that have been transmitted and for which we
 	// are waiting for the acknowledge.
-	packets          : Vec<(packet::Packet, i64)>,
+	packets          : Vec<(Packet, i64)>,
 }
 
 
 #[repr(C)]
 pub struct Network {
-	tx               : Sender<packet::IdType>,
+	tx               : Sender<IdType>,
     tx_msg           : Sender<IncomingMessage>,
 	shared           : Arc<Mutex<SharedData>>,
 	status_tx        : Sender<String>,
@@ -113,7 +114,7 @@ impl Network {
 	}
 
 	// TODO rx is not used anymore -> remove it
-	fn init_retry_event_receiver(&mut self, _rx: Receiver<packet::IdType>, k: Arc<Mutex<SharedData>>) {
+	fn init_retry_event_receiver(&mut self, _rx: Receiver<IdType>, k: Arc<Mutex<SharedData>>) {
         //let tx = self.tx.clone();
 		thread::spawn(move || { loop {
 			thread::sleep(Duration::from_millis(1000));
@@ -132,19 +133,6 @@ impl Network {
 				Network::transmit(i);
 			}
 		}});
-
-//		thread::spawn(move || { loop { match rx.recv() {
-//			Ok(id) => {
-//				let v = k.lock().unwrap();
-//                for i in &v.packets {
-//                    if i.id == id {
-//                        Network::transmit(i.clone());
-//                        Network::init_retry(tx.clone(), id);
-//                    }
-//                }
-//			}
-//			_ => { println!("error in receiving"); }
-//		}}});
 	}
 
 	fn init_callback(&mut self, dev: &String) {
@@ -178,7 +166,7 @@ impl Network {
 		// TODO error handling
 		//self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
 
-		let r = packet::Packet::deserialize(buf, len, ip);
+		let r = Packet::deserialize(buf, len, ip);
 		// The payload in the packet in r is still encrypted.
 		match r {
 			Some(p) => {
@@ -200,7 +188,7 @@ impl Network {
 		}
 	}
 
-    fn contains(&self, id: packet::IdType) -> bool {
+    fn contains(&self, id: IdType) -> bool {
 
         let shared = self.shared.clone();
         let v = shared.lock().expect("binding::contains: lock failes");
@@ -213,7 +201,7 @@ impl Network {
     }
 
 	// Packet could be one of a lot of packets.
-	fn handle_file_upload(&self, p: packet::Packet) {
+	fn handle_file_upload(&self, p: Packet) {
 
 		//println!("TTT upload");
 		if !self.contains(p.id) { // we are not the sender of the message
@@ -226,12 +214,12 @@ impl Network {
 				_      => { }
 			}
 			//println!("TTT upload ACK");
-			Network::transmit(packet::Packet::create_ack(p));
+			Network::transmit(Packet::create_ack(p));
 			// TODO error
 		}
 	}
 
-    fn handle_new_message(&self, p: packet::Packet) {
+    fn handle_new_message(&self, p: Packet) {
 
         if !self.contains(p.id) { // we are not the sender of the message
             let m = Message::new(p.ip.clone(), p.data.clone());
@@ -239,12 +227,12 @@ impl Network {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
                 _      => { }
             }
-            Network::transmit(packet::Packet::create_ack(p));
+            Network::transmit(Packet::create_ack(p));
             // TODO error
         }
     }
 
-    fn handle_ack(&mut self, p: packet::Packet) {
+    fn handle_ack(&mut self, p: Packet) {
 
 		//println!("TTT handle_ack");
         let shared = self.shared.clone();
@@ -291,62 +279,48 @@ impl Network {
 		let buf = msg.get_payload();
 
 		if buf.len() > MAX_MESSAGE_SIZE {
-			Err(Errors::MessageTooBig)
+			return Err(Errors::MessageTooBig);
+		}
+
+		let p = match msg.typ {
+			MessageType::FileUpload => Packet::file_upload(buf, ip),
+			_ => Packet::new(buf, ip)
+		};
+
+		self.wait_for_queue();
+
+		// Push message before sending it. Otherwise there could be a race condition that the ACK
+		// is received before message is sent.
+		self.push_packet(p.clone());
+
+		if Network::transmit(p.clone()) {
+			Ok(p.id)
 		} else {
-			let p = match msg.typ {
-				MessageType::FileUpload => packet::Packet::file_upload(buf.clone(), ip.clone()),
-				_                       => packet::Packet::new(buf.clone(), ip.clone())
-			};
-
-			//thread::sleep(Duration::from_millis(100));
-
-			// We push the message before we send the message in case that
-			// the callback for ack is called before the message is in the
-			// queue.
-			loop {
-				let mut n = 0;
-				{
-					let v = self.shared.clone();
-					let k = v.lock().expect("binding::send_msg: lock failed");
-					n += k.packets.len();
-				}
-				if n < 1000 {
-					break;
-				}
-				//println!("TTT n = {}", n);
-				thread::sleep(Duration::from_millis(100));
-			}
-
-			let v = self.shared.clone();
-			let mut k = v.lock().expect("binding::send_msg: lock failed");
-			k.packets.push((p.clone(), current_millis()));
-
-			//println!("TTT sending {}", k.packets.len());
-
-			if Network::transmit(p.clone()) {
-				//Network::init_retry(self.tx.clone(), p.id);
-				Ok(p.id)
-			} else {
-				k.packets.pop();
-				Err(Errors::SendFailed)
-			}
+			self.pop_packet();
+			Err(Errors::SendFailed)
 		}
 	}
 
-//	fn init_retry(tx: Sender<u64>, id: packet::IdType) {
-//
-//		thread::spawn(move || {
-//			thread::sleep(Duration::from_millis(RETRY_TIMEOUT));
-//			match tx.send(id) {
-//				Err(_) => { println!("init_retry: sending event through channel failed"); }
-//				_ => { }
-//			}
-//		});
-//	}
+	fn pop_packet(&self) {
+		self.shared.lock().expect("binding::push_packet: lock failed").packets.pop();
+	}
 
-	fn transmit(p: packet::Packet) -> bool {
+	fn push_packet(&self, p: Packet) {
+		self.shared.lock().expect("binding::push_packet: lock failed").packets.push((p, current_millis()));
+	}
 
-		let v  = p.serialize();
+	fn queue_size(&self) -> usize {
+		self.shared.lock().expect("binding::queue_size failed").packets.len()
+	}
+
+	fn wait_for_queue(&self) {
+		while self.queue_size() >= 1000 {
+			thread::sleep(Duration::from_millis(50));
+		}
+	}
+
+	fn transmit(p: Packet) -> bool {
+		let v = p.serialize();
 		let ip = p.ip.clone() + "\0";
 		unsafe {
 			send_icmp(ip.as_ptr(), v.as_ptr(), v.len() as u16) == 0

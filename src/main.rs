@@ -146,7 +146,7 @@ fn help_message(o: Arc<Mutex<HiOut>>) {
         "arrow down          - scroll to latest messages",
         "/uptime, /up        - uptime",
         "/cat <filename>     - send content of an UTF-8 encoded text file",
-        "/uplaod <filename>  - send binary file"
+        "/upload <filename>  - send binary file"
     ];
 
     for v in lines {

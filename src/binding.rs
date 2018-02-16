@@ -129,7 +129,7 @@ impl Network {
 				}
 			}
 			for i in r {
-				println!("resend");
+				//println!("resend");
 				Network::transmit(i);
 			}
 		}});

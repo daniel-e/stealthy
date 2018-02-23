@@ -1,0 +1,14 @@
+[package]
+name = "mytui"
+version = "0.1.0"
+authors = ["daniel-e <git.daniele@gmail.com>"]
+
+[dependencies]
+termion = "*"
+
+[dependencies.tui]
+git = "https://github.com/fdehau/tui-rs"
+#version = "0.2.0"
+default-features = false
+#features = ['rustbox']
+features = ['termion']

@@ -13,11 +13,15 @@ use termion::event;
 use std::io;
 use std::cmp;
 use std::iter::repeat;
+use std::sync::mpsc::{channel, Receiver};
+use std::thread;
+use std::time::Duration;
 
 struct App {
     size: Rect,
     tabs: MyTabs,
     input: String,
+    input_cursor: bool,
     messages: Vec<String>,
     line_offset: i32,
     selected_contact: usize,
@@ -57,14 +61,15 @@ impl MyTabs {
     }
 }
 
-fn create_app() -> App {
+fn create_app(r: Rect) -> App {
     App {
-        size: Rect::default(),
+        size: r,
         tabs: MyTabs {
             titles: vec![String::from("Messages"), String::from("Options")],
             selection: 0
         },
         input: String::new(),
+        input_cursor: true,
         messages: vec![String::new(), String::new()],
         line_offset: 0,
         selected_contact: 0,
@@ -82,90 +87,113 @@ fn create_app() -> App {
     }
 }
 
+fn update_app(app: &mut App, evt: event::Key) -> bool {
+    match evt {
+        // https://docs.rs/termion/1.5.1/termion/event/enum.Key.html
+        event::Key::Left => {
+            app.tabs.previous();
+        },
+        event::Key::Right => {
+            app.tabs.next();
+        },
+        event::Key::Esc => {
+            return true;
+        },
+        _ => {}
+    }
+
+    if app.tabs.selection == 0 { // Messages
+        match evt {
+            event::Key::Char('\n') => {
+                append_message(&mut app.messages[app.selected_contact], &app.input);
+                app.input.clear();
+                app.line_offset = 0;
+            },
+            event::Key::Down => {
+                if app.line_offset < 0 {
+                    app.line_offset += 1;
+                }
+            },
+            event::Key::Up => {
+                app.line_offset -= 1;
+            },
+            event::Key::PageDown => {
+                app.selected_contact = cmp::min(app.contacts.len() - 1, app.selected_contact + 1)
+            }
+            event::Key::PageUp => {
+                if app.selected_contact > 0 {
+                    app.selected_contact -= 1;
+                }
+            }
+            event::Key::Backspace => {
+                app.input.pop();
+            },
+            event::Key::Char(c) => {
+                app.input.push(c);
+            },
+            _ => {}
+        }
+    } else if app.tabs.selection == 1 { // Options
+        match evt {
+            event::Key::Char('\n') => {
+
+            },
+            event::Key::Down => {
+                if app.selected_option < app.options.len() - 1 {
+                    app.selected_option += 1;
+                }
+            },
+            event::Key::Up => {
+                if app.selected_option > 0 {
+                    app.selected_option -= 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    app.input_cursor = true;
+    false
+}
+
+fn keyboard_input() -> Receiver<event::Key> {
+    let (tx, rx) = channel();
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        for c in stdin.keys() {
+            tx.send(c.unwrap());
+        }
+    });
+    rx
+}
+
 fn main() {
     let backend = MouseBackend::new().unwrap();
     let mut term = Terminal::new(backend).unwrap();
 
-    let mut app = create_app();
-
     term.clear().unwrap();
     term.hide_cursor().unwrap();
-    app.size = term.size().unwrap();
+
+    let mut app = create_app(term.size().unwrap());
 
     draw(&mut term, &mut app);
 
-    let stdin = io::stdin();
-    for c in stdin.keys() {
-        let evt = c.unwrap();
+    let key_rx = keyboard_input();
 
-        match evt {
-            // https://docs.rs/termion/1.5.1/termion/event/enum.Key.html
-            event::Key::Left => {
-                app.tabs.previous();
+    loop {
+        match key_rx.recv_timeout(Duration::from_millis(500)) {
+            Ok(c) => {
+                if update_app(&mut app, c) {
+                    break;
+                }
             },
-            event::Key::Right => {
-                app.tabs.next();
-            },
-            event::Key::Esc => {
-                break;
-            },
-            _ => {}
+            _ => { app.input_cursor = !app.input_cursor; }
         }
-
-        if app.tabs.selection == 0 { // Messages
-            match evt {
-                event::Key::Char('\n') => {
-                    append_message(&mut app.messages[app.selected_contact], &app.input);
-                    app.input.clear();
-                    app.line_offset = 0;
-                },
-                event::Key::Down => {
-                    if app.line_offset < 0 {
-                        app.line_offset += 1;
-                    }
-                },
-                event::Key::Up => {
-                    app.line_offset -= 1;
-                },
-                event::Key::PageDown => {
-                    app.selected_contact = cmp::min(app.contacts.len() - 1, app.selected_contact + 1)
-                }
-                event::Key::PageUp => {
-                    if app.selected_contact > 0 {
-                        app.selected_contact -= 1;
-                    }
-                }
-                event::Key::Backspace => {
-                    app.input.pop();
-                },
-                event::Key::Char(c) => {
-                    app.input.push(c);
-                },
-                _ => {}
-            }
-        } else if app.tabs.selection == 1 { // Options
-            match evt {
-                event::Key::Char('\n') => {
-
-                },
-                event::Key::Down => {
-                    if app.selected_option < app.options.len() - 1 {
-                        app.selected_option += 1;
-                    }
-                },
-                event::Key::Up => {
-                    if app.selected_option > 0 {
-                        app.selected_option -= 1;
-                    }
-                }
-                _ => {}
-            }
-        }
-
         draw(&mut term, &mut app);
     }
 
+    term.clear();
     term.show_cursor().unwrap();
+    println!("Goodbye!\r");
 }
 
 fn append_message(buf: &mut String, msg: &str) {
@@ -231,7 +259,6 @@ fn number_of_lines_in_window(buf: &String, w: u16, h: u16, skp: usize) -> u16 {
 
 fn add_messages_widget(t: &mut Terminal<MouseBackend>, chunk1: &Rect, chunk2: &Rect, app: &mut App) {
     let siz = t.size().unwrap();
-    let app_size = app.size.clone();
 
     let h = siz.height - 8;
     let w = siz.width - 2;
@@ -274,7 +301,11 @@ fn add_messages_widget(t: &mut Terminal<MouseBackend>, chunk1: &Rect, chunk2: &R
         });
 
     let mut s = app.input.clone();
-    s.push('▄');
+    if app.input_cursor {
+        s.push('▄');
+    } else {
+        s.push(' ');
+    }
     let slen = s.chars().count();
     let win_width = (siz.width - 2) as usize;
     if slen > win_width {

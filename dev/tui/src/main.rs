@@ -300,23 +300,27 @@ fn add_messages_widget(t: &mut Terminal<MouseBackend>, chunk1: &Rect, chunk2: &R
                 .render(t, &chunks[1]);
         });
 
-    let mut s = app.input.clone();
-    if app.input_cursor {
+
+    input_field(t, chunk2, app.input_cursor, &app.input, siz.width - 2);
+}
+
+fn input_field(t: &mut Terminal<MouseBackend>, chunk: &Rect, show_cursor: bool, text: &str, length: u16) {
+    let mut s = String::from(text);
+    if show_cursor {
         s.push('▄');
     } else {
         s.push(' ');
     }
+    let n = length as usize;
     let slen = s.chars().count();
-    let win_width = (siz.width - 2) as usize;
-    if slen > win_width {
-        s = s.chars().skip(slen - win_width).collect();
+    if slen > n {
+        s = s.chars().skip(slen - n).collect();
     }
-
     Paragraph::default()
         .style(Style::default().fg(Color::Yellow))
         .block(Block::default().borders(Borders::ALL).title(" Your message "))
         .text(&s)
-        .render(t, chunk2);
+        .render(t, chunk);
 }
 
 fn add_options_widget(t: &mut Terminal<MouseBackend>, chunk: &Rect, app: &mut App) {

@@ -401,9 +401,9 @@ fn add_contact_widget(t: &mut Terminal<MouseBackend>, chunk: &Rect) {
         .margin(2)
         .sizes(&[Size::Fixed(1), Size::Fixed(1), Size::Fixed(1)])
         .render(t, chunk, |t, chunks| {
-//            add_textfield("Name:", 8, 15, t, &chunks[0]);
-//            add_textfield("IP:", 8,15, t, &chunks[1]);
-//            add_textfield("Key:", 8,32, t, &chunks[2]);
+            //add_textfield("Name:", 8, 15, t, &chunks[0]);
+            //add_textfield("IP:", 8,15, t, &chunks[1]);
+            //add_textfield("Key:", 8,32, t, &chunks[2]);
         });
 }
 

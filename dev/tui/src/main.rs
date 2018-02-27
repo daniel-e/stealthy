@@ -39,6 +39,8 @@ struct MyTabs {
 struct Options {
     interface: String,
     add_contact: AddContact,
+    focus_on_interface: bool,
+    focus_on_options: bool,
 }
 
 struct AddContact {
@@ -82,7 +84,9 @@ fn create_app(r: Rect) -> App {
                 name: String::new(),
                 ip: String::new(),
                 key: String::new(),
-            }
+            },
+            focus_on_interface: false,
+            focus_on_options: true,
         }
     }
 }
@@ -133,19 +137,49 @@ fn update_app(app: &mut App, evt: event::Key) -> bool {
             },
             _ => {}
         }
-    } else if app.tabs.selection == 1 { // Options
+    } else if app.tabs.selection == 1 { // Options tab is selected
         match evt {
             event::Key::Char('\n') => {
+                if app.options_content.focus_on_options { // if Enter is pressed on one of the options
+                    app.options_content.focus_on_options = false;
+                    app.options_content.focus_on_interface = false;
+                    match app.selected_option {
+                        0 => { // "Set network interface"
+                            app.options_content.focus_on_interface = true;
+                        },
+                        1 => { // "Add contact"
 
+                        },
+                        _ => {}
+                    }
+                } else if app.options_content.focus_on_interface {
+                    app.options_content.focus_on_options = true;
+                    app.options_content.focus_on_interface = false;
+                }
+            },
+            event::Key::Char(c) => {
+                if app.options_content.focus_on_interface {
+                    app.options_content.interface.push(c);
+                }
+            },
+            event::Key::Backspace => {
+                if app.options_content.focus_on_interface {
+                    app.options_content.interface.pop();
+                }
             },
             event::Key::Down => {
-                if app.selected_option < app.options.len() - 1 {
-                    app.selected_option += 1;
+                if app.options_content.focus_on_options {
+                    app.options_content.focus_on_interface = false;
+                    if  app.selected_option < app.options.len() - 1 {
+                        app.selected_option += 1;
+                    }
                 }
             },
             event::Key::Up => {
-                if app.selected_option > 0 {
-                    app.selected_option -= 1;
+                if app.options_content.focus_on_options {
+                    if app.selected_option > 0 {
+                        app.selected_option -= 1;
+                    }
                 }
             }
             _ => {}
@@ -301,12 +335,12 @@ fn add_messages_widget(t: &mut Terminal<MouseBackend>, chunk1: &Rect, chunk2: &R
         });
 
 
-    input_field(t, chunk2, app.input_cursor, &app.input, siz.width - 2);
+    input_field(t, chunk2, app.input_cursor, &app.input, siz.width - 2, true);
 }
 
-fn input_field(t: &mut Terminal<MouseBackend>, chunk: &Rect, show_cursor: bool, text: &str, length: u16) {
+fn input_field(t: &mut Terminal<MouseBackend>, chunk: &Rect, show_cursor: bool, text: &str, length: u16, has_focus: bool) {
     let mut s = String::from(text);
-    if show_cursor {
+    if show_cursor && has_focus {
         s.push('▄');
     } else {
         s.push(' ');
@@ -316,8 +350,9 @@ fn input_field(t: &mut Terminal<MouseBackend>, chunk: &Rect, show_cursor: bool, 
     if slen > n {
         s = s.chars().skip(slen - n).collect();
     }
+    let c = if has_focus { Color::DarkGray } else { Color::Black };
     Paragraph::default()
-        .style(Style::default().fg(Color::Yellow))
+        .style(Style::default().fg(Color::Yellow).bg(c))
         .block(Block::default().borders(Borders::ALL).title(" Your message "))
         .text(&s)
         .render(t, chunk);
@@ -337,21 +372,27 @@ fn add_options_widget(t: &mut Terminal<MouseBackend>, chunk: &Rect, app: &mut Ap
                 .render(t, &chunks[0]);
             Block::default().borders(Borders::ALL).render(t, &chunks[1]);
             match app.selected_option {
-                0 => { add_network_interface_widget(t, &chunks[1]); },
+                0 => { add_network_interface_widget(t, &chunks[1], app); },
                 1 => { add_contact_widget(t, &chunks[1]); },
                 _ => {}
             }
         });
 }
 
-fn add_network_interface_widget(t: &mut Terminal<MouseBackend>, chunk: &Rect) {
+fn add_network_interface_widget(t: &mut Terminal<MouseBackend>, chunk: &Rect, app: &mut App) {
     Group::default()
         .direction(Direction::Vertical)
         .margin(2)
-        .sizes(&[Size::Fixed(1)])
+        .sizes(&[Size::Fixed(1), Size::Min(0)])
         .render(t, chunk, |t, chunks| {
-            add_textfield("Interface:",12, 10, t, &chunks[0]);
+            add_textfield("Interface:",12, 10, t, &chunks[0], app.options_content.focus_on_interface, &app.options_content.interface, app.input_cursor);
+            add_placeholder(t, &chunks[1]);
         });
+}
+
+fn add_placeholder(t: &mut Terminal<MouseBackend>, chunk: &Rect) {
+    Paragraph::default()
+        .render(t, chunk);
 }
 
 fn add_contact_widget(t: &mut Terminal<MouseBackend>, chunk: &Rect) {
@@ -360,27 +401,54 @@ fn add_contact_widget(t: &mut Terminal<MouseBackend>, chunk: &Rect) {
         .margin(2)
         .sizes(&[Size::Fixed(1), Size::Fixed(1), Size::Fixed(1)])
         .render(t, chunk, |t, chunks| {
-            add_textfield("Name:", 8, 15, t, &chunks[0]);
-            add_textfield("IP:", 8,15, t, &chunks[1]);
-            add_textfield("Key:", 8,32, t, &chunks[2]);
+//            add_textfield("Name:", 8, 15, t, &chunks[0]);
+//            add_textfield("IP:", 8,15, t, &chunks[1]);
+//            add_textfield("Key:", 8,32, t, &chunks[2]);
         });
 }
 
-fn add_textfield(label: &str, label_length:usize, input_length: usize, t: &mut Terminal<MouseBackend>, chunk: &Rect) {
-    let f: String = repeat('_').take(input_length).collect();
-
+fn add_textfield(label: &str, label_length:usize, input_length: usize, t: &mut Terminal<MouseBackend>, chunk: &Rect, has_focus: bool, value: &String, show_cursor: bool) {
     Group::default()
         .direction(Direction::Horizontal)
         .margin(0)
-        .sizes(&[Size::Fixed(label_length as u16), Size::Min(0)])
+        .sizes(&[Size::Fixed(label_length as u16), Size::Fixed(input_length as u16), Size::Min(0)])
         .render(t, chunk, |t, chunks| {
             Paragraph::default()
                 .style(Style::default().fg(Color::Yellow))
                 .text(label)
                 .render(t, &chunks[0]);
-            Paragraph::default()
-                .style(Style::default().fg(Color::Yellow))
-                .text(&f)
-                .render(t, &chunks[1]);
+            input_line(t, &chunks[1], show_cursor, value, input_length as u16, has_focus);
+            add_placeholder(t, &chunks[2]);
         });
+}
+
+fn input_line(t: &mut Terminal<MouseBackend>, chunk: &Rect, show_cursor: bool, text: &str, length: u16, has_focus: bool) {
+    let mut s = String::from(text);
+    if show_cursor && has_focus {
+        s.push('▄');
+    } else {
+        s.push(' ');
+    }
+    let n = length as usize;
+    let slen = s.chars().count();
+    if slen > n {
+        s = s.chars().skip(slen - n).collect();
+    }
+    if has_focus {
+        Paragraph::default()
+            .style(Style::default().fg(Color::Yellow).bg(Color::DarkGray))
+            .text(&s)
+            .render(t, chunk);
+    } else {
+        let ds = if text.len() < length as usize {
+            let n = length as usize - text.len();
+            String::from(text) + &repeat('_').take(n).collect::<String>()
+        } else {
+            text.chars().take(length as usize).collect::<>()
+        };
+        Paragraph::default()
+            .style(Style::default().fg(Color::Yellow))
+            .text(&ds)
+            .render(t, chunk);
+    }
 }

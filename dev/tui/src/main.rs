@@ -17,6 +17,8 @@ use std::sync::mpsc::{channel, Receiver};
 use std::thread;
 use std::time::Duration;
 
+// ------------------------------- Data ------------------------------------------------------------
+
 struct App {
     size: Rect,
     tabs: MyTabs,
@@ -86,6 +88,8 @@ fn create_app(r: Rect) -> App {
         }
     }
 }
+
+// ------------------------------- Data end --------------------------------------------------------
 
 fn update_app(app: &mut App, evt: event::Key) -> bool {
     match evt {
@@ -165,6 +169,7 @@ fn keyboard_input() -> Receiver<event::Key> {
     });
     rx
 }
+
 
 fn main() {
     let backend = MouseBackend::new().unwrap();

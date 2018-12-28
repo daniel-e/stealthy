@@ -62,6 +62,17 @@ pub struct Message {
 }
 
 
+fn replace_char(c: char) -> char {
+    match c {
+        'a'...'z' | 'A'...'Z' | '0'...'9' | '-' | '.' => c,
+        _ => '_'
+    }
+}
+
+fn sanitize_filename(s: String) -> String {
+    s.chars().map(|c| replace_char(c)).collect()
+}
+
 impl Message {
     pub fn file_upload(ip: String, fname: String, data: Vec<u8>) -> Message {
         let mut buffer = Vec::from(fname.as_bytes());
@@ -98,7 +109,7 @@ impl Message {
         let payload = self.get_payload();
         let (fname, _) = payload.split_at(pos.unwrap());
         let filename = String::from_utf8(fname.to_vec()).expect("XXXXXXXX"); // TODO error
-        Some(filename)
+        Some(sanitize_filename(filename))
     }
 
     pub fn get_filedata(&self) -> Option<Vec<u8>> {
@@ -261,7 +272,5 @@ mod tests {
 
     #[test]
     fn test_handle_message() {
-
-
     }
 }

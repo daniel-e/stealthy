@@ -1,5 +1,38 @@
 use std::fs::File;
 use std::io::Read;
+use std::io::Write;
+
+pub fn without_dirs(fname: &str) -> String {
+
+    let mut parts: Vec<&str> = fname.split("/").collect();
+    parts
+        .pop()
+        .expect("expected one element in vector")
+        .to_string()
+}
+
+pub fn decode_uptime(t: i64) -> String {
+
+    let days = t / 86400;
+    if days > 0 {
+        if days > 1 {
+            format!("{} days ({} seconds)", days, t)
+        } else {
+            format!("{} day ({} seconds)", days, t)
+        }
+    } else {
+        format!("{} seconds", t)
+    }
+}
+
+pub fn write_data(fname: &str, data: Vec<u8>) -> bool {
+    match File::create(fname) {
+        Ok(mut f) => {
+            f.write_all(&data).is_ok()
+        },
+        _ => false
+    }
+}
 
 pub fn read_bin_file(fname: &str) -> Result<Vec<u8>, String> {
 

@@ -4,6 +4,7 @@ mod humaninterface_ncurses;
 mod callbacks;
 mod tools;
 mod rsatools;
+mod arguments;
 
 extern crate getopts;
 extern crate term;
@@ -14,13 +15,10 @@ extern crate dirs;
 
 extern crate crypto as cr;
 
-use std::{env, thread};
+use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use getopts::Options;
 use term::color;
-use std::fs::File;
-use std::io::{BufRead, BufReader, Write};
 use rand::{thread_rng, Rng};
 
 use cr::sha1::Sha1;
@@ -29,14 +27,17 @@ use cr::digest::Digest;
 use stealthy::{Message, IncomingMessage, Errors, Layers};
 use humaninterface::{Input, Output, UserInput, ControlType};
 use callbacks::Callbacks;
-use tools::{read_file, insert_delimiter, read_bin_file};
-//use rsatools::key_as_der;
+use tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
+use arguments::{parse_arguments, Arguments};
+use stealthy::Layer;
 
 use humaninterface_ncurses::{NcursesIn, NcursesOut};
-type HiIn = NcursesIn;
-type HiOut = NcursesOut;
+type HInput = NcursesIn;
+type HOutput = NcursesOut;
 
-fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
+
+// Receives messages via channel and writes the message to the screen.
+fn status_message_loop(o: Arc<Mutex<HOutput>>) -> Sender<String> {
 
     let (tx, rx) = channel::<String>();
 
@@ -47,10 +48,6 @@ fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
                 if msg.starts_with("") { // dummy to use variable
 
                 }
-                /*
-                o.lock().unwrap()
-                    .println(msg, color::YELLOW);
-                */
             }
             Err(e) => {
                 o.lock().unwrap()
@@ -62,16 +59,7 @@ fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {
     tx
 }
 
-fn write_data(fname: &str, data: Vec<u8>) -> bool {
-    match File::create(fname) {
-        Ok(mut f) => {
-            f.write_all(&data).is_ok()
-        },
-        _ => false
-    }
-}
-
-fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
+fn recv_loop(o: Arc<Mutex<HOutput>>, rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || {
         loop { match rx.recv() {
@@ -115,22 +103,7 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
     }});
 }
 
-fn decode_uptime(t: i64) -> String {
-
-    let days = t / 86400;
-    if days > 0 {
-        if days > 1 {
-            format!("{} days ({} seconds)", days, t)
-        } else {
-            format!("{} day ({} seconds)", days, t)
-        }
-    } else {
-        format!("{} seconds", t)
-    }
-}
-
-
-fn help_message(o: Arc<Mutex<HiOut>>) {
+fn help_message(o: Arc<Mutex<HOutput>>) {
 
     let lines = vec![
         "Commands always start with a slash:",
@@ -147,7 +120,7 @@ fn help_message(o: Arc<Mutex<HiOut>>) {
     }
 }
 
-fn output(msg: &str, o: Arc<Mutex<HiOut>>) {
+fn output(msg: &str, o: Arc<Mutex<HOutput>>) {
 
     o.lock().unwrap().println(String::from(msg), color::WHITE);
 }
@@ -175,7 +148,7 @@ fn init_global_state() {
     };
 }
 
-fn parse_command(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
+fn parse_command(txt: String, o: Arc<Mutex<HOutput>>, l: &Layers, dstip: String) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
@@ -222,16 +195,7 @@ fn parse_command(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
     };
 }
 
-fn without_dirs(fname: &str) -> String {
-
-    let mut parts: Vec<&str> = fname.split("/").collect();
-    parts
-        .pop()
-        .expect("expected one element in vector")
-        .to_string()
-}
-
-fn send_file(data: Vec<u8>, fname: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
+fn send_file(data: Vec<u8>, fname: String, o: Arc<Mutex<HOutput>>, l: &Layers, dstip: String) {
 
     let n = data.len();
     let msg = Message::file_upload(dstip, without_dirs(&fname), data);
@@ -255,7 +219,7 @@ fn send_file(data: Vec<u8>, fname: String, o: Arc<Mutex<HiOut>>, l: &Layers, dst
     }
 }
 
-fn send_message(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
+fn send_message(txt: String, o: Arc<Mutex<HOutput>>, l: &Layers, dstip: String) {
 
     let msg = Message::new(dstip, txt.clone().into_bytes());
     // TODO no lock here -> if sending wants to write a message it could dead lock
@@ -277,7 +241,7 @@ fn send_message(txt: String, o: Arc<Mutex<HiOut>>, l: &Layers, dstip: String) {
     }
 }
 
-fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
+fn input_loop(o: Arc<Mutex<HOutput>>, i: HInput, l: Layers, dstip: String) {
 
     // read from human interface until user enters control-d and send the
     // message via the network layer
@@ -309,136 +273,69 @@ fn input_loop(o: Arc<Mutex<HiOut>>, i: HiIn, l: Layers, dstip: String) {
 }
 
 
+fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
+    let ret =
+        if args.hybrid_mode {
+            // use asymmetric encryption
+            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx)
+        } else {
+            // use symmetric encryption
+            Layers::symmetric(&args.secret_key, &args.device, status_tx)
+        };
+    ret.expect("Initialization failed.")
+}
+
+fn welcome(args: &Arguments, o: Arc<Mutex<HOutput>>, layer: &Layer) {
+    let mut out = o.lock().unwrap();
+    out.println(logo::get_logo(), color::GREEN);
+    out.println(format!("Welcome to stealthy! The most secure ICMP messenger."), color::YELLOW);
+    out.println(format!("Type /help to get a list of available commands."), color::YELLOW);
+    out.println(format!(""), color::WHITE);
+    out.println(format!("device is {}, destination ip is {}", args.device, args.dstip), color::WHITE);
+    if args.hybrid_mode {
+        let mut h = Sha1::new();
+
+        h.input(&layer.layers.encryption_key());
+        let s = insert_delimiter(&h.result_str());
+        out.println(format!("Hash of encryption key : {}", s), color::YELLOW);
+
+        h.reset();
+        h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
+        let q = insert_delimiter(&h.result_str());
+        out.println(format!("Hash of your public key: {}", q), color::YELLOW);
+    }
+    out.println(format!("Happy chatting...\n"), color::WHITE);
+}
+
+
+struct ConsoleMessage {
+    msg: String,
+    col: term::color::Color
+}
+
 fn main() {
     init_global_state();
 
     // parse command line arguments
-	let r = parse_arguments();
-    let args = if r.is_some() { r.unwrap() } else { return };
+	let args = parse_arguments().expect("Cannot parse arguments");;
 
-    let o = Arc::new(Mutex::new(HiOut::new()));    // human interface for output
-    let i = HiIn::new();                           // human interface for input
+    // Output
+    let o = Arc::new(Mutex::new(HOutput::new()));
+
+    // Input
+    let i = HInput::new();
+
+    // Creates a thread which waits for messages on a channel to be written to o.
     let status_tx = status_message_loop(o.clone());
 
-    let ret =
-        if args.hybrid_mode {
-            // use asymmetric encryption
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx)  // network layer
-        } else {
-            // use symmetric encryption
-            Layers::symmetric(&args.secret_key, &args.device, status_tx)  // network layer
-        };
+    let layer = get_layer(&args, status_tx);
 
-    if ret.is_err() {
-        // TODO is this message visible when in curses
-        println!("Initialization failed.");
-        return;
-    }
+    welcome(&args, o.clone(), &layer);
 
-    let layer = ret.unwrap();
 
     // this is the loop which handles messages received via rx
     recv_loop(o.clone(), layer.rx);
 
-    {
-        let mut out = o.lock().unwrap();
-        out.println(logo::get_logo(), color::GREEN);
-        out.println(format!("Welcome to stealthy! The most secure ICMP messenger."), color::YELLOW);
-        out.println(format!("Type /help to get a list of available commands."), color::YELLOW);
-        out.println(format!(""), color::WHITE);
-        out.println(format!("device is {}, destination ip is {}", args.device, args.dstip), color::WHITE);
-        if args.hybrid_mode {
-            let mut h = Sha1::new();
-
-            h.input(&layer.layers.encryption_key());
-            let s = insert_delimiter(&h.result_str());
-            out.println(format!("Hash of encryption key : {}", s), color::YELLOW);
-
-            h.reset();
-            h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
-            let q = insert_delimiter(&h.result_str());
-            out.println(format!("Hash of your public key: {}", q), color::YELLOW);
-        }
-        out.println(format!("Happy chatting...\n"), color::WHITE);
-    }
-
     input_loop(o.clone(), i, layer.layers, args.dstip);
 }
 
-struct Arguments {
-    pub device: String,
-    pub dstip: String,
-    pub hybrid_mode: bool,
-    pub secret_key: String,
-    pub rcpt_pubkey_file: String,
-    pub privkey_file: String,
-    pub pubkey_file: String,
-}
-
-fn get_key_from_home() -> Option<String> {
-    match dirs::home_dir() {
-        Some(mut path) => {
-            path.push(".stealthy/key");
-            match File::open(path) {
-                Ok(f) => {
-                    let mut reader = BufReader::new(f);
-                    let mut key = String::new();
-                    match reader.read_line(&mut key) {
-                        Ok(_) => Some(key.trim().to_string()),
-                        _ => None
-                    }
-                }
-                _ => None
-            }
-        },
-        None => None
-    }
-}
-
-fn parse_arguments() -> Option<Arguments> {
-
-    static DEFAULT_SECRET_KEY: &'static str = "11111111111111111111111111111111";
-
-	// parse comand line options
-	let args : Vec<String> = env::args().collect();
-
-	let mut opts = Options::new();
-	opts.optopt("i", "dev", "set the device where to listen for messages", "device");
-	opts.optopt("d", "dst", "set the IP where messages are sent to", "IP");
-	opts.optopt("e", "enc", "set the encryption key", "key");
-	opts.optopt("r", "recipient", "recipient's public key in PEM format used for encryption", "filename");
-	opts.optopt("p", "priv", "your private key in PEM format used for decryption", "filename");
-    opts.optopt("q", "pub", "your public key in PEM format", "filename");
-	opts.optflag("h", "help", "print this message");
-
-	let matches = match opts.parse(&args[1..]) {
-		Ok(m) => { m }
-		Err(f) => { panic!(f.to_string()) }
-	};
-
-    let hybrid_mode = matches.opt_present("r") || matches.opt_present("p");
-
-	if matches.opt_present("h") ||
-            (hybrid_mode && !(matches.opt_present("r") && matches.opt_present("p") && matches.opt_present("q"))) {
-
-		let brief = format!("Usage: {} [options]", args[0]);
-		println!("{}", opts.usage(&brief));
-		return None;
-	}
-
-    // 1) If option -e is given use this key.
-    // 2) If key exists in home directory use this key.
-    // 3) Use default key.
-    let key = matches.opt_str("e")
-        .unwrap_or(get_key_from_home().unwrap_or(DEFAULT_SECRET_KEY.to_string()));
-
-    Some(Arguments {
-        device:       matches.opt_str("i").unwrap_or("lo".to_string()),
-        dstip:        matches.opt_str("d").unwrap_or("127.0.0.1".to_string()),
-        secret_key:   key,
-        hybrid_mode:  hybrid_mode,
-        rcpt_pubkey_file:  matches.opt_str("r").unwrap_or("".to_string()),
-        privkey_file: matches.opt_str("p").unwrap_or("".to_string()),
-        pubkey_file:  matches.opt_str("q").unwrap_or("".to_string()),
-    })
-}

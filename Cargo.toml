@@ -6,13 +6,13 @@ authors = ["unknown"]
 build = "build.rs"
 
 [dependencies]
-rand = "*"
-libc = "*"
-time = "*"
-getopts = "*"
-term = "*"
-rust-crypto = "*"
-rustc-serialize = "*"
+rand = "0.6.1"
+libc = "0.2.45"
+time = "0.1.41"
+getopts = "0.2.18"
+term = "0.5.1"
+rust-crypto = "0.2.36"
+rustc-serialize = "0.3.24"
 dirs = "1.0.4"
 
 [dependencies.ncurses]

@@ -1,28 +1,19 @@
-#[cfg(feature="usencurses")]
 extern crate term;
-#[cfg(feature="usencurses")]
 extern crate ncurses;
 
-#[cfg(feature="usencurses")]
 use term::color;
-#[cfg(feature="usencurses")]
 use self::ncurses::*;
 
-#[cfg(feature="usencurses")]
 use humaninterface::{Input, Output, UserInput, ControlType};
-#[cfg(feature="usencurses")]
 use callbacks::Callbacks;
 
-#[cfg(feature="usencurses")]
 struct WindowWrapper {
     pub win: WINDOW
 }
 
-#[cfg(feature="usencurses")]
 unsafe impl Send for WindowWrapper { }
 
 
-#[cfg(feature="usencurses")]
 pub struct NcursesOut {
     win1: WindowWrapper,
     win2: WindowWrapper,
@@ -31,26 +22,19 @@ pub struct NcursesOut {
     max_y: i32
 }
 
-#[cfg(feature="usencurses")]
 pub struct NcursesIn {
     maxx: i32,
     maxy: i32,
 }
 
-#[cfg(feature="usencurses")]
 static COLOR_WHITE_ON_BKGD: i16 = 1;
-#[cfg(feature="usencurses")]
 static COLOR_YELLOW_ON_BKGD: i16 = 2;
-#[cfg(feature="usencurses")]
 static COLOR_RED_ON_BKGD: i16 = 3;
-#[cfg(feature="usencurses")]
 static COLOR_BLUE_ON_BKGD: i16 = 4;
-#[cfg(feature="usencurses")]
 static COLOR_GREEN_ON_BKGD: i16 = 5;
 
 const BUFFER_LINES: i32 = 1000;
 
-#[cfg(feature="usencurses")]
 impl NcursesOut {
 
     pub fn new() -> NcursesOut {
@@ -125,7 +109,6 @@ impl NcursesOut {
     }
 }
 
-#[cfg(feature="usencurses")]
 impl Output for NcursesOut {
 
     fn close(&self) {
@@ -169,10 +152,8 @@ impl Output for NcursesOut {
 
 }
 
-#[cfg(feature="usencurses")]
 impl Callbacks for NcursesOut { }
 
-#[cfg(feature="usencurses")]
 impl NcursesIn {
 
     pub fn new() -> NcursesIn {
@@ -211,7 +192,6 @@ impl NcursesIn {
 
 const K_BACKSPACE: i32 = 127;
 
-#[cfg(feature="usencurses")]
 impl Input for NcursesIn {
 
     fn read_line(&self) -> Option<UserInput> {

@@ -1,6 +1,5 @@
 mod logo;
 mod humaninterface;
-mod humaninterface_std;
 mod humaninterface_ncurses;
 mod callbacks;
 mod tools;

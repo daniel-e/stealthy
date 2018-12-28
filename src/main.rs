@@ -11,6 +11,7 @@ extern crate term;
 extern crate stealthy;
 extern crate time;
 extern crate rand;
+extern crate dirs;
 
 extern crate crypto as cr;
 
@@ -95,7 +96,10 @@ fn recv_loop(o: Arc<Mutex<HiOut>>, rx: Receiver<IncomingMessage>) {
                         match msg.get_filename() {
                             Some(fname) => {
                                 let fdata = msg.get_filedata();
-                                let r: String = thread_rng().gen_ascii_chars().take(10).collect();
+                                let chars = b"abcdefghijklmnopqrstuvwxyz0123456789";
+                                let mut rng = thread_rng();
+                                let b: Vec<u8> = (0..10).map(|_| {chars[rng.gen::<usize>() % chars.len()]}).collect();
+                                let r = String::from_utf8(b).expect("Invalid characters.");
                                 let dst = format!("/tmp/stealthy_{}_{}", r, &fname);
                                 out.new_file(msg, fname);
                                 match fdata {
@@ -383,7 +387,7 @@ struct Arguments {
 }
 
 fn get_key_from_home() -> Option<String> {
-    match env::home_dir() {
+    match dirs::home_dir() {
         Some(mut path) => {
             path.push(".stealthy/key");
             match File::open(path) {

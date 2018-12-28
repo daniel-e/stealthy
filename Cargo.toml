@@ -13,6 +13,7 @@ getopts = "*"
 term = "*"
 rust-crypto = "*"
 rustc-serialize = "*"
+dirs = "1.0.4"
 
 [dependencies.ncurses]
 git = "https://github.com/jeaye/ncurses-rs.git"

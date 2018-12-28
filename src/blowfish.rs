@@ -1,7 +1,8 @@
 extern crate rand;
 extern crate libc;
 
-use self::rand::{OsRng, Rng};
+use self::rand::rngs::OsRng;
+use self::rand::Rng;
 use std::iter;
 
 #[repr(C)]
@@ -70,7 +71,10 @@ impl Blowfish {
     /// keys and initialization vectors.
     fn random_u8(n: usize) -> ResultVec {
         match OsRng::new() {
-            Ok(mut r) => Ok(r.gen_iter::<u8>().take(n).collect()),
+            Ok(mut r) => {
+                Ok((0..n).map(|_| { r.gen() }).collect())
+                //Ok(r.gen_iter::<u8>().take(n).collect())
+            },
             _ => Err("Could not get OsRng.")
         }
     }

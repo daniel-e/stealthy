@@ -1,7 +1,8 @@
 extern crate rand;
 extern crate libc;
 
-use self::rand::{OsRng, Rng};
+use self::rand::rngs::OsRng;
+use self::rand::Rng;
 use std::{iter, ptr};
 
 pub enum BIO {}
@@ -132,7 +133,7 @@ impl RSA {
         match OsRng::new() {
             Ok(mut r) => {
                 let mut seed: [u8; 32] = [0; 32];
-                r.fill_bytes(&mut seed);
+                r.fill(&mut seed);
                 unsafe {
                     RAND_seed(
                         seed.as_ptr() as *const libc::c_void,

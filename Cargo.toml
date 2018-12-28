@@ -18,7 +18,3 @@ dirs = "1.0.4"
 [dependencies.ncurses]
 git = "https://github.com/jeaye/ncurses-rs.git"
 rev = "162839bd621377781d274237637a0389ca9784f2"
-
-[features]
-default = ["usencurses"]
-usencurses = []

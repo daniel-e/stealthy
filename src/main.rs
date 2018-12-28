@@ -32,18 +32,8 @@ use callbacks::Callbacks;
 use tools::{read_file, insert_delimiter, read_bin_file};
 //use rsatools::key_as_der;
 
-#[cfg(not(feature="usencurses"))]
-use humaninterface_std::{StdIn, StdOut};
-#[cfg(not(feature="usencurses"))]
-type HiIn = StdIn;
-#[cfg(not(feature="usencurses"))]
-type HiOut = StdOut;
-
-#[cfg(feature="usencurses")]
 use humaninterface_ncurses::{NcursesIn, NcursesOut};
-#[cfg(feature="usencurses")]
 type HiIn = NcursesIn;
-#[cfg(feature="usencurses")]
 type HiOut = NcursesOut;
 
 fn status_message_loop(o: Arc<Mutex<HiOut>>) -> Sender<String> {

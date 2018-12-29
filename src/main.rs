@@ -1,7 +1,5 @@
 mod logo;
-mod humaninterface;
 mod humaninterface_ncurses;
-mod callbacks;
 mod tools;
 mod rsatools;
 mod arguments;
@@ -25,7 +23,7 @@ use cr::sha1::Sha1;
 use cr::digest::Digest;
 
 use stealthy::{Message, IncomingMessage, Errors, Layers};
-use humaninterface::{Input, Output, UserInput, ControlType};
+use humaninterface_ncurses::{UserInput, ControlType};
 use tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
 use arguments::{parse_arguments, Arguments};
 use stealthy::Layer;
@@ -33,6 +31,9 @@ use console::ConsoleMessage;
 
 use humaninterface_ncurses::{NcursesIn, NcursesOut};
 use std::time::Duration;
+use std::sync::Arc;
+use std::sync::Mutex;
+use humaninterface_ncurses::Screen;
 
 type HInput = NcursesIn;
 type HOutput = NcursesOut;
@@ -302,9 +303,9 @@ fn input_loop(o: Sender<ConsoleMessage>, i: HInput, l: Layers, dstip: String) {
     send_channel(o, ConsoleMessage::Exit);
 }
 
-fn init_screen() -> Sender<ConsoleMessage> {
+fn init_screen(scr: Arc<Mutex<Screen>>) -> Sender<ConsoleMessage> {
     let (tx, rx) = channel::<ConsoleMessage>();
-    let mut o = HOutput::new();
+    let mut o = HOutput::new(scr);
 
     thread::spawn(move || {
         loop { match rx.recv() {
@@ -343,9 +344,8 @@ fn main() {
     // parse command line arguments
 	let args = parse_arguments().expect("Cannot parse arguments");;
 
-    let output = init_screen();
-    // Output
-    //let o = Arc::new(Mutex::new(HOutput::new()));
+    let scr = Arc::new(Mutex::new(Screen::new()));
+    let output = init_screen(scr.clone());
 
     // Input
     let i = HInput::new();

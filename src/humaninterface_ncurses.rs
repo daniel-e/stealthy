@@ -3,9 +3,28 @@ extern crate ncurses;
 
 use term::color;
 use self::ncurses::*;
+use std::sync::Arc;
+use std::sync::Mutex;
 
-use humaninterface::{Input, Output, UserInput, ControlType};
-use callbacks::Callbacks;
+pub struct Screen {
+
+}
+
+impl Screen {
+    pub fn new() -> Screen {
+        Screen { }
+    }
+}
+
+pub enum ControlType {
+    ArrowUp,
+    ArrowDown
+}
+
+pub enum UserInput {
+    Line(String),
+    Control(ControlType)
+}
 
 struct WindowWrapper {
     pub win: WINDOW
@@ -19,7 +38,8 @@ pub struct NcursesOut {
     win2: WindowWrapper,
     scroll_offset: i32,
     max_x: i32,
-    max_y: i32
+    max_y: i32,
+    scr: Arc<Mutex<Screen>>,
 }
 
 pub struct NcursesIn {
@@ -33,11 +53,13 @@ static COLOR_RED_ON_BKGD: i16 = 3;
 static COLOR_BLUE_ON_BKGD: i16 = 4;
 static COLOR_GREEN_ON_BKGD: i16 = 5;
 
+const K_BACKSPACE: i32 = 127;
+
 const BUFFER_LINES: i32 = 1000;
 
 impl NcursesOut {
 
-    pub fn new() -> NcursesOut {
+    pub fn new(scr: Arc<Mutex<Screen>>) -> NcursesOut {
 
         setlocale(LcCategory::all, "");
         initscr();
@@ -60,7 +82,6 @@ impl NcursesOut {
         unsafe {
             getmaxyx(stdscr, &mut max_y, &mut max_x)
         }
-        //getmaxyx(stdscr(), &mut max_y, &mut max_x);
 
         let w1 = WindowWrapper { win: newpad(BUFFER_LINES, max_x) };
         let w2 = WindowWrapper { win: newwin(2, max_x, max_y - 1 - 1, 0) };
@@ -77,9 +98,53 @@ impl NcursesOut {
             win2: w2,
             scroll_offset: 0,
             max_y: max_y,
-            max_x: max_x
+            max_x: max_x,
+            scr: scr,
         }
     }
+
+    pub fn close(&self) {
+        endwin();
+    }
+
+    pub fn println(&mut self, s: String, color: color::Color) {
+
+        let _scr = self.scr.lock().expect("Mutex lock failed.");
+
+        let attr = match color {
+            color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
+            color::RED          => COLOR_PAIR(COLOR_RED_ON_BKGD),
+            color::BLUE         => COLOR_PAIR(COLOR_BLUE_ON_BKGD),
+            color::BRIGHT_RED   => COLOR_PAIR(COLOR_RED_ON_BKGD),
+            color::GREEN        => COLOR_PAIR(COLOR_GREEN_ON_BKGD),
+            color::BRIGHT_GREEN => COLOR_PAIR(COLOR_GREEN_ON_BKGD), // TODO bright
+            _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD)
+        };
+        let (y, x) = self.pos();
+        waddstr(self.win1.win, "\n");
+        wattron(self.win1.win, attr as u64);
+        waddstr(self.win1.win, &s);
+        wattroff(self.win1.win, attr as u64);
+        self.jump_to_cursor();
+        mv(y, x);
+        prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
+        wrefresh(self.win2.win);
+    }
+
+    pub fn scroll_up(&mut self) {
+        self.scroll_n(-1);
+    }
+
+    pub fn scroll_down(&mut self) {
+        let mut x = 0;
+        let mut y = 0;
+        getyx(self.win1.win, &mut y, &mut x);
+        if y - self.scroll_offset > self.max_y - 3 {
+            self.scroll_n(1);
+        }
+    }
+
+    // ========================================================================================
 
     fn scroll_n(&mut self, n: i32) {
         if self.scroll_offset + n >= 0 && self.scroll_offset + n + self.max_y - 2 <= BUFFER_LINES {
@@ -109,51 +174,6 @@ impl NcursesOut {
     }
 }
 
-impl Output for NcursesOut {
-
-    fn close(&self) {
-        endwin();
-    }
-
-    fn println(&mut self, s: String, color: color::Color) {
-
-        let attr = match color {
-            color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
-            color::RED          => COLOR_PAIR(COLOR_RED_ON_BKGD),
-            color::BLUE         => COLOR_PAIR(COLOR_BLUE_ON_BKGD),
-            color::BRIGHT_RED   => COLOR_PAIR(COLOR_RED_ON_BKGD),
-            color::GREEN        => COLOR_PAIR(COLOR_GREEN_ON_BKGD),
-            color::BRIGHT_GREEN => COLOR_PAIR(COLOR_GREEN_ON_BKGD), // TODO bright
-            _                   => COLOR_PAIR(COLOR_WHITE_ON_BKGD)
-        };
-        let (y, x) = self.pos();
-        waddstr(self.win1.win, "\n");
-        wattron(self.win1.win, attr as u64);
-        waddstr(self.win1.win, &s);
-        wattroff(self.win1.win, attr as u64);
-        self.jump_to_cursor();
-        mv(y, x);
-        prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
-        wrefresh(self.win2.win);
-    }
-
-    fn scroll_up(&mut self) {
-        self.scroll_n(-1);
-    }
-
-    fn scroll_down(&mut self) {
-        let mut x = 0;
-        let mut y = 0;
-        getyx(self.win1.win, &mut y, &mut x);
-        if y - self.scroll_offset > self.max_y - 3 {
-            self.scroll_n(1);
-        }
-    }
-
-}
-
-impl Callbacks for NcursesOut { }
-
 impl NcursesIn {
 
     pub fn new() -> NcursesIn {
@@ -163,46 +183,19 @@ impl NcursesIn {
         unsafe {
             getmaxyx(stdscr, &mut max_y, &mut max_x);
         }
-        //getmaxyx(stdscr(), &mut max_y, &mut max_x);
 
         NcursesIn {
             maxx: max_x,
             maxy: max_y,
         }
     }
-    fn clear_input_line(&self) {
 
-        for x in 0..self.maxx {
-            mv(self.maxy - 1, x);
-            addch(' ' as chtype);
-        }
-    }
-
-    fn x(&self) -> i32 {
-        let mut x = 0;
-        let mut y = 0;
-        unsafe {
-            getyx(stdscr, &mut y, &mut x);
-        }
-        //getyx(stdscr(), &mut y, &mut x);
-        x
-    }
-
-}
-
-const K_BACKSPACE: i32 = 127;
-
-impl Input for NcursesIn {
-
-    fn read_line(&self) -> Option<UserInput> {
+    pub fn read_line(&self) -> Option<UserInput> {
 
         let mut buf: Vec<u8> = Vec::new();
 
         self.clear_input_line();
         mv(self.maxy - 1, 0);
-        //addch('>' as chtype);
-        //addch('>' as chtype);
-        //addch(' ' as chtype);
         refresh();
 
         let mut state = 0;
@@ -286,4 +279,26 @@ impl Input for NcursesIn {
             }
         }
     }
+
+    // ============================================================================================
+
+    fn clear_input_line(&self) {
+
+        for x in 0..self.maxx {
+            mv(self.maxy - 1, x);
+            addch(' ' as chtype);
+        }
+    }
+
+    fn x(&self) -> i32 {
+        let mut x = 0;
+        let mut y = 0;
+        unsafe {
+            getyx(stdscr, &mut y, &mut x);
+        }
+        x
+    }
+
 }
+
+

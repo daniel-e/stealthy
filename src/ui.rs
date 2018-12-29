@@ -109,7 +109,8 @@ impl NcursesOut {
 
     pub fn println(&mut self, s: String, color: color::Color) {
 
-        let _scr = self.scr.lock().expect("Mutex lock failed.");
+        // TODO
+        //let _scr = self.scr.lock().expect("Mutex lock failed.");
 
         let attr = match color {
             color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),

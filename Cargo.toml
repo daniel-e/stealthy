@@ -2,8 +2,10 @@
 
 name = "stealthy"
 version = "0.0.1"
-authors = ["unknown"]
+authors = ["Daniel Etzold"]
 build = "build.rs"
+
+edition = '2018'
 
 [dependencies]
 rand = "0.6.1"

@@ -1,5 +1,5 @@
 mod logo;
-mod humaninterface_ncurses;
+mod ui;
 mod tools;
 mod rsatools;
 mod arguments;
@@ -23,17 +23,15 @@ use cr::sha1::Sha1;
 use cr::digest::Digest;
 
 use stealthy::{Message, IncomingMessage, Errors, Layers};
-use humaninterface_ncurses::{UserInput, ControlType};
-use tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
-use arguments::{parse_arguments, Arguments};
+use crate::ui::{UserInput, ControlType, NcursesIn, NcursesOut, Screen};
+use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
+use crate::arguments::{parse_arguments, Arguments};
 use stealthy::Layer;
-use console::ConsoleMessage;
+use crate::console::ConsoleMessage;
 
-use humaninterface_ncurses::{NcursesIn, NcursesOut};
 use std::time::Duration;
 use std::sync::Arc;
 use std::sync::Mutex;
-use humaninterface_ncurses::Screen;
 
 type HInput = NcursesIn;
 type HOutput = NcursesOut;

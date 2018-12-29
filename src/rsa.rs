@@ -176,7 +176,7 @@ impl RSA {
     pub fn encrypt(&self, msg: &[u8]) -> Result<Vec<u8>, &'static str> {
 
         // "rng must be seeded prior to calling this method"
-        try!(Self::seed_rand());
+        Self::seed_rand()?;
 
         unsafe {
             // For encryption message length must be less than siz - 41
@@ -197,8 +197,8 @@ impl RSA {
     pub fn new(pubkey: &String, privkey: &String) -> Result<RSA, &'static str> {
 
         Ok(RSA {
-            rsapub: try!(RSA::rsa_pubkey(pubkey)),
-            rsapriv: try!(RSA::rsa_privkey(privkey))
+            rsapub: RSA::rsa_pubkey(pubkey)?,
+            rsapriv: RSA::rsa_privkey(privkey)?
         })
     }
 

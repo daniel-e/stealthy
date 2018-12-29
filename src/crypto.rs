@@ -1,7 +1,10 @@
 use std::fs::File;
 use std::io::Read;
 
-use super::{blowfish, rsa, rsatools};
+//use super::{blowfish, rsa, rsatools};
+use crate::blowfish;
+use crate::rsa;
+use crate::rsatools;
 use super::delivery::{push_value, pop_value, push_slice};
 
 pub type ResultVec = Result<Vec<u8>, &'static str>;
@@ -28,7 +31,7 @@ impl SymmetricEncryption {
     pub fn new(hexkey: &String) -> Result<SymmetricEncryption, &'static str> {
 
         Ok(SymmetricEncryption {
-            algorithm: try!(blowfish::Blowfish::from_key(try!(from_hex(hexkey.clone()))))
+            algorithm: blowfish::Blowfish::from_key(from_hex(hexkey.clone())?)?
         })
     }
 }
@@ -59,8 +62,8 @@ impl AsymmetricEncryption {
     pub fn new(pubkey_file: &str, privkey_file: &str) -> Result<AsymmetricEncryption, &'static str> {
 
         Ok(AsymmetricEncryption {
-            pub_key: try!(read_file(pubkey_file)),
-            priv_key: try!(read_file(privkey_file))
+            pub_key: read_file(pubkey_file)?,
+            priv_key: read_file(privkey_file)?
         })
     }
 }
@@ -72,15 +75,12 @@ impl Encryption for AsymmetricEncryption {
     fn encrypt(&self, v: &Vec<u8>) -> ResultVec {
 
         // Encrypt the data with Blowfish.
-        let symenc = try!(blowfish::Blowfish::new());
-        let cipher = try!(symenc.encrypt(v));
+        let symenc = blowfish::Blowfish::new()?;
+        let cipher = symenc.encrypt(v)?;
 
         // Encrypt the key used by Blowfish with RSA.
-        let ekey = try!(
-            try!(
-                rsa::RSA::new(&self.pub_key, &self.priv_key)
-            ).encrypt(&symenc.key())
-        );
+        let ekey =
+            rsa::RSA::new(&self.pub_key, &self.priv_key)?.encrypt(&symenc.key())?;
 
         let mut v: Vec<u8> = Vec::new();
         push_value(&mut v, cipher.len() as u64, 8); // length of ciphertext
@@ -92,7 +92,7 @@ impl Encryption for AsymmetricEncryption {
     fn decrypt(&self, v: &Vec<u8>) -> ResultVec {
 
         let mut data = v.clone();
-        let clen = try!(pop_value(&mut data, 8)) as usize;
+        let clen = pop_value(&mut data, 8)? as usize;
 
         if clen > data.len() {
             return Err("Invalid ciphertext length.");
@@ -100,14 +100,10 @@ impl Encryption for AsymmetricEncryption {
 
         let (cipher, cipher_key) = data.split_at(clen);
 
-        try!(
-            blowfish::Blowfish::from_key(
-                try!(
-                    try!(rsa::RSA::new(&self.pub_key, &self.priv_key))
-                        .decrypt(cipher_key)
-                )
-            )
-        ).decrypt(cipher)
+
+        blowfish::Blowfish::from_key(
+            rsa::RSA::new(&self.pub_key, &self.priv_key)?.decrypt(cipher_key)?
+        )?.decrypt(cipher)
     }
 
     /// Returns the public key.

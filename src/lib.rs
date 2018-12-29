@@ -1,18 +1,19 @@
 mod binding;
-mod blowfish;
-mod crypto;
 mod delivery;
 mod packet;
 mod rsa;
 mod rsatools;
 
+mod blowfish;
+mod crypto;
+
 use std::thread;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crypto::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
-use delivery::Delivery;
-use binding::Network;
+use crate::crypto::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
+use crate::delivery::Delivery;
+use crate::binding::Network;
 
 pub enum ErrorType {
     DecryptionError,
@@ -149,13 +150,13 @@ impl Layers {
 
     pub fn symmetric(hexkey: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
 
-        Layers::init(Box::new(try!(SymmetricEncryption::new(hexkey))), device, status_tx)
+        Layers::init(Box::new(SymmetricEncryption::new(hexkey)?), device, status_tx)
     }
 
     pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(
-                try!(AsymmetricEncryption::new(&pubkey_file, &privkey_file))
+                AsymmetricEncryption::new(&pubkey_file, &privkey_file)?
             ), device, status_tx
         )
     }

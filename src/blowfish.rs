@@ -48,7 +48,7 @@ impl Blowfish {
 
     /// Returns a new instance of Blowfish with a random key.
     pub fn new() -> Result<Blowfish, &'static str> { 
-        Blowfish::from_key(try!(Blowfish::new_key()))
+        Blowfish::from_key(Blowfish::new_key()?)
     }
 
     /// Returns a new instance of Blowfish with the given key.
@@ -149,7 +149,7 @@ impl Blowfish {
     /// Encrypts the data with the current key and a new IV.
     pub fn encrypt(&self, data: &[u8]) -> ResultVec {
 
-        let iv = try!(Blowfish::new_iv());
+        let iv = Blowfish::new_iv()?;
         Ok(
             iv.iter().cloned()
                 .chain(

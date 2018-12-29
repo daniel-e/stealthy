@@ -1,4 +1,4 @@
-extern crate rand;
+//extern crate rand;
 
 
 use std::collections::{HashMap, HashSet};
@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 
 use super::{Message, IncomingMessage, Errors};
-use binding::Network;    // Implemenation for network layer
+use crate::binding::Network;
 
 #[derive(Clone)]
 struct SmallMessage {

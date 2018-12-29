@@ -1,6 +1,6 @@
 use std::thread;
 use std::sync::{Arc, Mutex};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::Sender;
 use std::time::Duration;
 
 use crate::{IncomingMessage, Message, Errors, MessageType};
@@ -75,7 +75,6 @@ struct SharedData {
 
 #[repr(C)]
 pub struct Network {
-	tx               : Sender<IdType>,
     tx_msg           : Sender<IncomingMessage>,
 	shared           : Arc<Mutex<SharedData>>,
 	status_tx        : Sender<String>,
@@ -87,32 +86,25 @@ fn current_millis() -> i64 {
 }
 
 impl Network {
-	/// Constructs a new `Network`.
 	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : vec![],
 		}));
 
-        // Create a channel to transport retry events.
-		let (tx, rx) = channel();
-
 		// Network must be on the heap because of the callback function.
 		let mut n = Box::new(Network {
 			shared: s.clone(),
             tx_msg: tx_msg,
-			tx: tx,
 			status_tx: status_tx
 		});
 
 		n.init_callback(dev);
-		n.init_retry_event_receiver(rx, s.clone());
+		n.init_retry_event_receiver(s.clone());
 		n
 	}
 
-	// TODO rx is not used anymore -> remove it
-	fn init_retry_event_receiver(&mut self, _rx: Receiver<IdType>, k: Arc<Mutex<SharedData>>) {
-        //let tx = self.tx.clone();
+	fn init_retry_event_receiver(&mut self, k: Arc<Mutex<SharedData>>) {
 		thread::spawn(move || { loop {
 			thread::sleep(Duration::from_millis(1000));
 			let mut r = vec![];
@@ -126,7 +118,6 @@ impl Network {
 				}
 			}
 			for i in r {
-				//println!("resend");
 				Network::transmit(i);
 			}
 		}});
@@ -150,6 +141,8 @@ impl Network {
 
 	// This method is called with the encrypted content in buf.
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
+
+		self.status_tx.send(String::from("[Network::recv_packet()] called.")).expect("send failed");
 
 		if len == 0 {
 			// TODO: hack: ip is the reason for the invalid packet
@@ -200,7 +193,6 @@ impl Network {
 	// Packet could be one of a lot of packets.
 	fn handle_file_upload(&self, p: Packet) {
 
-		//println!("TTT upload");
 		if !self.contains(p.id) { // we are not the sender of the message
 			let m = Message::new(p.ip.clone(), p.data.clone());
 
@@ -210,7 +202,6 @@ impl Network {
 				Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
 				_      => { }
 			}
-			//println!("TTT upload ACK");
 			Network::transmit(Packet::create_ack(p));
 			// TODO error
 		}
@@ -224,6 +215,7 @@ impl Network {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
                 _      => { }
             }
+			self.status_tx.send(String::from("binding.rs::sending ack")).expect("Could not send.");
             Network::transmit(Packet::create_ack(p));
             // TODO error
         }
@@ -231,7 +223,6 @@ impl Network {
 
     fn handle_ack(&mut self, p: Packet) {
 
-		//println!("TTT handle_ack");
         let shared = self.shared.clone();
         let mut v = shared.lock().expect("binding::handle_ack: lock failed");
         let mut c = 0;
@@ -290,6 +281,7 @@ impl Network {
 		// is received before message is sent.
 		self.push_packet(p.clone());
 
+		self.status_tx.send(String::from("binding.rs::sending packet")).expect("Could not send.");
 		if Network::transmit(p.clone()) {
 			Ok(p.id)
 		} else {

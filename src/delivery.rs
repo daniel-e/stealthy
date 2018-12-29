@@ -28,7 +28,7 @@ pub struct Delivery {
     network_layer: Box<Network>
 }
 
-const MAX_MESSAGE_PART_SIZE: usize = 128;
+const MAX_MESSAGE_PART_SIZE: usize = (128 * 200);
 
 impl Delivery {
 
@@ -67,7 +67,6 @@ impl Delivery {
             }
             v.insert(seq, small_msg);
             k = v.len();
-            //println!("TTT insert {}", k);
         }
 
         if k as u32 >= n {
@@ -76,14 +75,10 @@ impl Delivery {
             a.sort();
             let b = (1..n + 1).collect::<Vec<u32>>();
 
-            //println!("TTT insert A {} {} {} {}", a.len(), b.len(), a[0], b[0]);
             if a == b {
                 // all packets received
                 let buf = b.iter().flat_map(|seq| i.get(&id).unwrap().get(&seq).unwrap().buf.iter()).map(|&x| x).collect();
-
-                //let buf = i.get(&id).unwrap().iter().flat_map(|(ky, vl)| vl.buf.iter()).map(|&x| x).collect();
                 i.remove(&id);
-                //println!("TTT insert ok");
                 return Some(buf);
             }
         }
@@ -165,27 +160,20 @@ impl Delivery {
 
     pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
 
+        // Split big message into smaller messages.
         let mut small_messages = Self::split_message(&msg);
 
-        //{
-            let mut queue = self.pending.lock().expect("delivery::send_msg: pending failed");
-            //queue.push(small_messages.clone());
-        //}
-
-        //println!("TTT sending {} messages", small_messages.messages.len());
+        let mut queue = self.pending.lock().expect("delivery::send_msg: pending failed");
 
         // split messages and send them via the network layer
         for i in &small_messages.messages {
             let message = msg.set_payload(Delivery::serialize(i));
 
             match self.network_layer.send_msg(message) {
-                //Ok(id) => { small_messages.acks.push(id); }
                 Ok(id) => { small_messages.acks.insert(id); }
                 Err(e) => { return Err(e); }
             }
         }
-
-        //println!("TTT sent {} messages", small_messages.messages.len());
 
         let id = small_messages.id;
         queue.push(small_messages);
@@ -214,7 +202,7 @@ impl Delivery {
         SmallMessages {
             messages: parts,
             id: id,
-            acks: HashSet::new() //vec![]
+            acks: HashSet::new()
         }
     }
 

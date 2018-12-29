@@ -10,18 +10,17 @@ extern crate crypto as cr;
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use term::color;
 use rand::{thread_rng, Rng};
 
 use cr::sha1::Sha1;
 use cr::digest::Digest;
 
 use stealthy::{Message, IncomingMessage, Errors, Layers, Layer};
-use crate::ui::{UserInput, ControlType, NcursesIn, NcursesOut, Screen};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
 use crate::arguments::{parse_arguments, Arguments};
-use crate::console::ConsoleMessage;
+use crate::console::{ConsoleMessage, Color};
 
+use crate::ui::{UserInput, ControlType, NcursesIn, NcursesOut, Screen};
 type HInput = NcursesIn;
 type HOutput = NcursesOut;
 
@@ -34,10 +33,11 @@ fn status_message_loop(o: Sender<ConsoleMessage>) -> Sender<String> {
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
+                //console::status(o.clone(), msg);
                 // TODO use s.th.  like debug, info, ...
-                if msg.starts_with("") { // dummy to use variable
+                //if msg.starts_with("") { // dummy to use variable
 
-                }
+                //}
             }
             Err(e) => {
                 console::error(o.clone(), format!("status_message_loop: failed. {:?}", e));
@@ -103,7 +103,7 @@ fn help_message(o: Sender<ConsoleMessage>) {
     ];
 
     for v in lines {
-        console::msg(o.clone(), String::from(v), color::WHITE)
+        console::msg(o.clone(), String::from(v), Color::White)
     }
 }
 
@@ -138,11 +138,11 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
         let (_, b) = txt.as_str().split_at(5);
         match read_file(b) {
             Ok(data) => {
-                console::msg(o.clone(), String::from("Transmitting data ..."), color::WHITE);
+                console::msg(o.clone(), String::from("Transmitting data ..."), Color::White);
                 send_message(String::from("\n") + data.as_str(), o.clone(), l, dstip);
             },
             _ => {
-                console::msg(o.clone(), String::from("Could not read file."), color::WHITE);
+                console::msg(o.clone(), String::from("Could not read file."), Color::White);
             }
         }
         return;
@@ -155,7 +155,7 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
                 send_file(data, b.to_string(), o, l, dstip);
             },
             Err(s) => {
-                console::msg(o, String::from(s), color::WHITE);
+                console::msg(o, String::from(s), Color::White);
             }
         }
         return;
@@ -166,10 +166,10 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
             help_message(o.clone());
         },
         "/uptime" | "/up" => {
-            console::msg(o, format!("up {}", decode_uptime(uptime())), color::WHITE);
+            console::msg(o, format!("up {}", decode_uptime(uptime())), Color::White);
         },
         _ => {
-            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), color::WHITE);
+            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), Color::White);
         }
     };
 }
@@ -181,18 +181,18 @@ fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers
 
     // TODO no lock here -> if sending wants to write a message it could dead lock
     let fm = time::strftime("%R", &time::now()).unwrap();
-    console::msg(o.clone(), format!("{} [you] sending file '{}' with {} bytes...", fm, fname, n), color::YELLOW);
+    console::msg(o.clone(), format!("{} [you] sending file '{}' with {} bytes...", fm, fname, n), Color::Yellow);
 
     // send message
     match l.send(msg) {
         Ok(_) => {
             let fm = time::strftime("%R", &time::now()).expect("send_file: strftime failed");
-            console::msg(o, format!("{} transmitting...", fm), color::BLUE);
+            console::msg(o, format!("{} transmitting...", fm), Color::Blue);
         }
         Err(e) => { match e {
-            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), color::RED); }
-            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), color::RED); }
-            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), color::RED); }
+            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), Color::Red); }
+            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), Color::Red); }
+            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), Color::Red); }
         }}
     }
 }
@@ -202,18 +202,18 @@ fn send_message(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Strin
     let msg = Message::new(dstip, txt.clone().into_bytes());
     // TODO no lock here -> if sending wants to write a message it could dead lock
     let fm = time::strftime("%R", &time::now()).unwrap();
-    console::msg(o.clone(), format!("{} [you] says: {}", fm, txt), color::WHITE);
+    console::msg(o.clone(), format!("{} [you] says: {}", fm, txt), Color::White);
 
     // send message
     match l.send(msg) {
         Ok(_) => {
             let fm = time::strftime("%R", &time::now()).unwrap();
-            console::msg(o, format!("{} transmitting...", fm), color::BLUE);
+            console::msg(o, format!("{} transmitting...", fm), Color::Blue);
         }
         Err(e) => { match e {
-            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), color::RED); }
-            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), color::RED); }
-            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), color::RED); }
+            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), Color::Red); }
+            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), Color::Red); }
+            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), Color::Red); }
         }}
     }
 }
@@ -236,30 +236,30 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
 
 fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
     for l in logo::get_logo() {
-        console::msg(o.clone(), l, color::GREEN);
+        console::msg(o.clone(), l, Color::Green);
     }
-    console::msg(o.clone(), format!("The most secure ICMP messenger."), color::BRIGHT_GREEN);
-    console::msg(o.clone(), format!(""), color::WHITE);
-    console::msg(o.clone(), format!("┌─────────────────────┬──────────────────┐"), color::BRIGHT_GREEN);
-    console::msg(o.clone(), format!("│ Listening on device │ {}               │", args.device), color::BRIGHT_GREEN);
-    console::msg(o.clone(), format!("│ Destination IP      │ {:16} │", args.dstip), color::BRIGHT_GREEN);
-    console::msg(o.clone(), format!("└─────────────────────┴──────────────────┘"), color::BRIGHT_GREEN);
-    console::msg(o.clone(), format!(""), color::WHITE);
-    console::msg(o.clone(), format!("Type /help to get a list of available commands."), color::BRIGHT_GREEN);
+    console::msg(o.clone(), format!("The most secure ICMP messenger."), Color::BrightGreen);
+    console::msg(o.clone(), format!(""), Color::White);
+    console::msg(o.clone(), format!("┌─────────────────────┬──────────────────┐"), Color::BrightGreen);
+    console::msg(o.clone(), format!("│ Listening on device │ {}               │", args.device), Color::BrightGreen);
+    console::msg(o.clone(), format!("│ Destination IP      │ {:16} │", args.dstip), Color::BrightGreen);
+    console::msg(o.clone(), format!("└─────────────────────┴──────────────────┘"), Color::BrightGreen);
+    console::msg(o.clone(), format!(""), Color::White);
+    console::msg(o.clone(), format!("Type /help to get a list of available commands."), Color::BrightGreen);
 
     if args.hybrid_mode {
         let mut h = Sha1::new();
 
         h.input(&layer.layers.encryption_key());
         let s = insert_delimiter(&h.result_str());
-        console::msg(o.clone(), format!("Hash of encryption key : {}", s), color::YELLOW);
+        console::msg(o.clone(), format!("Hash of encryption key : {}", s), Color::Yellow);
 
         h.reset();
         h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
         let q = insert_delimiter(&h.result_str());
-        console::msg(o.clone(), format!("Hash of your public key: {}", q), color::YELLOW);
+        console::msg(o.clone(), format!("Hash of your public key: {}", q), Color::Yellow);
     }
-    console::msg(o.clone(), format!("Happy chatting...\n"), color::BRIGHT_GREEN);
+    console::msg(o.clone(), format!("Happy chatting...\n"), Color::BrightGreen);
 }
 
 

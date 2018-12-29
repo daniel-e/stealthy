@@ -88,7 +88,10 @@ int send_icmp(const char* dstip, const char* buf, u_int16_t size)
 pcap_t* setup_pcap(const char* dev, const char* filter)
 {
 	char errbuf[PCAP_ERRBUF_SIZE];
-	pcap_t* handle = pcap_open_live(dev, PCAP_ERRBUF_SIZE, 1, 1000, errbuf);
+	// Timeout should be small. Otherwise receiving packets could be delayed.
+	// https://stackoverflow.com/a/30203212/4339066
+	int timeout = 1; // ms
+	pcap_t* handle = pcap_open_live(dev, PCAP_ERRBUF_SIZE, 1, timeout, errbuf);
 	if (!handle) {
 		return 0;
 	}
@@ -243,9 +246,11 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 	a->cb(a->target, (const char*) packet, datalen, type, buf);
 }
 
-static void* do_callback(void* args)
+static void* worker_thread(void* args)
 {
 	struct arguments* a = (struct arguments*) args;
+	// processes packets from a live capture; does not return
+	// https://linux.die.net/man/3/pcap_loop
 	pcap_loop(a->handle, -1, got_packet, (u_char*) a);
 	pcap_close(a->handle);
 	free(a);
@@ -261,7 +266,7 @@ int recv_callback(void* target, const char* dev, callback cb) {
 		args->handle = handle;
 		args->cb = cb;
 		args->target = target;
-		int r = pthread_create(&t, NULL, &do_callback, (void*) args);
+		int r = pthread_create(&t, NULL, &worker_thread, (void*) args);
 		if (r != 0) {
 			return -1;
 		}

@@ -36,12 +36,12 @@ pub struct NcursesOut {
     scroll_offset: i32,
     max_x: i32,
     max_y: i32,
-    scr: Arc<Mutex<Screen>>,
 }
 
 pub struct NcursesIn {
     maxx: i32,
     maxy: i32,
+    scr: Arc<Mutex<Screen>>,
 }
 
 static COLOR_WHITE_ON_BKGD: i16 = 1;
@@ -56,7 +56,7 @@ const BUFFER_LINES: i32 = 1000;
 
 impl NcursesOut {
 
-    pub fn new(scr: Arc<Mutex<Screen>>) -> NcursesOut {
+    pub fn new() -> NcursesOut {
 
         setlocale(LcCategory::all, "");
         initscr();
@@ -96,7 +96,6 @@ impl NcursesOut {
             scroll_offset: 0,
             max_y: max_y,
             max_x: max_x,
-            scr: scr,
         }
     }
 
@@ -105,9 +104,6 @@ impl NcursesOut {
     }
 
     pub fn println(&mut self, s: String, color: color::Color) {
-
-        // TODO
-        //let _scr = self.scr.lock().expect("Mutex lock failed.");
 
         let attr = match color {
             color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
@@ -152,11 +148,11 @@ impl NcursesOut {
     }
 
     fn jump_to_cursor(&mut self) {
-        let mut x = 0;
-        let mut y = 0;
-        getyx(self.win1.win, &mut y, &mut x);
-        if y > self.max_y - 3 {
-            self.scroll_offset = y - (self.max_y - 3);
+        let mut cx = 0;
+        let mut cy = 0;
+        getyx(self.win1.win, &mut cy, &mut cx);
+        if cy > self.max_y - 3 {
+            self.scroll_offset = cy - (self.max_y - 3);
             prefresh(self.win1.win, self.scroll_offset, 0, 0, 0, self.max_y - 3, self.max_x);
         }
     }
@@ -174,7 +170,7 @@ impl NcursesOut {
 
 impl NcursesIn {
 
-    pub fn new() -> NcursesIn {
+    pub fn new(scr: Arc<Mutex<Screen>>) -> NcursesIn {
 
         let mut max_x = 0;
         let mut max_y = 0;
@@ -185,22 +181,29 @@ impl NcursesIn {
         NcursesIn {
             maxx: max_x,
             maxy: max_y,
+            scr: scr,
         }
     }
 
     pub fn read_line(&self) -> Option<UserInput> {
 
+        {
+            let _scr = self.scr.lock().expect("Mutex lock failed.");
+            self.clear_input_line();
+            mv(self.maxy - 1, 0);
+            refresh();
+        }
+
         let mut buf: Vec<u8> = Vec::new();
-
-        self.clear_input_line();
-        mv(self.maxy - 1, 0);
-        refresh();
-
         let mut state = 0;
 
         loop {
-            refresh();
+            {
+                let _scr = self.scr.lock().expect("Mutex lock failed.");
+                refresh();
+            }
             let c = getch();
+            let _scr = self.scr.lock().expect("Mutex lock failed.");
 
             if state == 2 {
                 state = 0;

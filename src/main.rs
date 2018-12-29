@@ -293,11 +293,12 @@ fn input_loop(o: Sender<ConsoleMessage>, i: HInput, l: Layers, dstip: String) {
 
 fn init_screen(scr: Arc<Mutex<Screen>>) -> Sender<ConsoleMessage> {
     let (tx, rx) = channel::<ConsoleMessage>();
-    let mut o = HOutput::new(scr);
+    let mut o = HOutput::new();
 
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
+                let _scr = scr.lock().expect("Could not lock mutex.");
                 match msg {
                     ConsoleMessage::TextMessage(msg) => {
                         o.println(msg.msg, msg.col);
@@ -332,11 +333,13 @@ fn main() {
     // parse command line arguments
 	let args = parse_arguments().expect("Cannot parse arguments");;
 
+    // scr is used to synchronized input and output
     let scr = Arc::new(Mutex::new(Screen::new()));
+    
     let output = init_screen(scr.clone());
 
     // Input
-    let i = HInput::new();
+    let i = HInput::new(scr);
 
     // Creates a thread which waits for messages on a channel to be written to o.
     let status_tx = status_message_loop(output.clone());
@@ -348,8 +351,6 @@ fn main() {
 
     // this is the loop which handles messages received via rx
     recv_loop(output.clone(), layer.rx);
-
-    thread::sleep(Duration::from_millis(100));
 
     input_loop(output.clone(), i, layer.layers, args.dstip);
 }

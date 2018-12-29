@@ -16,6 +16,7 @@ term = "0.5.1"
 rust-crypto = "0.2.36"
 rustc-serialize = "0.3.24"
 dirs = "1.0.4"
+termion = "1.5.1"
 
 [dependencies.ncurses]
 git = "https://github.com/jeaye/ncurses-rs.git"

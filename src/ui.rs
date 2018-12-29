@@ -3,6 +3,21 @@ use ncurses::*;
 use std::sync::Arc;
 use std::sync::Mutex;
 
+use crate::console::Color;
+
+fn map_color(c: Color) -> color::Color {
+    match c {
+        Color::BrightGreen => color::BRIGHT_GREEN,
+        Color::White => color::WHITE,
+        Color::Yellow => color::YELLOW,
+        Color::Blue => color::BLUE,
+        Color::Red => color::RED,
+        Color::Green => color::GREEN,
+        Color::BrightRed => color::BRIGHT_RED,
+        Color::BrightYellow => color::BRIGHT_YELLOW
+    }
+}
+
 pub struct Screen {
 
 }
@@ -104,9 +119,9 @@ impl NcursesOut {
         endwin();
     }
 
-    pub fn println(&mut self, s: String, color: color::Color) {
+    pub fn println(&mut self, s: String, color: Color) {
 
-        let attr = match color {
+        let attr = match map_color(color) {
             color::YELLOW       => COLOR_PAIR(COLOR_YELLOW_ON_BKGD),
             color::RED          => COLOR_PAIR(COLOR_RED_ON_BKGD),
             color::BLUE         => COLOR_PAIR(COLOR_BLUE_ON_BKGD),

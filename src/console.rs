@@ -1,4 +1,3 @@
-use term::color;
 use std::sync::mpsc::Sender;
 use std::process::Command;
 use stealthy::Message;
@@ -14,34 +13,21 @@ pub enum Color {
     BrightYellow,
 }
 
-fn map_color(c: Color) -> color::Color {
-    match c {
-        Color::BrightGreen => color::BRIGHT_GREEN,
-        Color::White => color::WHITE,
-        Color::Yellow => color::YELLOW,
-        Color::Blue => color::BLUE,
-        Color::Red => color::RED,
-        Color::Green => color::GREEN,
-        Color::BrightRed => color::BRIGHT_RED,
-        Color::BrightYellow => color::BRIGHT_YELLOW
-    }
-}
-
-
 pub enum ConsoleMessage {
     TextMessage(NormalMessage),
     Exit,
     ScrollUp,
     ScrollDown,
+    Refresh,
 }
 
 pub struct NormalMessage {
     pub msg: String,
-    pub col: color::Color
+    pub col: Color
 }
 
 impl NormalMessage {
-    pub fn new(msg: String, col: color::Color) -> NormalMessage {
+    pub fn new(msg: String, col: Color) -> NormalMessage {
         NormalMessage {
             msg: msg,
             col: col,
@@ -55,7 +41,7 @@ fn fm_time() -> String {
 
 pub fn raw(o: Sender<ConsoleMessage>, s: String, col: Color) {
     o.send(ConsoleMessage::TextMessage(
-        NormalMessage::new(format!("{}", s), map_color(col)))
+        NormalMessage::new(format!("{}", s), col))
     ).expect("Error in console::msg");
 }
 

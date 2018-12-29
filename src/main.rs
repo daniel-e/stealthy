@@ -4,12 +4,14 @@ mod tools;
 mod rsatools;
 mod arguments;
 mod console;
+mod ui_termion;
 
 extern crate crypto as cr;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use rand::{thread_rng, Rng};
 
 use cr::sha1::Sha1;
@@ -20,11 +22,11 @@ use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decod
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::{ConsoleMessage, Color};
 
-use crate::ui::{UserInput, ControlType, NcursesIn, NcursesOut, Screen};
-use std::time::Duration;
+use crate::ui_termion::{UserInput, ControlType, TermIn, TermOut, Screen};
+use crate::ui_termion::Model;
 
-type HInput = NcursesIn;
-type HOutput = NcursesOut;
+type HInput = TermIn;
+type HOutput = TermOut;
 
 
 // Receives messages via channel and writes the message to the screen.
@@ -255,11 +257,11 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
 
 
 
-fn input_loop(o: Sender<ConsoleMessage>, i: HInput, l: Layers, dstip: String) {
+fn input_loop(o: Sender<ConsoleMessage>, mut i: HInput, l: Layers, dstip: String) {
 
     // read from human interface until user enters control-d and send the
     // message via the network layer
-    loop { match i.read_line() {
+    loop { match i.read_char() {
         Some(ui) => {
             match ui {
                 UserInput::Line(s) => {
@@ -277,6 +279,9 @@ fn input_loop(o: Sender<ConsoleMessage>, i: HInput, l: Layers, dstip: String) {
                         ControlType::ArrowUp => { send_channel(o.clone(), ConsoleMessage::ScrollUp); },
                         ControlType::ArrowDown => { send_channel(o.clone(), ConsoleMessage::ScrollDown); }
                     }
+                },
+                UserInput::Refresh => {
+                    send_channel(o.clone(), ConsoleMessage::Refresh);
                 }
             }
         }
@@ -288,9 +293,9 @@ fn input_loop(o: Sender<ConsoleMessage>, i: HInput, l: Layers, dstip: String) {
     thread::sleep(Duration::from_millis(200));
 }
 
-fn init_screen(scr: Arc<Mutex<Screen>>) -> Sender<ConsoleMessage> {
+fn init_screen(scr: Arc<Mutex<Screen>>, model: Arc<Mutex<Model>>) -> Sender<ConsoleMessage> {
     let (tx, rx) = channel::<ConsoleMessage>();
-    let mut o = HOutput::new();
+    let mut o = HOutput::new(model);
 
     thread::spawn(move || {
         loop { match rx.recv() {
@@ -309,6 +314,9 @@ fn init_screen(scr: Arc<Mutex<Screen>>) -> Sender<ConsoleMessage> {
                     },
                     ConsoleMessage::ScrollDown => {
                         o.scroll_down();
+                    },
+                    ConsoleMessage::Refresh => {
+                        o.refresh();
                     }
                 }
             }
@@ -333,10 +341,12 @@ fn main() {
     // scr is used to synchronized input and output
     let scr = Arc::new(Mutex::new(Screen::new()));
 
-    let output = init_screen(scr.clone());
+    let model = Arc::new(Mutex::new(Model::new()));
+
+    let output = init_screen(scr.clone(), model.clone());
 
     // Input
-    let i = HInput::new(scr);
+    let i = HInput::new(scr, model.clone());
 
     // Creates a thread which waits for messages on a channel to be written to o.
     let status_tx = status_message_loop(output.clone());

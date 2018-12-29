@@ -49,10 +49,18 @@ impl NormalMessage {
     }
 }
 
+fn fm_time() -> String {
+    time::strftime("%d.%m. %R", &time::now()).unwrap()
+}
+
+pub fn raw(o: Sender<ConsoleMessage>, s: String, col: Color) {
+    o.send(ConsoleMessage::TextMessage(
+        NormalMessage::new(format!("{}", s), map_color(col)))
+    ).expect("Error in console::msg");
+}
 
 pub fn msg(o: Sender<ConsoleMessage>, s: String, col: Color) {
-    o.send(ConsoleMessage::TextMessage(
-        NormalMessage::new(s, map_color(col)))).expect("Error in console::msg");
+    raw(o, format!("{} │ {}", fm_time(), s), col);
 }
 
 pub fn error(o: Sender<ConsoleMessage>, s: String) {
@@ -64,24 +72,21 @@ pub fn status(o: Sender<ConsoleMessage>, s: String) {
 }
 
 pub fn new_file(o: Sender<ConsoleMessage>, m: Message, filename: String) {
-    let fm = time::strftime("%R", &time::now()).unwrap();
-    msg(o, format!("{} [{}] received file '{}'", fm, m.get_ip(), filename), Color::BrightGreen);
+    msg(o, format!("[{}] received file '{}'", m.get_ip(), filename), Color::BrightGreen);
 }
 
 pub fn ack_msg(o: Sender<ConsoleMessage>, _id: u64) {
-    let fm = time::strftime("%R", &time::now()).unwrap();
-    msg(o, format!("{} ack", fm), Color::BrightGreen);
+    msg(o, format!("ack"), Color::BrightGreen);
 }
 
 pub fn new_msg(o: Sender<ConsoleMessage>, m: Message) {
 
     let ip = m.get_ip();
     let s  = String::from_utf8(m.get_payload());
-    let fm = time::strftime("%R", &time::now()).unwrap();
 
     match s {
         Ok(s)  => {
-            msg(o.clone(), format!("{} [{}] says: {}", fm, ip, s), Color::Yellow);
+            msg(o.clone(), format!("[{}] {}", ip, s), Color::Yellow);
 
             // TODO configure the command
             if Command::new("notify-send")
@@ -93,7 +98,7 @@ pub fn new_msg(o: Sender<ConsoleMessage>, m: Message) {
             }
         }
         Err(_) => {
-            msg(o, format!("[{}] {} error: could not decode message", ip, fm), Color::BrightRed);
+            msg(o, format!("[{}] error: could not decode message", ip), Color::BrightRed);
         }
     }
 }

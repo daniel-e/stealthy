@@ -21,6 +21,8 @@ use crate::arguments::{parse_arguments, Arguments};
 use crate::console::{ConsoleMessage, Color};
 
 use crate::ui::{UserInput, ControlType, NcursesIn, NcursesOut, Screen};
+use std::time::Duration;
+
 type HInput = NcursesIn;
 type HOutput = NcursesOut;
 
@@ -32,7 +34,7 @@ fn status_message_loop(o: Sender<ConsoleMessage>) -> Sender<String> {
 
     thread::spawn(move || {
         loop { match rx.recv() {
-            Ok(msg) => {
+            Ok(_msg) => {
                 //console::status(o.clone(), msg);
                 // TODO use s.th.  like debug, info, ...
                 //if msg.starts_with("") { // dummy to use variable
@@ -174,20 +176,10 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
     };
 }
 
-fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
-
-    let n = data.len();
-    let msg = Message::file_upload(dstip, without_dirs(&fname), data);
-
-    // TODO no lock here -> if sending wants to write a message it could dead lock
-    let fm = time::strftime("%R", &time::now()).unwrap();
-    console::msg(o.clone(), format!("{} [you] sending file '{}' with {} bytes...", fm, fname, n), Color::Yellow);
-
-    // send message
+fn do_send(o: Sender<ConsoleMessage>, msg: Message, l: &Layers) {
     match l.send(msg) {
         Ok(_) => {
-            let fm = time::strftime("%R", &time::now()).expect("send_file: strftime failed");
-            console::msg(o, format!("{} transmitting...", fm), Color::Blue);
+            console::msg(o, format!("transmitting..."), Color::Blue);
         }
         Err(e) => { match e {
             Errors::MessageTooBig => { console::msg(o, format!("Message too big."), Color::Red); }
@@ -197,25 +189,21 @@ fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers
     }
 }
 
+fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
+
+    let n = data.len();
+    let msg = Message::file_upload(dstip, without_dirs(&fname), data);
+
+    console::msg(o.clone(), format!("[you] sending file '{}' with {} bytes...", fname, n), Color::Yellow);
+    do_send(o, msg, l);
+}
+
 fn send_message(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
 
     let msg = Message::new(dstip, txt.clone().into_bytes());
-    // TODO no lock here -> if sending wants to write a message it could dead lock
-    let fm = time::strftime("%R", &time::now()).unwrap();
-    console::msg(o.clone(), format!("{} [you] says: {}", fm, txt), Color::White);
 
-    // send message
-    match l.send(msg) {
-        Ok(_) => {
-            let fm = time::strftime("%R", &time::now()).unwrap();
-            console::msg(o, format!("{} transmitting...", fm), Color::Blue);
-        }
-        Err(e) => { match e {
-            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), Color::Red); }
-            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), Color::Red); }
-            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), Color::Red); }
-        }}
-    }
+    console::msg(o.clone(), format!("[you] {}", txt), Color::White);
+    do_send(o, msg, l);
 }
 
 fn send_channel(o: Sender<ConsoleMessage>, c: ConsoleMessage) {
@@ -236,30 +224,32 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
 
 fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
     for l in logo::get_logo() {
-        console::msg(o.clone(), l, Color::Green);
+        console::raw(o.clone(), l, Color::Green);
     }
-    console::msg(o.clone(), format!("The most secure ICMP messenger."), Color::BrightGreen);
-    console::msg(o.clone(), format!(""), Color::White);
-    console::msg(o.clone(), format!("┌─────────────────────┬──────────────────┐"), Color::BrightGreen);
-    console::msg(o.clone(), format!("│ Listening on device │ {}               │", args.device), Color::BrightGreen);
-    console::msg(o.clone(), format!("│ Destination IP      │ {:16} │", args.dstip), Color::BrightGreen);
-    console::msg(o.clone(), format!("└─────────────────────┴──────────────────┘"), Color::BrightGreen);
-    console::msg(o.clone(), format!(""), Color::White);
-    console::msg(o.clone(), format!("Type /help to get a list of available commands."), Color::BrightGreen);
+    console::raw(o.clone(), format!("The most secure ICMP messenger."), Color::BrightGreen);
+    console::raw(o.clone(), format!(""), Color::White);
+    console::raw(o.clone(), format!("┌─────────────────────┬──────────────────┐"), Color::BrightGreen);
+    console::raw(o.clone(), format!("│ Listening on device │ {}               │", args.device), Color::BrightGreen);
+    console::raw(o.clone(), format!("│ Talking to IP       │ {:16} │", args.dstip), Color::BrightGreen);
+    console::raw(o.clone(), format!("└─────────────────────┴──────────────────┘"), Color::BrightGreen);
+    console::raw(o.clone(), format!(""), Color::White);
+    console::raw(o.clone(), format!("Type /help to get a list of available commands."), Color::BrightGreen);
+    console::raw(o.clone(), format!("Ctrl+D to quit."), Color::BrightGreen);
 
     if args.hybrid_mode {
         let mut h = Sha1::new();
 
         h.input(&layer.layers.encryption_key());
         let s = insert_delimiter(&h.result_str());
-        console::msg(o.clone(), format!("Hash of encryption key : {}", s), Color::Yellow);
+        console::raw(o.clone(), format!("Hash of encryption key : {}", s), Color::Yellow);
 
         h.reset();
         h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
         let q = insert_delimiter(&h.result_str());
-        console::msg(o.clone(), format!("Hash of your public key: {}", q), Color::Yellow);
+        console::raw(o.clone(), format!("Hash of your public key: {}", q), Color::Yellow);
     }
-    console::msg(o.clone(), format!("Happy chatting...\n"), Color::BrightGreen);
+    console::raw(o.clone(), format!(""), Color::White);
+    console::raw(o.clone(), format!("Happy chatting...\n"), Color::BrightGreen);
 }
 
 
@@ -293,6 +283,9 @@ fn input_loop(o: Sender<ConsoleMessage>, i: HInput, l: Layers, dstip: String) {
         _ => { break; }
     }}
     send_channel(o, ConsoleMessage::Exit);
+
+    // Sleep some time so that the output has some time to reset the terminal.
+    thread::sleep(Duration::from_millis(200));
 }
 
 fn init_screen(scr: Arc<Mutex<Screen>>) -> Sender<ConsoleMessage> {

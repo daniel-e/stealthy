@@ -9,7 +9,6 @@ extern crate crypto as cr;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::time::Duration;
 use std::sync::{Arc, Mutex};
 use term::color;
 use rand::{thread_rng, Rng};
@@ -239,10 +238,15 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
     for l in logo::get_logo() {
         console::msg(o.clone(), l, color::GREEN);
     }
-    console::msg(o.clone(), format!("Welcome to stealthy! The most secure ICMP messenger."), color::YELLOW);
-    console::msg(o.clone(), format!("Type /help to get a list of available commands."), color::YELLOW);
+    console::msg(o.clone(), format!("The most secure ICMP messenger."), color::BRIGHT_GREEN);
     console::msg(o.clone(), format!(""), color::WHITE);
-    console::msg(o.clone(), format!("device is {}, destination ip is {}", args.device, args.dstip), color::WHITE);
+    console::msg(o.clone(), format!("┌─────────────────────┬──────────────────┐"), color::BRIGHT_GREEN);
+    console::msg(o.clone(), format!("│ Listening on device │ {}               │", args.device), color::BRIGHT_GREEN);
+    console::msg(o.clone(), format!("│ Destination IP      │ {:16} │", args.dstip), color::BRIGHT_GREEN);
+    console::msg(o.clone(), format!("└─────────────────────┴──────────────────┘"), color::BRIGHT_GREEN);
+    console::msg(o.clone(), format!(""), color::WHITE);
+    console::msg(o.clone(), format!("Type /help to get a list of available commands."), color::BRIGHT_GREEN);
+
     if args.hybrid_mode {
         let mut h = Sha1::new();
 
@@ -255,7 +259,7 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
         let q = insert_delimiter(&h.result_str());
         console::msg(o.clone(), format!("Hash of your public key: {}", q), color::YELLOW);
     }
-    console::msg(o.clone(), format!("Happy chatting...\n"), color::WHITE);
+    console::msg(o.clone(), format!("Happy chatting...\n"), color::BRIGHT_GREEN);
 }
 
 
@@ -335,7 +339,7 @@ fn main() {
 
     // scr is used to synchronized input and output
     let scr = Arc::new(Mutex::new(Screen::new()));
-    
+
     let output = init_screen(scr.clone());
 
     // Input

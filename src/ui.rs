@@ -49,6 +49,7 @@ static COLOR_YELLOW_ON_BKGD: i16 = 2;
 static COLOR_RED_ON_BKGD: i16 = 3;
 static COLOR_BLUE_ON_BKGD: i16 = 4;
 static COLOR_GREEN_ON_BKGD: i16 = 5;
+static COLOR_WHITE_ON_RED: i16 = 6;
 
 const K_BACKSPACE: i32 = 127;
 
@@ -171,6 +172,8 @@ impl NcursesOut {
 impl NcursesIn {
 
     pub fn new(scr: Arc<Mutex<Screen>>) -> NcursesIn {
+
+        init_pair(COLOR_WHITE_ON_RED, COLOR_WHITE, COLOR_RED);
 
         let mut max_x = 0;
         let mut max_y = 0;

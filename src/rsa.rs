@@ -1,8 +1,5 @@
-extern crate rand;
-extern crate libc;
-
-use self::rand::rngs::OsRng;
-use self::rand::Rng;
+use rand::rngs::OsRng;
+use rand::Rng;
 use std::{iter, ptr};
 
 pub enum BIO {}

@@ -1,5 +1,3 @@
-extern crate term;
-
 use term::color;
 use std::sync::mpsc::Sender;
 use stealthy::Message;

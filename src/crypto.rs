@@ -5,7 +5,7 @@ use std::io::Read;
 use crate::blowfish;
 use crate::rsa;
 use crate::rsatools;
-use super::delivery::{push_value, pop_value, push_slice};
+use crate::delivery::{push_value, pop_value, push_slice};
 
 pub type ResultVec = Result<Vec<u8>, &'static str>;
 

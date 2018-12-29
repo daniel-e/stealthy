@@ -1,5 +1,5 @@
-extern crate rand;
-extern crate time;
+//extern crate rand;
+//extern crate time;
 
 pub type IdType = (u64);
 

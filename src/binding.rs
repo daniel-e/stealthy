@@ -1,13 +1,10 @@
-extern crate libc;
-extern crate time;
-
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Sender, Receiver};
 use std::time::Duration;
 
-use super::{IncomingMessage, Message, Errors, MessageType};
-use super::packet::{Packet, IdType};
+use crate::{IncomingMessage, Message, Errors, MessageType};
+use crate::packet::{Packet, IdType};
 
 const RETRY_TIMEOUT: i64      = 15000;  // TODO
 const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);

@@ -5,33 +5,23 @@ mod rsatools;
 mod arguments;
 mod console;
 
-extern crate getopts;
-extern crate term;
-extern crate stealthy;
-extern crate time;
-extern crate rand;
-extern crate dirs;
-
 extern crate crypto as cr;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
+use std::time::Duration;
+use std::sync::{Arc, Mutex};
 use term::color;
 use rand::{thread_rng, Rng};
 
 use cr::sha1::Sha1;
 use cr::digest::Digest;
 
-use stealthy::{Message, IncomingMessage, Errors, Layers};
+use stealthy::{Message, IncomingMessage, Errors, Layers, Layer};
 use crate::ui::{UserInput, ControlType, NcursesIn, NcursesOut, Screen};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
 use crate::arguments::{parse_arguments, Arguments};
-use stealthy::Layer;
 use crate::console::ConsoleMessage;
-
-use std::time::Duration;
-use std::sync::Arc;
-use std::sync::Mutex;
 
 type HInput = NcursesIn;
 type HOutput = NcursesOut;

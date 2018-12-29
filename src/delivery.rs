@@ -1,12 +1,9 @@
-//extern crate rand;
-
-
 use std::collections::{HashMap, HashSet};
 use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 
-use super::{Message, IncomingMessage, Errors};
+use crate::{Message, IncomingMessage, Errors};
 use crate::binding::Network;
 
 #[derive(Clone)]
@@ -20,7 +17,6 @@ struct SmallMessage {
 #[derive(Clone)]
 struct SmallMessages {
     messages: Vec<SmallMessage>,
-    //acks: Vec<u64>,  /// pending acks
     acks: HashSet<u64>,  /// pending acks
     id: u64
 }

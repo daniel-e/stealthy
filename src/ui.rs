@@ -1,8 +1,5 @@
-extern crate term;
-extern crate ncurses;
-
 use term::color;
-use self::ncurses::*;
+use ncurses::*;
 use std::sync::Arc;
 use std::sync::Mutex;
 

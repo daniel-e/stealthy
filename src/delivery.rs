@@ -28,7 +28,7 @@ pub struct Delivery {
     network_layer: Box<Network>
 }
 
-const MAX_MESSAGE_PART_SIZE: usize = (128 * 200);
+const MAX_MESSAGE_PART_SIZE: usize = (128 * 10);
 
 impl Delivery {
 

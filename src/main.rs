@@ -1,5 +1,4 @@
 mod logo;
-mod ui;
 mod tools;
 mod rsatools;
 mod arguments;
@@ -22,7 +21,7 @@ use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decod
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::{ConsoleMessage, Color};
 
-use crate::ui_termion::{UserInput, ControlType, TermIn, TermOut, Screen};
+use crate::ui_termion::{UserInput, ControlType, TermIn, TermOut};
 use crate::ui_termion::Model;
 
 type HInput = TermIn;
@@ -236,7 +235,7 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
     console::raw(o.clone(), format!("└─────────────────────┴──────────────────┘"), Color::BrightGreen);
     console::raw(o.clone(), format!(""), Color::White);
     console::raw(o.clone(), format!("Type /help to get a list of available commands."), Color::BrightGreen);
-    console::raw(o.clone(), format!("Ctrl+D to quit."), Color::BrightGreen);
+    console::raw(o.clone(), format!("Esc or Ctrl+D to quit."), Color::BrightGreen);
 
     if args.hybrid_mode {
         let mut h = Sha1::new();
@@ -293,14 +292,13 @@ fn input_loop(o: Sender<ConsoleMessage>, mut i: HInput, l: Layers, dstip: String
     thread::sleep(Duration::from_millis(100));
 }
 
-fn init_screen(scr: Arc<Mutex<Screen>>, model: Arc<Mutex<Model>>) -> Sender<ConsoleMessage> {
+fn init_screen(model: Arc<Mutex<Model>>) -> Sender<ConsoleMessage> {
     let (tx, rx) = channel::<ConsoleMessage>();
     let mut o = HOutput::new(model);
 
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
-                let _scr = scr.lock().expect("Could not lock mutex.");
                 match msg {
                     ConsoleMessage::TextMessage(msg) => {
                         o.println(msg.msg, msg.col);
@@ -338,15 +336,12 @@ fn main() {
     // parse command line arguments
 	let args = parse_arguments().expect("Cannot parse arguments");;
 
-    // scr is used to synchronized input and output
-    let scr = Arc::new(Mutex::new(Screen::new()));
-
     let model = Arc::new(Mutex::new(Model::new()));
 
-    let output = init_screen(scr.clone(), model.clone());
+    let output = init_screen(model.clone());
 
     // Input
-    let i = HInput::new(scr, model.clone());
+    let i = HInput::new(model.clone());
 
     // Creates a thread which waits for messages on a channel to be written to o.
     let status_tx = status_message_loop(output.clone());
@@ -354,7 +349,6 @@ fn main() {
     let layer = get_layer(&args, status_tx);
 
     welcome(&args, output.clone(), &layer);
-
 
     // this is the loop which handles messages received via rx
     recv_loop(output.clone(), layer.rx);

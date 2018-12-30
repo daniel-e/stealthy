@@ -290,7 +290,7 @@ fn input_loop(o: Sender<ConsoleMessage>, mut i: HInput, l: Layers, dstip: String
     send_channel(o, ConsoleMessage::Exit);
 
     // Sleep some time so that the output has some time to reset the terminal.
-    thread::sleep(Duration::from_millis(200));
+    thread::sleep(Duration::from_millis(100));
 }
 
 fn init_screen(scr: Arc<Mutex<Screen>>, model: Arc<Mutex<Model>>) -> Sender<ConsoleMessage> {

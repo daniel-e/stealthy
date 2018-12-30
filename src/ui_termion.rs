@@ -72,6 +72,7 @@ impl TermOut {
         let mut stdout = stdout().into_raw_mode().expect("No raw mode.");
 
         write!(stdout, "{}", termion::clear::All);
+        write!(stdout, "{}", termion::cursor::Hide);
         stdout.flush().unwrap();
 
         TermOut {
@@ -80,8 +81,10 @@ impl TermOut {
         }
     }
 
-    pub fn close(&self) {
-
+    pub fn close(&mut self) {
+        write!(self.stdout, "{}{}", termion::clear::All, termion::cursor::Goto(1, 1));
+        write!(self.stdout, "{}", termion::cursor::Show);
+        self.stdout.flush().unwrap();
     }
 
     pub fn println(&mut self, s: String, color: Color) {
@@ -136,32 +139,38 @@ impl TermOut {
     fn redraw(&mut self) {
         self.draw_window();
 
-        {
-            let buf = &self.model.lock().unwrap().buf;
-            let mut y = 2;
-            for e in buf {
-                write!(self.stdout, "{}", termion::cursor::Goto(2, y));
-                y += 1;
-                write!(self.stdout, "{}", e);
-            }
+        let mut model = self.model.lock().unwrap();
+
+        // Write buffer to screen.
+        let buf = &model.buf;
+        let mut y = 2;
+        for e in buf {
+            write!(self.stdout, "{}", termion::cursor::Goto(2, y));
+            y += 1;
+            write!(self.stdout, "{}", e);
         }
 
-        // draw input field
-        {
-            let (maxx, maxy) = TermOut::size();
-            write!(self.stdout, "{}", termion::color::Bg(termion::color::Blue));
-            for x in 2..maxx {
-                write!(self.stdout, "{} ",
-                       termion::cursor::Goto(x, maxy - 1),
+        // Write input field to screen.
 
-                );
-            }
-            let input = self.model.lock().unwrap().input.clone();
-            let s = String::from_utf8(input).unwrap();
+        let (maxx, maxy) = TermOut::size();
+        let input_field_len = (maxx - 2 - 1) as usize; // one character for cursor
 
-            write!(self.stdout, "{}{}", termion::cursor::Goto(2, maxy - 1), s);
-            write!(self.stdout, "{}", termion::color::Bg(termion::color::Reset));
+        write!(self.stdout, "{}", termion::color::Bg(termion::color::Blue));
+        for x in 2..maxx {
+            write!(self.stdout, "{} ", termion::cursor::Goto(x, maxy - 1));
         }
+
+        let mut s = String::from_utf8(model.input.clone()).unwrap();
+        while s.chars().count() > input_field_len {
+            s.remove(0);
+
+        }
+        s.push('▂');
+        write!(self.stdout, "{}{}{}",
+               termion::cursor::Goto(2, maxy - 1),
+               s,
+               termion::color::Bg(termion::color::Reset)
+        );
 
         self.stdout.flush().unwrap();
     }
@@ -198,30 +207,37 @@ impl TermIn {
                 buf.push(b);
                 loop {
                     match self.rx.recv_timeout(Duration::from_millis(2)) {
-                        Ok(b) => {
-                            buf.push(b);
-                        },
-                        _ => {
-                            break;
-                        }
+                        Ok(b) => { buf.push(b); },
+                        _ => { break; }
                     }
                 }
             },
             _ => { return None; }
         };
 
+        let mut model = self.model.lock().unwrap();
+
         if buf.len() == 1 {
             if buf[0] == 27 { // Escape
                 return None;
             } else if buf[0] == 13 { // Enter
-                let s = String::from_utf8(self.model.lock().unwrap().input.clone()).unwrap();
-                self.model.lock().unwrap().input.clear();
+                let s = String::from_utf8(model.input.clone()).unwrap();
+                model.input.clear();
                 return Some(UserInput::Line(s));
+            } else if buf[0] == 127 { // backspace
+                loop {
+                    model.input.pop();
+                    let s = String::from_utf8(model.input.clone());
+                    if s.is_ok() {
+                        break;
+                    }
+                }
+                return Some(UserInput::Refresh);
             }
         }
 
         for b in buf {
-            self.model.lock().unwrap().input.push(b);
+            model.input.push(b);
         }
 
         Some(UserInput::Refresh)

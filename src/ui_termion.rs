@@ -213,12 +213,17 @@ impl TermIn {
         if buf.len() == 1 {
             if buf[0] == 27 { // Escape
                 return None;
+            } else if buf[0] == 13 { // Enter
+                let s = String::from_utf8(self.model.lock().unwrap().input.clone()).unwrap();
+                self.model.lock().unwrap().input.clear();
+                return Some(UserInput::Line(s));
             }
         }
 
         for b in buf {
             self.model.lock().unwrap().input.push(b);
         }
+
         Some(UserInput::Refresh)
     }
 }

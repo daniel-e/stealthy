@@ -36,7 +36,7 @@ fn status_message_loop(o: Sender<ConsoleMessage>) -> Sender<String> {
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(_msg) => {
-                //console::status(o.clone(), msg);
+                console::status(o.clone(), _msg);
                 // TODO use s.th.  like debug, info, ...
                 //if msg.starts_with("") { // dummy to use variable
 
@@ -98,16 +98,23 @@ fn help_message(o: Sender<ConsoleMessage>) {
     let lines = vec![
         "Commands always start with a slash:",
         "/help               - this help message",
-        "arrow up            - scroll to older messages",
-        "arrow down          - scroll to latest messages",
         "/uptime, /up        - uptime",
         "/cat <filename>     - send content of an UTF-8 encoded text file",
-        "/upload <filename>  - send binary file"
+        "/upload <filename>  - send binary file",
+        "Keys:",
+        "arrow up            - scroll to older messages",
+        "arrow down          - scroll to latest messages",
+        "page up             - scroll one page up",
+        "page down           - scroll one page down",
+        "end                 - scroll to last message in buffer",
+        "pos1                - scroll to first message in buffer",
+        "esc or ctrl+d       - quit"
     ];
 
     for v in lines {
         console::msg(o.clone(), String::from(v), Color::White)
     }
+    console::raw(o, String::from(" "), Color::White);
 }
 
 
@@ -228,12 +235,12 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
         console::raw(o.clone(), l, Color::Green);
     }
     console::raw(o.clone(), format!("The most secure ICMP messenger."), Color::BrightGreen);
-    console::raw(o.clone(), format!(""), Color::White);
+    console::raw(o.clone(), format!(" "), Color::White);
     console::raw(o.clone(), format!("┌─────────────────────┬──────────────────┐"), Color::BrightGreen);
     console::raw(o.clone(), format!("│ Listening on device │ {}               │", args.device), Color::BrightGreen);
     console::raw(o.clone(), format!("│ Talking to IP       │ {:16} │", args.dstip), Color::BrightGreen);
     console::raw(o.clone(), format!("└─────────────────────┴──────────────────┘"), Color::BrightGreen);
-    console::raw(o.clone(), format!(""), Color::White);
+    console::raw(o.clone(), format!(" "), Color::White);
     console::raw(o.clone(), format!("Type /help to get a list of available commands."), Color::BrightGreen);
     console::raw(o.clone(), format!("Esc or Ctrl+D to quit."), Color::BrightGreen);
 
@@ -249,8 +256,9 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
         let q = insert_delimiter(&h.result_str());
         console::raw(o.clone(), format!("Hash of your public key: {}", q), Color::Yellow);
     }
-    console::raw(o.clone(), format!(""), Color::White);
-    console::raw(o.clone(), format!("Happy chatting...\n"), Color::BrightGreen);
+    console::raw(o.clone(), format!(" "), Color::White);
+    console::raw(o.clone(), format!("Happy chatting..."), Color::BrightGreen);
+    console::raw(o.clone(), format!(" "), Color::White);
 }
 
 

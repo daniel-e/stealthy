@@ -207,10 +207,12 @@ impl Network {
 		}
 	}
 
+	// This method is called when a new message has been received.
     fn handle_new_message(&self, p: Packet) {
 
         if !self.contains(p.id) { // we are not the sender of the message
             let m = Message::new(p.ip.clone(), p.data.clone());
+			self.status_tx.send(format!("NEW MESSAGE: {}", p.data.len()));
             match self.tx_msg.send(IncomingMessage::New(m)) {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
                 _      => { }
@@ -265,6 +267,8 @@ impl Network {
 
 		let ip  = msg.get_ip();
 		let buf = msg.get_payload();
+
+		self.status_tx.send(format!("binding.rs::send_msg: sending [{}]", buf.len())).expect("Error.");
 
 		if buf.len() > MAX_MESSAGE_SIZE {
 			return Err(Errors::MessageTooBig);

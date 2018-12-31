@@ -14,18 +14,21 @@ use std::sync::mpsc::channel;
 use std::thread;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
+use std::cmp::min;
 
 
 pub struct Model {
     buf: Vec<String>,
     input: Vec<u8>,
+    scroll_offset: usize,
 }
 
 impl Model {
     pub fn new() -> Model {
         Model {
             buf: vec![],
-            input: vec![]
+            input: vec![],
+            scroll_offset: 0,
         }
     }
 }
@@ -76,14 +79,40 @@ impl TermOut {
 
     pub fn println(&mut self, s: String, color: Color) {
 
-        self.model.lock().unwrap().buf.push(s);
+        {
+            let mut model = self.model.lock().unwrap();
+            model.buf.push(s);
+            if model.scroll_offset > 0 {
+                model.scroll_offset += 1;
+            }
+        }
         self.redraw();
     }
 
+    pub fn scroll_up_1(model: &mut Model) {
+        let window_height = TermOut::window_height() as usize;
+        let buffer_lines = TermOut::lines(&model.buf).len();
+
+        if buffer_lines > window_height {
+            let max_off = buffer_lines - window_height;
+            model.scroll_offset = min(max_off, model.scroll_offset + 1);
+        }
+    }
+
+    pub fn scroll_down_1(model: &mut Model) {
+        if model.scroll_offset > 0 {
+            model.scroll_offset -= 1;
+        }
+    }
+
     pub fn scroll_up(&mut self) {
+        TermOut::scroll_up_1(&mut self.model.lock().unwrap());
+        self.refresh();
     }
 
     pub fn scroll_down(&mut self) {
+        TermOut::scroll_down_1(&mut self.model.lock().unwrap());
+        self.refresh();
     }
 
     pub fn refresh(&mut self) {
@@ -123,23 +152,63 @@ impl TermOut {
         ).expect("Error.");
     }
 
+    fn window_height() -> usize {
+        let (_, maxy) = TermOut::size();
+        maxy as usize - 4
+    }
+
+    fn window_width() -> usize {
+        let (maxx, _) = TermOut::size();
+        maxx as usize - 2
+    }
+
+    fn lines(buf: &Vec<String>) -> Vec<String> {
+        let screen_width = TermOut::window_width();
+        let mut buffer: Vec<String> = vec![];
+        for e in buf {
+            // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of
+            // UTF-8 characters
+            let v = e.chars().collect::<Vec<char>>();
+            for chunk in v.chunks(screen_width) {
+                buffer.push(chunk.iter().collect());
+            }
+        }
+        buffer
+    }
+
     fn redraw(&mut self) {
         self.draw_window();
 
         let model = self.model.lock().unwrap();
+        let screen_width = TermOut::window_width();
+        let screen_height = TermOut::window_height();
 
         // Write buffer to screen.
-        let buf = &model.buf;
-        let mut y = 2;
-        for e in buf {
-            write!(self.stdout, "{}", termion::cursor::Goto(2, y)).expect("Error.");
-            y += 1;
-            write!(self.stdout, "{}", e).expect("Error.");
+
+        let buffer = TermOut::lines(&model.buf);
+        let n = buffer.len();
+        let mut p = 0;
+        let buf = if n <= screen_height {
+            buffer.clone()
+        } else {
+            // n - screen_height: index for scroll_offset = 0
+            p = n - screen_height - model.scroll_offset;
+            buffer.iter().skip(p).take(screen_height).cloned().collect()
+        };
+
+        for (y, line) in buf.iter().enumerate() {
+            let mut s = line.clone();
+            while s.chars().count() < screen_width {
+                s.push(' ');
+            }
+            write!(self.stdout, "{}{}", termion::cursor::Goto(2, y as u16 + 2), s).expect("Error.");
         }
 
-        // Write input field to screen.
+
         let (maxx, maxy) = TermOut::size();
-        let input_field_len = (maxx - 2 - 1) as usize; // one character for cursor
+
+        // Write input field to screen.
+        let input_field_len = maxx - 2 - 1; // one character for cursor
 
         write!(self.stdout, "{}", termion::color::Bg(termion::color::Blue)).expect("Error.");
         for x in 2..maxx {
@@ -147,7 +216,7 @@ impl TermOut {
         }
 
         let mut s = String::from_utf8(model.input.clone()).unwrap();
-        while s.chars().count() > input_field_len {
+        while s.chars().count() > input_field_len as usize {
             s.remove(0);
 
         }
@@ -157,6 +226,20 @@ impl TermOut {
                s,
                termion::color::Bg(termion::color::Reset)
         ).expect("Error.");
+
+        // Scroll status.
+        if model.scroll_offset > 0 {
+            let s = format!("line:{}/{}", p, buffer.len());
+            let x = maxx as usize - s.len();
+            write!(self.stdout, "{}{}{}{}{}{}",
+                   termion::cursor::Goto(x as u16, 2),
+                   termion::color::Bg(termion::color::Red),
+                   termion::color::Fg(termion::color::LightWhite),
+                   s,
+                   termion::color::Bg(termion::color::Reset),
+                   termion::color::Fg(termion::color::Reset)
+            ).expect("Error.");
+        }
 
         self.stdout.flush().unwrap();
     }
@@ -205,33 +288,51 @@ impl TermIn {
         //println!("{}, {:?}", buf.len(), buf);
         //self.rx.recv();
 
-        if buf.len() == 1 {
-
-            if buf[0] == 27 { // Escape
-                return None;
-            } else if buf[0] == 4 { // Ctrl + D
-                return None;
-            } else if buf[0] == 13 { // Enter
-                let s = String::from_utf8(model.input.clone()).unwrap();
-                model.input.clear();
-                return Some(UserInput::Line(s));
-            } else if buf[0] == 127 { // backspace
-                loop {
-                    model.input.pop();
-                    let s = String::from_utf8(model.input.clone());
-                    if s.is_ok() {
-                        break;
-                    }
+        if buf == vec![27] {         // Escape
+            return None;
+        } else if buf == vec![4] {   // Ctrl + D
+            return None;
+        } else if buf == vec![13] {  // Enter
+            let s = String::from_utf8(model.input.clone()).unwrap();
+            model.input.clear();
+            return Some(UserInput::Line(s));
+        } else if buf == vec![127] { // backspace
+            loop {
+                model.input.pop();
+                let s = String::from_utf8(model.input.clone());
+                if s.is_ok() {
+                    break;
                 }
-                return Some(UserInput::Refresh);
             }
+            return Some(UserInput::Refresh);
+        } else if buf == vec![27, 91, 65] {  // Arrow up
+            Some(UserInput::Control(ControlType::ArrowUp))
+        } else if buf == vec![27, 91, 66] {  // Arrow down
+            Some(UserInput::Control(ControlType::ArrowDown))
+        } else if buf == vec![27, 91, 70] {  // End
+            model.scroll_offset = 0;
+            Some(UserInput::Refresh)
+        } else if buf.len() < 3 {
+            for b in String::from_utf8(buf)
+                .unwrap().chars().filter(|c| !c.is_control()).collect::<String>().as_bytes() {
+                model.input.push(*b);
+            }
+            Some(UserInput::Refresh)
+        } else if buf == vec![27, 91, 53, 126] { // Page up
+            for _ in 0..TermOut::window_height() {
+                TermOut::scroll_up_1(&mut model);
+            }
+            Some(UserInput::Refresh)
+        } else if buf == vec![27, 91, 54, 126] { // Page down
+            for _ in 0..TermOut::window_height() {
+                TermOut::scroll_down_1(&mut model);
+            }
+            Some(UserInput::Refresh)
+        } else {
+            //println!("{}, {:?}", buf.len(), buf);
+            //self.rx.recv();
+            Some(UserInput::Refresh)
         }
-
-        for b in buf {
-            model.input.push(b);
-        }
-
-        Some(UserInput::Refresh)
     }
 }
 

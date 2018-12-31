@@ -4,7 +4,7 @@ mod packet;
 mod rsa;
 mod rsatools;
 mod blowfish;
-mod crypto;
+//mod crypto;
 
 use std::thread;
 use std::sync::Arc;
@@ -13,6 +13,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use crate::crypto::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
 use crate::delivery::Delivery;
 use crate::binding::Network;
+use crypto::sha2::Sha256;
 
 pub enum ErrorType {
     DecryptionError,
@@ -121,6 +122,12 @@ impl Message {
         let payload = self.get_payload();
         let (_, data) = payload.split_at(pos.unwrap() + 1);
         Some(data.to_vec())
+    }
+
+    pub fn sha2(&self) -> String {
+        let mut sha2 = Sha256::new();
+        sha2.input(&self.buf);
+        sha2.result_str()
     }
 
     fn create(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
@@ -242,9 +249,13 @@ impl Layers {
 
         match m {
             IncomingMessage::New(msg) => {
+                status_tx.send(format!("[Layers::handle_message()] new message {}", msg.buf.len())).unwrap();
                 match enc.decrypt(&msg.buf) {
                     Ok(buf) => Some(IncomingMessage::New(msg.set_payload(buf))),
-                    _ => None
+                    Err(mg) => {
+                        status_tx.send(format!("[Layers::handle_message()] decrypt returned with error. {}", mg)).unwrap();
+                        None
+                    }
                 }
             },
             IncomingMessage::FileUpload(msg) => {

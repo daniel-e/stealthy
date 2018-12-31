@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <pcap.h>
 #include <pthread.h>
+#include <stdio.h>
 
 #include "net.h"
 
@@ -178,6 +179,11 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 	char      buf[128];
 	u_int32_t size_ethernet = SIZE_ETHERNET;
 
+#if 1
+    FILE* f;
+    f = fopen("/tmp/icmp.log", "a");
+#endif
+
 	// check if this is already an IP packet; otherwise it could be an etheret
 	// frame
 	if (check_ip_packet(h, packet) == 0) {
@@ -202,6 +208,11 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 	// check length of packet
 	if (iplen < iphdrlen * 4) {
 		a->cb(a->target, 0, 0, INVALID_IP_LENGTH, 0);
+#if 1
+		fprintf(f, "Packet has invalid length.\n");
+		fflush(f);
+		fclose(f);
+#endif
 		return;
 	}
 	// check protocol
@@ -212,6 +223,11 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 
 	if (h->len < size_ethernet + iphdrlen * 4 + sizeof(struct icmp)) {
 		a->cb(a->target, 0, 0, INVALID, 0);
+#if 1
+		fprintf(f, "Packet has invalid length (2).\n");
+		fflush(f);
+		fclose(f);
+#endif
 		return;
 	}
 
@@ -235,14 +251,29 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 
 	if (iphdrlen * 4 + sizeof(struct icmp) > iplen) {
 		a->cb(a->target, 0, 0, INVALID, 0);
+#if 1
+		fprintf(f, "Packet has invalid length (3).\n");
+		fflush(f);
+		fclose(f);
+#endif
 		return;
 	}
 
 	if (h->len < size_ethernet + iphdrlen * 4 + sizeof(struct icmp) + datalen) {
 		a->cb(a->target, 0, 0, INVALID, 0);
+#if 1
+		fprintf(f, "Packet has invalid length (4).\n");
+		fflush(f);
+		fclose(f);
+#endif
 		return;
 	}
 
+#if 1
+		fprintf(f, "Calling callback. datalen = %d.\n", datalen);
+		fflush(f);
+		fclose(f);
+#endif
 	a->cb(a->target, (const char*) packet, datalen, type, buf);
 }
 

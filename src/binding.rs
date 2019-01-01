@@ -130,9 +130,11 @@ impl Network {
 			let r = recv_callback(&mut *self, sdev.as_ptr(), callback);
 			match r {
 				-1 => {
+					#[cfg(feature="debugout")]
 					self.status_tx.send(String::from("[Network::init_callback] failed")).unwrap();
 				},
 				_ => {
+					#[cfg(feature="debugout")]
 					self.status_tx.send(String::from("[Network::init_callback] network initialized)")).unwrap();
 				}
 			}
@@ -142,6 +144,7 @@ impl Network {
 	// This method is called with the encrypted content in buf.
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
 
+		#[cfg(feature="debugout")]
 		self.status_tx.send(String::from("[Network::recv_packet()] called.")).expect("send failed");
 
 		if len == 0 {
@@ -156,6 +159,15 @@ impl Network {
 		// TODO error handling
 		//self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
 
+		#[cfg(feature="debugout")]
+		unsafe {
+			let mut vv: Vec<u8> = vec![];
+			for i in 0..len {
+				vv.push(*buf.offset(i as isize));
+			}
+			self.status_tx.send(format!("[Network::recv_packet()] new message; len = {}, {:?}", len, vv)).unwrap();
+		}
+
 		let r = Packet::deserialize(buf, len, ip);
 		// The payload in the packet in r is still encrypted.
 		match r {
@@ -163,16 +175,19 @@ impl Network {
 				if p.is_file_upload() {
 					self.handle_file_upload(p);
 				} else if p.is_new_message() {
+					#[cfg(feature="debugout")]
 					self.status_tx.send(String::from("[Network::recv_packet()] new message")).unwrap();
                     self.handle_new_message(p);
                 } else if p.is_ack() {
 					//self.status_tx.send(String::from("[Network::recv_packet()] ack")).expect("bindings:ack failed");
                     self.handle_ack(p);
                 } else {
+					#[cfg(feature="debugout")]
 					self.status_tx.send(String::from("[Network::recv_packet()] unknown packet type")).unwrap();
                 }
 			},
 			None => {
+				#[cfg(feature="debugout")]
 				self.status_tx.send(String::from("[Network::recv_packet()] deserialization failed")).unwrap();
 			}
 		}
@@ -212,11 +227,15 @@ impl Network {
 
         if !self.contains(p.id) { // we are not the sender of the message
             let m = Message::new(p.ip.clone(), p.data.clone());
-			self.status_tx.send(format!("NEW MESSAGE: {}", p.data.len()));
+
+			#[cfg(feature="debugout")]
+			self.status_tx.send(format!("NEW MESSAGE: {} {}", p.data.len(), m.sha2())).unwrap();
+
             match self.tx_msg.send(IncomingMessage::New(m)) {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
                 _      => { }
             }
+			#[cfg(feature="debugout")]
 			self.status_tx.send(String::from("binding.rs::sending ack")).expect("Could not send.");
             Network::transmit(Packet::create_ack(p));
             // TODO error
@@ -268,7 +287,8 @@ impl Network {
 		let ip  = msg.get_ip();
 		let buf = msg.get_payload();
 
-		self.status_tx.send(format!("binding.rs::send_msg: sending [{}]", buf.len())).expect("Error.");
+		#[cfg(feature="debugout")]
+		self.status_tx.send(format!("binding.rs::send_msg: sending [{}] [{}]", buf.len(), msg.sha2())).expect("Error.");
 
 		if buf.len() > MAX_MESSAGE_SIZE {
 			return Err(Errors::MessageTooBig);
@@ -285,7 +305,9 @@ impl Network {
 		// is received before message is sent.
 		self.push_packet(p.clone());
 
+		#[cfg(feature="debugout")]
 		self.status_tx.send(String::from("binding.rs::sending packet")).expect("Could not send.");
+
 		if Network::transmit(p.clone()) {
 			Ok(p.id)
 		} else {

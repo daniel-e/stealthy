@@ -208,7 +208,7 @@ impl RSA {
 #[cfg(test)]
 mod tests {
 
-    use ::crypto::read_file;
+    use ::cryp::read_file;
     use ::rsa::RSA;
 
     #[test]

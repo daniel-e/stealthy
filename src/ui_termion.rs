@@ -59,38 +59,35 @@ impl TermOut {
 
     pub fn new(model: Arc<Mutex<Model>>) -> TermOut {
 
-        let mut stdout = stdout().into_raw_mode().expect("No raw mode.");
-
-        write!(stdout, "{}", termion::clear::All).expect("Error.");
-        write!(stdout, "{}", termion::cursor::Hide).expect("Error.");
-        stdout.flush().unwrap();
-
         TermOut {
-            stdout: stdout,
+            stdout: stdout().into_raw_mode().expect("No raw mode possible."),
             model: model
-        }
+        }.init()
     }
 
     pub fn close(&mut self) {
-        write!(self.stdout, "{}{}", termion::clear::All, termion::cursor::Goto(1, 1)).expect("Error.");
-        write!(self.stdout, "{}", termion::cursor::Show).expect("Error.");
-        self.stdout.flush().unwrap();
+        write!(self.stdout, "{}{}{}",
+               termion::clear::All,
+               termion::cursor::Goto(1, 1),
+               termion::cursor::Show
+        ).expect("Write error.");
+        self.flush();
     }
 
     pub fn println(&mut self, s: String, color: Color) {
 
         {
             let mut model = self.model.lock().unwrap();
-            model.buf.push(s);
             if model.scroll_offset > 0 {
-                model.scroll_offset += 1;
+                model.scroll_offset += TermOut::split_line(&s).len();
             }
+            model.buf.push(s);
         }
         self.redraw();
     }
 
     pub fn scroll_up_1(model: &mut Model) {
-        let window_height = TermOut::window_height() as usize;
+        let window_height = TermOut::window_height();
         let buffer_lines = TermOut::lines(&model.buf).len();
 
         if buffer_lines > window_height {
@@ -117,6 +114,21 @@ impl TermOut {
 
     pub fn refresh(&mut self) {
         self.redraw();
+    }
+
+    // ===========================================================================================
+
+    fn init(mut self) -> TermOut {
+        write!(self.stdout, "{}{}",
+               termion::clear::All,   // clear screen
+               termion::cursor::Hide  // hide cursor
+        ).expect("Error.");
+        self.flush();
+        self
+    }
+
+    fn flush(&mut self) {
+        self.stdout.flush().expect("Flush error.");
     }
 
     // ===========================================================================================
@@ -153,27 +165,26 @@ impl TermOut {
     }
 
     fn window_height() -> usize {
-        let (_, maxy) = TermOut::size();
-        maxy as usize - 4
+        TermOut::size().1 as usize - 4
     }
 
     fn window_width() -> usize {
-        let (maxx, _) = TermOut::size();
-        maxx as usize - 2
+        TermOut::size().0 as usize - 2
+    }
+
+    fn split_line(s: &String) -> Vec<String> {
+        // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of UTF-8 characters
+        s.chars().collect::<Vec<char>>()
+            .chunks(TermOut::window_width())
+            .map(|x| x.iter().collect())
+            .collect()
     }
 
     fn lines(buf: &Vec<String>) -> Vec<String> {
-        let screen_width = TermOut::window_width();
-        let mut buffer: Vec<String> = vec![];
-        for e in buf {
-            // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of
-            // UTF-8 characters
-            let v = e.chars().collect::<Vec<char>>();
-            for chunk in v.chunks(screen_width) {
-                buffer.push(chunk.iter().collect());
-            }
-        }
-        buffer
+        buf.iter()
+            .map(|v| TermOut::split_line(v))
+            .flatten()
+            .collect()
     }
 
     fn redraw(&mut self) {
@@ -284,9 +295,6 @@ impl TermIn {
         };
 
         let mut model = self.model.lock().unwrap();
-
-        //println!("{}, {:?}", buf.len(), buf);
-        //self.rx.recv();
 
         if buf == vec![27] {         // Escape
             return None;

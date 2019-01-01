@@ -6,12 +6,30 @@ use std::sync::mpsc::{Receiver, Sender};
 use crate::{Message, IncomingMessage, Errors};
 use crate::binding::Network;
 
+#[cfg(feature="debugout")]
+use crypto::sha2::Sha256;
+#[cfg(feature="debugout")]
+use crypto::digest::Digest;
+
 #[derive(Clone)]
 struct SmallMessage {
     buf: Vec<u8>,
     seq: u32,
     id : u64,
     n  : u32,
+}
+
+#[cfg(feature="debugout")]
+impl SmallMessage {
+    pub fn sha2(&self) -> String {
+        let mut sha2 = Sha256::new();
+        sha2.input(&self.buf);
+        sha2.result_str()
+    }
+
+    pub fn as_string(&self) -> String {
+        format!("{} {} {} {} {:?}", self.buf.len(), self.n, self.id, self.seq, self.buf)
+    }
 }
 
 #[derive(Clone)]
@@ -25,22 +43,24 @@ pub struct Delivery {
     pending      : Arc<Mutex<Vec<SmallMessages>>>,
     incoming     : Arc<Mutex<HashMap<u64, HashMap<u32, SmallMessage>>>>,
     tx           : Sender<IncomingMessage>,
-    network_layer: Box<Network>
+    network_layer: Box<Network>,
+    _status_tx   : Sender<String>
 }
 
-const MAX_MESSAGE_PART_SIZE: usize = (128 * 1);
+const MAX_MESSAGE_PART_SIZE: usize = 8192;
 
 impl Delivery {
 
     /// Via rx1 this layer receives incoming messages from the
     /// network layer (message with encrypted payload).
-    pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>) -> Delivery {
+    pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>, status_tx: Sender<String>) -> Delivery {
 
         let d = Delivery {
             pending: Arc::new(Mutex::new(vec![])),
             tx: tx,
             network_layer: n,
             incoming: Arc::new(Mutex::new(HashMap::new())),
+            _status_tx: status_tx,
         };
 
         d.init_rx(rx);
@@ -91,6 +111,9 @@ impl Delivery {
         let queue    = self.pending.clone();
         let incoming = self.incoming.clone();
 
+        #[cfg(feature="debugout")]
+        let stx = self._status_tx.clone();
+
 		thread::spawn(move || { loop { 
             match rx.recv() {
                 Ok(msg) => {
@@ -117,6 +140,8 @@ impl Delivery {
                         IncomingMessage::New(m) => { // TODO beautify
                             match Delivery::deserialize(&m.buf) {
                                 Some(small_msg) => {
+                                    #[cfg(feature="debugout")]
+                                    stx.send(format!("delivery.rs::deserialize result hash: {} [{}]", small_msg.sha2(), small_msg.as_string())).unwrap();
                                     let r = Delivery::insert_packet(incoming.clone(), small_msg);
                                     if r.is_some() {
                                         // The payload is still encrypted.
@@ -167,6 +192,8 @@ impl Delivery {
 
         // split messages and send them via the network layer
         for i in &small_messages.messages {
+            #[cfg(feature="debugout")]
+            self._status_tx.send(format!("delivery.rs::send_msg with hash {} [{}]", i.sha2(), i.as_string())).unwrap();
             let message = msg.set_payload(Delivery::serialize(i));
 
             match self.network_layer.send_msg(message) {
@@ -211,11 +238,11 @@ impl Delivery {
     fn serialize(m: &SmallMessage) -> Vec<u8> {
 
         let mut v: Vec<u8> = Vec::new();
-        v.push(1);                            // version u8
+        v.push(1);                                  // version u8
         push_value(&mut v, m.id, 8);          // id u64
         push_value(&mut v, m.n as u64, 4);    // number of messages u32
         push_value(&mut v, m.seq as u64, 4);  // seq u32
-        push_slice(&mut v, &m.buf);           // message: variable len
+        push_slice(&mut v, &m.buf);                   // message: variable len
         v
     }
 

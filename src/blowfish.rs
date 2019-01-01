@@ -186,7 +186,7 @@ mod tests {
         s
     }
 
-    use ::crypto::{from_hex};
+    use ::cryp::{from_hex};
     use super::Blowfish;
 
     #[test]

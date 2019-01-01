@@ -4,16 +4,17 @@ mod packet;
 mod rsa;
 mod rsatools;
 mod blowfish;
-//mod crypto;
+mod cryp;
 
 use std::thread;
 use std::sync::Arc;
 use std::sync::mpsc::{channel, Receiver, Sender};
 
-use crate::crypto::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
+use crate::cryp::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
 use crate::delivery::Delivery;
 use crate::binding::Network;
 use crypto::sha2::Sha256;
+use crypto::digest::Digest;
 
 pub enum ErrorType {
     DecryptionError,
@@ -130,6 +131,10 @@ impl Message {
         sha2.result_str()
     }
 
+    pub fn some_bytes(&self) -> Vec<u8> {
+        self.buf.iter().take(20).cloned().collect()
+    }
+
     fn create(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
 		Message {
 			ip: ip,
@@ -188,7 +193,12 @@ impl Layers {
         let (tx1, rx1) = channel();
         let (tx2, rx2) = channel();
         Ok(Layers::new(e,
-            Delivery::new(Network::new(device, tx1, status_tx.clone()), tx2, rx1),
+            Delivery::new(
+                Network::new(device, tx1, status_tx.clone()),
+                tx2,
+                rx1,
+                status_tx.clone(),
+            ),
             rx2,
             status_tx
         ))
@@ -242,18 +252,22 @@ impl Layers {
 
     /// Decrypts incoming messages of type "new" or returns the message without
     /// modification if it is not of type "new".
-    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>, status_tx: Sender<String>) -> Option<IncomingMessage> {
+    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>, _status_tx: Sender<String>) -> Option<IncomingMessage> {
 
         // TODO error handling
-        status_tx.send(String::from("[Layers::handle_message()] decrypting message")).unwrap();
+        #[cfg(feature="debugout")]
+        _status_tx.send(String::from("[Layers::handle_message()] decrypting message")).unwrap();
 
         match m {
             IncomingMessage::New(msg) => {
-                status_tx.send(format!("[Layers::handle_message()] new message {}", msg.buf.len())).unwrap();
+                #[cfg(feature="debugout")]
+                _status_tx.send(format!("[Layers::handle_message()] new message {}", msg.buf.len())).unwrap();
+
                 match enc.decrypt(&msg.buf) {
                     Ok(buf) => Some(IncomingMessage::New(msg.set_payload(buf))),
-                    Err(mg) => {
-                        status_tx.send(format!("[Layers::handle_message()] decrypt returned with error. {}", mg)).unwrap();
+                    Err(_m) => {
+                        #[cfg(feature="debugout")]
+                        _status_tx.send(format!("[Layers::handle_message()] decrypt returned with error. {}", _m)).unwrap();
                         None
                     }
                 }

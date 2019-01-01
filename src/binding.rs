@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use crate::{IncomingMessage, Message, Errors, MessageType};
 use crate::packet::{Packet, IdType};
+use std::collections::HashMap;
 
 const RETRY_TIMEOUT: i64      = 15000;  // TODO
 const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);
@@ -80,10 +81,10 @@ impl PendingPacket {
 	}
 }
 
-struct SharedData {
+pub struct SharedData {
 	// Packets that have been transmitted and for which we
 	// are waiting for the acknowledge.
-	packets          : Vec<PendingPacket>,
+	packets          : HashMap<u64, PendingPacket>,
 }
 
 
@@ -103,7 +104,7 @@ impl Network {
 	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
-			packets : vec![],
+			packets : HashMap::new(),
 		}));
 
 		// Network must be on the heap because of the callback function.
@@ -123,7 +124,7 @@ impl Network {
 			thread::sleep(Duration::from_millis(1000));
 			let mut r = vec![];
 			{
-				for pp in &mut k.lock().unwrap().packets {
+				for pp in &mut k.lock().unwrap().packets.values_mut() {
 					if current_millis() > pp.millis + RETRY_TIMEOUT {
 						r.push(pp.p.clone());
 						pp.millis = current_millis();
@@ -208,14 +209,10 @@ impl Network {
 
     fn contains(&self, id: IdType) -> bool {
 
-        let shared = self.shared.clone();
-        let v = shared.lock().expect("binding::contains: lock failes");
-        for pp in &v.packets {
-            if pp.p.id == id {
-                return true;
-            }
-        }
-        false
+		self.shared.lock()
+			.expect("Cannot lock.")
+			.packets
+			.contains_key(&id)
     }
 
 	// Packet could be one of a lot of packets.
@@ -256,28 +253,13 @@ impl Network {
     }
 
     fn handle_ack(&mut self, p: Packet) {
-
-        let shared = self.shared.clone();
-        let mut v = shared.lock().expect("binding::handle_ack: lock failed");
-        let mut c = 0;
-        let mut b: bool = false;
-
-        for pp in &v.packets { // search the id
-            if pp.p.id == p.id {
-                b = true;
-                break;
-            }
-            c += 1;
-        }
-        if b {
-			//println!("TTT removing");
-            v.packets.swap_remove(c);
-            match self.tx_msg.send(IncomingMessage::Ack(p.id)) {
-                Err(_) => println!("handle_ack: could not deliver ack to upper layer"),
-                _      => { }
-            }
-        }
-  }
+		if self.shared.lock()
+			.expect("Lock failed.")
+			.packets
+			.remove(&p.id).is_some() {
+			self.tx_msg.send(IncomingMessage::Ack(p.id)).expect("Send failed.");
+		}
+  	}
 
 	/// message format:
 	/// u8 : version { 1 }
@@ -295,63 +277,62 @@ impl Network {
 	///
 	/// ip  = IPv4 of the receiver
 	/// buf = data to be transmitted to the receiver
-	pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
+	pub fn send_msg(msg: Message, shared: Arc<Mutex<SharedData>>, mini_id: u64) -> Result<u64, Errors> {
 
 		let ip  = msg.get_ip();
 		let buf = msg.get_payload();
-
-		#[cfg(feature="debugout")]
-		self.status_tx.send(format!("binding.rs::send_msg: sending [{}] [{}]", buf.len(), msg.sha2())).expect("Error.");
 
 		if buf.len() > MAX_MESSAGE_SIZE {
 			return Err(Errors::MessageTooBig);
 		}
 
 		let p = match msg.typ {
-			MessageType::FileUpload => Packet::file_upload(buf, ip),
-			_ => Packet::new(buf, ip)
+			MessageType::FileUpload => Packet::file_upload(buf, ip, mini_id),
+			_ => Packet::new(buf, ip, mini_id)
 		};
 
-		self.wait_for_queue();
+		Network::wait_for_queue(shared.clone());
 
 		// Push message before sending it. Otherwise there could be a race condition that the ACK
 		// is received before message is sent.
-		self.push_packet(p.clone());
+		Network::add_packet(shared.clone(), p.clone());
 
-		#[cfg(feature="debugout")]
-		self.status_tx.send(String::from("binding.rs::sending packet")).expect("Could not send.");
-
-		if Network::transmit(p.clone()) {
-			Ok(p.id)
+		let id = p.id;
+		if Network::transmit(p) {
+			Ok(id)
 		} else {
-			self.pop_packet();
+			Network::remove_packet(shared.clone(), id);
 			Err(Errors::SendFailed)
 		}
 	}
 
-	fn pop_packet(&self) {
-		self.shared.lock()
-			.expect("binding::push_packet: lock failed")
-			.packets
-			.pop();
+	pub fn shared_data(&self) -> Arc<Mutex<SharedData>> {
+		self.shared.clone()
 	}
 
-	fn push_packet(&self, p: Packet) {
-		self.shared.lock()
+	fn remove_packet(shared: Arc<Mutex<SharedData>>, id: u64) {
+		shared.lock()
 			.expect("binding::push_packet: lock failed")
 			.packets
-			.push(PendingPacket::new(p, current_millis()));
+			.remove(&id);
 	}
 
-	fn queue_size(&self) -> usize {
-		self.shared.lock()
+	fn add_packet(shared: Arc<Mutex<SharedData>>, p: Packet) {
+		shared.lock()
+			.expect("binding::push_packet: lock failed")
+			.packets
+			.insert(p.id, PendingPacket::new(p, current_millis()));
+	}
+
+	fn queue_size(shared: Arc<Mutex<SharedData>>) -> usize {
+		shared.lock()
 			.expect("binding::queue_size failed")
 			.packets
 			.len()
 	}
 
-	fn wait_for_queue(&self) {
-		while self.queue_size() > 1000 {
+	fn wait_for_queue(shared: Arc<Mutex<SharedData>>) {
+		while Network::queue_size(shared.clone()) > 1000 {
 			thread::sleep(Duration::from_millis(50));
 		}
 	}

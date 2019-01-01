@@ -3,13 +3,14 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 
-use crate::{Message, IncomingMessage, Errors};
+use crate::{Message, IncomingMessage};
 use crate::binding::Network;
 
 #[cfg(feature="debugout")]
 use crypto::sha2::Sha256;
 #[cfg(feature="debugout")]
 use crypto::digest::Digest;
+use crate::binding::SharedData;
 
 #[derive(Clone)]
 struct SmallMessage {
@@ -17,6 +18,7 @@ struct SmallMessage {
     seq: u32,
     id : u64,
     n  : u32,
+    mini_id: u64,
 }
 
 #[cfg(feature="debugout")]
@@ -33,14 +35,14 @@ impl SmallMessage {
 }
 
 #[derive(Clone)]
-struct SmallMessages {
+pub struct SmallMessages {
     messages: Vec<SmallMessage>,
     acks: HashSet<u64>,  /// pending acks
     id: u64
 }
 
 pub struct Delivery {
-    pending      : Arc<Mutex<Vec<SmallMessages>>>,
+    pub pending  : Arc<Mutex<Vec<SmallMessages>>>,
     incoming     : Arc<Mutex<HashMap<u64, HashMap<u32, SmallMessage>>>>,
     tx           : Sender<IncomingMessage>,
     network_layer: Box<Network>,
@@ -183,27 +185,37 @@ impl Delivery {
         }});
     }
 
-    pub fn send_msg(&self, msg: Message, id: u64) -> Result<(), Errors> {
+    pub fn get_pending(&self) -> Arc<Mutex<Vec<SmallMessages>>> {
+        self.pending.clone()
+    }
+
+    pub fn get_shared(&self) -> Arc<Mutex<SharedData>> {
+        self.network_layer.shared_data()
+    }
+
+    pub fn send_msg(msg: Message, id: u64, pending: Arc<Mutex<Vec<SmallMessages>>>, shared: Arc<Mutex<SharedData>>, status_tx: Sender<String>) -> SendObject {
 
         // Split big message into smaller messages.
         let mut small_messages = Self::split_message(&msg, id);
 
-        let mut queue = self.pending.lock().expect("delivery::send_msg: pending failed");
-
-        // split messages and send them via the network layer
-        for i in &small_messages.messages {
-            #[cfg(feature="debugout")]
-            self._status_tx.send(format!("delivery.rs::send_msg with hash {} [{}]", i.sha2(), i.as_string())).unwrap();
-            let message = msg.set_payload(Delivery::serialize(i));
-
-            match self.network_layer.send_msg(message) {
-                Ok(id) => { small_messages.acks.insert(id); }
-                Err(e) => { return Err(e); }
-            }
+        // Save ids for acks.
+        let j = &small_messages.messages;
+        for i in j {
+            small_messages.acks.insert(i.mini_id);
         }
 
-        queue.push(small_messages);
-        Ok(())
+        pending.lock()
+            .expect("Could not lock.")
+            .push(small_messages.clone());
+
+        let o = SendObject {
+            msg,
+            small_messages,
+            shared,
+            status_tx,
+        };
+
+        o
     }
 
     fn split_message(msg: &Message, id: u64) -> SmallMessages {
@@ -218,8 +230,9 @@ impl Delivery {
             parts.push(SmallMessage {
                 buf: win.to_vec(),
                 seq: i,
-                id: id,
+                id: id,  // id from the big message
                 n: n as u32,
+                mini_id: rand::random::<u64>(),
             });
             i += 1;
         }
@@ -266,8 +279,34 @@ impl Delivery {
             buf: v.clone(),
             seq: seq,
             id : id,
-            n  : n
+            n  : n,
+            mini_id: 0,
         })
+    }
+}
+
+pub struct SendObject {
+    msg: Message,
+    small_messages: SmallMessages,
+    shared: Arc<Mutex<SharedData>>,
+    status_tx: Sender<String>,
+}
+
+impl SendObject {
+    pub fn run(&self) {
+        for i in &self.small_messages.messages {
+            let message = self.msg.set_payload(Delivery::serialize(i));
+            match Network::send_msg(message, self.shared.clone(), i.mini_id) {
+                Ok(id) => {
+                    //small_messages.acks.insert(i.mini_id);
+                }
+                Err(_) => {
+                    self.status_tx.send(format!("delivery.rs::send_msg failed.")).expect("Send failed.");
+                    // TODO remove small_message from delivery.rs:Delivery:self.pending on error
+                    break;
+                }
+            }
+        }
     }
 }
 

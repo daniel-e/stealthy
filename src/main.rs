@@ -186,15 +186,8 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
     };
 }
 
-fn do_send(msg: Message, l: &Layers, id: u64) -> Result<(), String> {
-    match l.send(msg, id) {
-        Ok(()) => Ok(()),
-        Err(e) => { match e {
-            Errors::MessageTooBig => Err(format!("Message too big.")),
-            Errors::SendFailed => Err(format!("Sending of message failed.")),
-            Errors::EncryptionError => Err(format!("Encryption failed.")),
-        }}
-    }
+fn do_send(msg: Message, l: &Layers, id: u64, background: bool) {
+    l.send(msg, id, background);
 }
 
 fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
@@ -210,13 +203,7 @@ fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers
             ItemType::MyMessage
         ).symbol(Symbol::Transmitting).id(id)
     );
-
-    match do_send(msg, l, id) {
-        Ok(()) => {},
-        Err(msg) => {
-            console::msg(o.clone(), msg, ItemType::Error);
-        }
-    }
+    do_send(msg, l, id, true);
 }
 
 fn send_message(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
@@ -231,12 +218,7 @@ fn send_message(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Strin
             ItemType::MyMessage
         ).symbol(Symbol::Transmitting).id(id)
     );
-    match do_send(msg, l, id) {
-        Ok(()) => {},
-        Err(msg) => {
-            console::msg(o.clone(), msg, ItemType::Error);
-        }
-    }
+    do_send(msg, l, id, false);
 }
 
 fn send_channel(o: Sender<ConsoleMessage>, c: ConsoleMessage) {

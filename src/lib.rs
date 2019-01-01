@@ -15,6 +15,7 @@ use crate::delivery::Delivery;
 use crate::binding::Network;
 use crypto::sha2::Sha256;
 use crypto::digest::Digest;
+use std::time::Duration;
 
 pub enum ErrorType {
     DecryptionError,
@@ -151,7 +152,7 @@ pub struct Layer {
 
 pub struct Layers {
     encryption_layer: Arc<Box<Encryption>>,
-    delivery_layer  : Delivery,
+    delivery_layer  : Arc<Box<Delivery>>,
     status_tx       : Sender<String>,
 }
 
@@ -171,11 +172,26 @@ impl Layers {
         )
     }
 
-    pub fn send(&self, msg: Message, id: u64) -> Result<(), Errors> {
+    pub fn send(&self, msg: Message, id: u64, background: bool) {
 
-        match self.encryption_layer.encrypt(&msg.buf) {
-            Ok(buf) => self.delivery_layer.send_msg(msg.set_payload(buf), id),
-            _       => Err(Errors::EncryptionError)
+        let s = self.status_tx.clone();
+        let e = self.encryption_layer.clone();
+        let p = self.delivery_layer.get_pending();
+        let shared = self.delivery_layer.get_shared();
+
+        let t = thread::spawn(move || {
+            match e.encrypt(&msg.buf) {
+                Ok(buf) => {
+                    Delivery::send_msg(msg.set_payload(buf), id, p, shared, s.clone()).run();
+                },
+                _ => {
+                    s.send(format!("Encryption failed.")).expect("Send failed.");
+                }
+            }
+        });
+
+        if !background {
+            t.join().expect("Join failed.");
         }
     }
 
@@ -210,7 +226,7 @@ impl Layers {
 
         let l = Layers {
             encryption_layer: Arc::new(e),
-            delivery_layer: d,
+            delivery_layer: Arc::new(Box::new(d)),
             status_tx: status_tx.clone()
         };
 

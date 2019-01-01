@@ -33,8 +33,7 @@ impl Packet {
 		self.typ == (PacketType::FileUpload as u8)
 	}
 
-	pub fn file_upload(data: Vec<u8>, ip: String) -> Packet {
-		let r = rand::random::<u64>();
+	pub fn file_upload(data: Vec<u8>, ip: String, r: u64) -> Packet {
 		Packet {
 			data: data,
 			id: r,
@@ -45,9 +44,8 @@ impl Packet {
 	}
 
 	// data = message
-	pub fn new(data: Vec<u8>, ip: String) -> Packet {
-		let r = rand::random::<u64>();
-		Packet { 
+	pub fn new(data: Vec<u8>, ip: String, r: u64) -> Packet {
+		Packet {
 			data: data, 
 			id: r,
 			created: time::PreciseTime::now(),

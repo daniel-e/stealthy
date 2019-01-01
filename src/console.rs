@@ -1,16 +1,13 @@
 use std::sync::mpsc::Sender;
 use std::process::Command;
 use stealthy::Message;
-use crate::ui_termion::ItemType;
-use crate::ui_termion::Item;
+use crate::model::ItemType;
+use crate::model::Item;
 
 pub enum ConsoleMessage {
     TextMessage(Item),
-    Exit,
-    ScrollUp,
-    ScrollDown,
-    Refresh,
     Ack(u64),
+    Exit,
 }
 
 fn fm_time() -> String {
@@ -48,7 +45,6 @@ pub fn new_file(o: Sender<ConsoleMessage>, m: Message, filename: String) {
 
 pub fn ack_msg(o: Sender<ConsoleMessage>, id: u64) {
     o.send(ConsoleMessage::Ack(id)).expect("Error");
-    //msg(o, format!("ack"), ItemType::Ack);
 }
 
 pub fn new_msg(o: Sender<ConsoleMessage>, m: Message) {

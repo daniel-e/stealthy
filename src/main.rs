@@ -4,119 +4,110 @@ mod rsatools;
 mod arguments;
 mod console;
 mod ui_termion;
-
-extern crate crypto as cr;
+mod model;
+mod ui_in;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
 use rand::{thread_rng, Rng};
 
-use cr::sha1::Sha1;
-use cr::digest::Digest;
+use crypto::sha1::Sha1;
+use crypto::digest::Digest;
 
 use stealthy::{Message, IncomingMessage, Layers, Layer};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::ConsoleMessage;
 
-use crate::ui_termion::{UserInput, ControlType, TermIn, TermOut, ItemType};
-use crate::ui_termion::Model;
-use crate::ui_termion::Item;
-use crate::ui_termion::Symbol;
+use crate::ui_termion::TermOut;
+use crate::ui_in::{TermIn, UserInput};
+use crate::model::{ItemType, Model, Item, Symbol};
 
 type HInput = TermIn;
 type HOutput = TermOut;
+type ArcModel = Arc<Mutex<Model>>;
+type ArcOut = Arc<Mutex<HOutput>>;
+type Channel = Sender<ConsoleMessage>;
 
+fn help_message(o: Channel) {
 
-// Receives messages via channel and writes the message to the screen.
-fn status_message_loop(o: Sender<ConsoleMessage>) -> Sender<String> {
-
-    let (tx, rx) = channel::<String>();
-
-    thread::spawn(move || {
-        loop { match rx.recv() {
-            Ok(_msg) => {
-                console::status(o.clone(), _msg);
-                // TODO use s.th.  like debug, info, ...
-                //if msg.starts_with("") { // dummy to use variable
-
-                //}
-            }
-            Err(e) => {
-                console::error(o.clone(), format!("status_message_loop: failed. {:?}", e));
-            }
-        }
-    }});
-
-    tx
-}
-
-fn recv_loop(o: Sender<ConsoleMessage>, rx: Receiver<IncomingMessage>) {
-
-    thread::spawn(move || {
-        loop { match rx.recv() {
-            Ok(msg) => {
-                match msg {
-                    IncomingMessage::New(msg)        => { console::new_msg(o.clone(), msg); }
-                    IncomingMessage::Ack(id)         => { console::ack_msg(o.clone(), id); }
-                    IncomingMessage::Error(_, s)     => { console::error(o.clone(), s); }
-                    IncomingMessage::FileUpload(msg) => {
-                        match msg.get_filename() {
-                            Some(fname) => {
-                                let fdata = msg.get_filedata();
-                                let chars = b"abcdefghijklmnopqrstuvwxyz0123456789";
-                                let mut rng = thread_rng();
-                                let b: Vec<u8> = (0..10).map(|_| {chars[rng.gen::<usize>() % chars.len()]}).collect();
-                                let r = String::from_utf8(b).expect("Invalid characters.");
-                                let dst = format!("/tmp/stealthy_{}_{}", r, &fname);
-                                console::new_file(o.clone(), msg, fname);
-                                match fdata {
-                                    Some(data) => {
-                                        if write_data(&dst, data) {
-                                            console::status(o.clone(), format!("File written to '{}'.", dst));
-                                        } else {
-                                            console::error(o.clone(), format!("Could not write data of received file upload."));
-                                        }
-                                    },
-                                    _ => { console::error(o.clone(), format!("Could not get data of received file upload.")); }
-                                }
-                            },
-                            _ => { console::error(o.clone(), format!("Could not get filename of received file upload.")); }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                console::error(o.clone(), format!("recv_loop: failed to receive message. {:?}", e));
-            }
-        }
-    }});
-}
-
-fn help_message(o: Sender<ConsoleMessage>) {
-
-    let lines = vec![
+    write_lines(o, &vec![
         "Commands always start with a slash:",
+        " ",
         "/help               - this help message",
         "/uptime, /up        - uptime",
         "/cat <filename>     - send content of an UTF-8 encoded text file",
         "/upload <filename>  - send binary file",
+        " ",
         "Keys:",
+        " ",
         "arrow up            - scroll to older messages",
         "arrow down          - scroll to latest messages",
         "page up             - scroll one page up",
         "page down           - scroll one page down",
         "end                 - scroll to last message in buffer",
-        "pos1                - scroll to first message in buffer",
-        "esc or ctrl+d       - quit"
-    ];
+        "esc or ctrl+d       - quit",
+        " "
+    ], ItemType::Info);
+}
+
+fn write_lines(o: Channel, lines: &[&str], typ: ItemType) {
 
     for v in lines {
-        console::msg(o.clone(), String::from(v), ItemType::Info)
+        console::raw(o.clone(), String::from(*v), typ.clone())
     }
-    console::raw(o, String::from(" "), ItemType::Info);
+}
+
+fn recv_loop(o: Channel, rx: Receiver<IncomingMessage>) {
+
+    thread::spawn(move || {
+        loop { match rx.recv() {
+            Ok(msg) => process_incoming_message(o.clone(), msg),
+            Err(e) => console::error(o.clone(), format!("recv_loop: failed to receive message. {:?}", e))
+        }}
+    });
+}
+
+fn process_incoming_message(o: Channel, msg: IncomingMessage) {
+
+    match msg {
+        IncomingMessage::New(msg) => { console::new_msg(o.clone(), msg); }
+        IncomingMessage::Ack(id) => { console::ack_msg(o.clone(), id); }
+        IncomingMessage::Error(_, s) => { console::error(o.clone(), s); }
+        IncomingMessage::FileUpload(msg) => { process_upload(o.clone(), msg) }
+    }
+}
+
+fn random_str(n: usize) -> String {
+
+    let chars = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = thread_rng();
+    String::from_utf8(
+        (0..n).map(|_| { chars[rng.gen::<usize>() % chars.len()] }).collect()
+    ).unwrap()
+}
+
+fn process_upload(o: Channel, msg: Message) {
+
+    if msg.get_filename().is_none() {
+        console::error(o.clone(), format!("Could not get filename of received file upload."));
+        return;
+    } else if msg.get_filedata().is_none() {
+        console::error(o.clone(), format!("Could not get data of received file upload."));
+        return;
+    }
+
+    let fname = msg.get_filename().unwrap();
+    let data = msg.get_filedata().unwrap();
+    let dst = format!("/tmp/stealthy_{}_{}", random_str(10), &fname);
+    console::new_file(o.clone(), msg, fname);
+
+    if write_data(&dst, data) {
+        console::status(o.clone(), format!("File written to '{}'.", dst));
+    } else {
+        console::error(o.clone(), format!("Could not write data of received file upload."));
+    }
 }
 
 
@@ -133,6 +124,7 @@ fn uptime() -> i64 {
     unsafe {
         time::get_time().sec - GLOBAL_STATE.clone().unwrap().start_time.sec
     }
+asdf
 }
 
 fn init_global_state() {
@@ -143,7 +135,7 @@ fn init_global_state() {
     };
 }
 
-fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
+fn parse_command(txt: String, o: Channel, l: &Layers, dstip: String) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
@@ -186,43 +178,30 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
     };
 }
 
-fn do_send(msg: Message, l: &Layers, id: u64, background: bool) {
-    l.send(msg, id, background);
+fn msg_transmitting(o: Channel, id: u64, s: String) {
+
+    console::msg_item(
+        o,Item::new(s,ItemType::MyMessage).symbol(Symbol::Transmitting).id(id)
+    );
 }
 
-fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
+fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstip: String) {
 
     let n = data.len();
     let msg = Message::file_upload(dstip, without_dirs(&fname), data);
 
     let id = rand::random::<u64>();
-    console::msg_item(
-        o.clone(),
-        Item::new(
-            format!("[you] sending file '{}' with {} bytes...", fname, n),
-            ItemType::MyMessage
-        ).symbol(Symbol::Transmitting).id(id)
-    );
-    do_send(msg, l, id, true);
+    msg_transmitting(o, id, format!("[you] sending file '{}' with {} bytes...", fname, n));
+    l.send(msg, id, true);
 }
 
-fn send_message(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
+fn send_message(txt: String, o: Channel, l: &Layers, dstip: String) {
 
     let msg = Message::new(dstip, txt.clone().into_bytes());
 
     let id = rand::random::<u64>();
-    console::msg_item(
-        o.clone(),
-        Item::new(
-            format!("[you] {}", txt),
-            ItemType::MyMessage
-        ).symbol(Symbol::Transmitting).id(id)
-    );
-    do_send(msg, l, id, false);
-}
-
-fn send_channel(o: Sender<ConsoleMessage>, c: ConsoleMessage) {
-    o.send(c).expect("Could not send message.");
+    msg_transmitting(o, id, format!("[you] {}", txt));
+    l.send(msg, id, false);
 }
 
 fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
@@ -237,7 +216,7 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
     ret.expect("Initialization failed.")
 }
 
-fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
+fn welcome(args: &Arguments, o: Channel, layer: &Layer) {
     for l in logo::get_logo() {
         console::raw(o.clone(), l, ItemType::Introduction);
     }
@@ -253,9 +232,12 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
         format!("Type /help to get a list of available commands."),
         format!("Esc or Ctrl+D to quit.")
     ];
-    for i in v {
-        console::raw(o.clone(), i, ItemType::Introduction);
-    }
+
+    write_lines(
+        o.clone(),
+        v.iter().map(|x| x.as_str()).collect::<Vec<_>>().as_slice(),
+        ItemType::Introduction
+    );
 
     if args.hybrid_mode {
         let mut h = Sha1::new();
@@ -275,108 +257,112 @@ fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
 }
 
 
+fn status_message_loop(o: Channel) -> Sender<String> {
 
-
-fn input_loop(o: Sender<ConsoleMessage>, mut i: HInput, l: Layers, dstip: String) {
-
-    // read from human interface until user enters control-d and send the
-    // message via the network layer
-    loop { match i.read_char() {
-        Some(ui) => {
-            match ui {
-                UserInput::Line(s) => {
-                    let txt = s.trim_right().to_string();
-                    if txt.len() > 0 {
-                        if txt.starts_with("/") {
-                            parse_command(txt, o.clone(), &l, dstip.clone());
-                        } else {
-                            send_message(txt, o.clone(), &l, dstip.clone());
-                        }
-                    }
-                }
-                UserInput::Control(what) => {
-                    match what {
-                        ControlType::ArrowUp => { send_channel(o.clone(), ConsoleMessage::ScrollUp); },
-                        ControlType::ArrowDown => { send_channel(o.clone(), ConsoleMessage::ScrollDown); }
-                    }
-                },
-                UserInput::Refresh => {
-                    send_channel(o.clone(), ConsoleMessage::Refresh);
-                }
-            }
-        }
-        _ => { break; }
-    }}
-    send_channel(o, ConsoleMessage::Exit);
-
-    // Sleep some time so that the output has some time to reset the terminal.
-    thread::sleep(Duration::from_millis(100));
-}
-
-fn init_screen(model: Arc<Mutex<Model>>) -> Sender<ConsoleMessage> {
-    let (tx, rx) = channel::<ConsoleMessage>();
-    let mut o = HOutput::new(model);
-
-    thread::spawn(move || {
-        loop { match rx.recv() {
-            Ok(msg) => {
-                match msg {
-                    ConsoleMessage::TextMessage(item) => {
-                        o.println(item);
-                    },
-                    ConsoleMessage::Ack(id) => {
-                        o.ack(id);
-                    }
-                    ConsoleMessage::Exit => {
-                        o.close();
-                        break;
-                    },
-                    ConsoleMessage::ScrollUp => {
-                        o.scroll_up();
-                    },
-                    ConsoleMessage::ScrollDown => {
-                        o.scroll_down();
-                    },
-                    ConsoleMessage::Refresh => {
-                        o.refresh();
-                    }
-                }
-            }
-            Err(_e) => {
-                o.close();
-                break;
-            }
-        }}}
-    );
-
+    let (tx, rx) = channel::<String>();
+    thread::spawn(move || { loop { match rx.recv() {
+        Ok(msg) => console::status(o.clone(), msg),
+        Err(er) => console::error(o.clone(), format!("status_message_loop: failed. {:?}", er))
+    }}});
     tx
 }
 
+fn input_loop(o: Channel, mut i: HInput, l: Layers, dstip: String, model: ArcModel, out: ArcOut) {
 
+    loop { match i.read_char() {
+        UserInput::Character(buf) => {
+            model.lock().unwrap().update_input(buf);
+            out.lock().unwrap().refresh();
+        },
+        UserInput::Escape | UserInput::CtrlD => {
+            out.lock().unwrap().close();
+            o.send(ConsoleMessage::Exit).expect("Send failed.");
+            break;
+        },
+        UserInput::ArrowDown => {
+            out.lock().unwrap().scroll_down();
+        },
+        UserInput::ArrowUp => {
+            out.lock().unwrap().scroll_up();
+        },
+        UserInput::Backspace => {
+            model.lock().unwrap().apply_backspace();
+            out.lock().unwrap().refresh();
+        },
+        UserInput::End => {
+            out.lock().unwrap().key_end();
+        },
+        UserInput::PageDown => {
+            out.lock().unwrap().page_down();
+        },
+        UserInput::PageUp => {
+            out.lock().unwrap().page_up();
+        },
+        UserInput::Enter => {
+            let s = model.lock().unwrap().apply_enter();
+            out.lock().unwrap().refresh();
+            if s.len() > 0 {
+                if s.starts_with("/") {
+                    parse_command(s, o.clone(), &l, dstip.clone());
+                } else {
+                    send_message(s, o.clone(), &l, dstip.clone());
+                }
+            }
+        }
+    }}
+}
+
+fn init_screen(model: ArcModel, out: ArcOut) -> Channel {
+
+    // The sender "tx" is used at other locations to send messages to the output.
+    let (tx, rx) = channel::<ConsoleMessage>();
+
+    thread::spawn(move || {
+        loop { match rx.recv().unwrap() {
+            ConsoleMessage::TextMessage(item) => {
+                model.lock().unwrap().add_message(item.clone());
+                out.lock().unwrap().adjust_scroll_offset(item);
+            },
+            ConsoleMessage::Ack(id) => {
+                model.lock().unwrap().ack(id);
+                out.lock().unwrap().refresh();
+            },
+            // We need this as otherwise "out" is not dropped and the terminal state
+            // is not restored.
+            ConsoleMessage::Exit => {
+                break;
+            }
+        }}
+    });
+    tx
+}
 
 fn main() {
     init_global_state();
 
-    // parse command line arguments
+    // Parse command line arguments.
 	let args = parse_arguments().expect("Cannot parse arguments");;
 
+    // The model stores all information which is required to show the screen.
     let model = Arc::new(Mutex::new(Model::new()));
 
-    let output = init_screen(model.clone());
+    let out = Arc::new(Mutex::new(HOutput::new(model.clone())));
 
-    // Input
-    let i = HInput::new(model);
+    let tx = init_screen(model.clone(), out.clone());
 
-    // Creates a thread which waits for messages on a channel to be written to o.
-    let status_tx = status_message_loop(output.clone());
+    // Used to receive user input.
+    let i = HInput::new();
+
+    // Creates a thread which waits for messages on a channel to be written to out.
+    let status_tx = status_message_loop(tx.clone());
 
     let layer = get_layer(&args, status_tx);
 
-    welcome(&args, output.clone(), &layer);
+    welcome(&args, tx.clone(), &layer);
 
     // this is the loop which handles messages received via rx
-    recv_loop(output.clone(), layer.rx);
+    recv_loop(tx.clone(), layer.rx);
 
-    input_loop(output.clone(), i, layer.layers, args.dstip);
+    input_loop(tx.clone(), i, layer.layers, args.dstip, model, out);
 }
 

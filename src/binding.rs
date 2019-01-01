@@ -66,10 +66,24 @@ extern {
 
 // -------------------------------------------------------------------------------------
 
+struct PendingPacket {
+	p: Packet,
+	millis: i64,
+}
+
+impl PendingPacket {
+	pub fn new(p: Packet, millis: i64) -> PendingPacket {
+		PendingPacket {
+			p,
+			millis,
+		}
+	}
+}
+
 struct SharedData {
 	// Packets that have been transmitted and for which we
 	// are waiting for the acknowledge.
-	packets          : Vec<(Packet, i64)>,
+	packets          : Vec<PendingPacket>,
 }
 
 
@@ -109,11 +123,10 @@ impl Network {
 			thread::sleep(Duration::from_millis(1000));
 			let mut r = vec![];
 			{
-				let mut v = k.lock().unwrap();
-				for &mut (ref mut i, ref mut t) in &mut v.packets {
-					if current_millis() > *t + RETRY_TIMEOUT {
-						r.push(i.clone());
-						*t = current_millis();
+				for pp in &mut k.lock().unwrap().packets {
+					if current_millis() > pp.millis + RETRY_TIMEOUT {
+						r.push(pp.p.clone());
+						pp.millis = current_millis();
 					}
 				}
 			}
@@ -197,8 +210,8 @@ impl Network {
 
         let shared = self.shared.clone();
         let v = shared.lock().expect("binding::contains: lock failes");
-        for &(ref i, _t) in &v.packets {
-            if i.id == id {
+        for pp in &v.packets {
+            if pp.p.id == id {
                 return true;
             }
         }
@@ -249,8 +262,8 @@ impl Network {
         let mut c = 0;
         let mut b: bool = false;
 
-        for &(ref i, _t) in &v.packets { // search the id
-            if i.id == p.id {
+        for pp in &v.packets { // search the id
+            if pp.p.id == p.id {
                 b = true;
                 break;
             }
@@ -317,19 +330,28 @@ impl Network {
 	}
 
 	fn pop_packet(&self) {
-		self.shared.lock().expect("binding::push_packet: lock failed").packets.pop();
+		self.shared.lock()
+			.expect("binding::push_packet: lock failed")
+			.packets
+			.pop();
 	}
 
 	fn push_packet(&self, p: Packet) {
-		self.shared.lock().expect("binding::push_packet: lock failed").packets.push((p, current_millis()));
+		self.shared.lock()
+			.expect("binding::push_packet: lock failed")
+			.packets
+			.push(PendingPacket::new(p, current_millis()));
 	}
 
 	fn queue_size(&self) -> usize {
-		self.shared.lock().expect("binding::queue_size failed").packets.len()
+		self.shared.lock()
+			.expect("binding::queue_size failed")
+			.packets
+			.len()
 	}
 
 	fn wait_for_queue(&self) {
-		while self.queue_size() >= 1000 {
+		while self.queue_size() > 1000 {
 			thread::sleep(Duration::from_millis(50));
 		}
 	}

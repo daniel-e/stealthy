@@ -248,10 +248,18 @@ impl TermOut {
 
     fn split_line(s: &Item) -> Vec<Item> {
         // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of UTF-8 characters
-        s.msg.chars().collect::<Vec<char>>()
+        TermOut::remove_symbol(s.msg.chars().collect::<Vec<char>>()
             .chunks(TermOut::window_width())
             .map(|x| s.clone().message(x.iter().collect()))
             .collect()
+        )
+    }
+
+    fn remove_symbol(mut v: Vec<Item>) -> Vec<Item> {
+        for i in v.iter_mut().skip(1) {
+            i.symbol = None;
+        }
+        v
     }
 
     fn lines(buf: &Vec<Item>) -> Vec<Item> {

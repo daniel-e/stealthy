@@ -23,6 +23,8 @@ use crate::console::ConsoleMessage;
 
 use crate::ui_termion::{UserInput, ControlType, TermIn, TermOut, ItemType};
 use crate::ui_termion::Model;
+use crate::ui_termion::Item;
+use crate::ui_termion::Symbol;
 
 type HInput = TermIn;
 type HOutput = TermOut;
@@ -184,15 +186,13 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
     };
 }
 
-fn do_send(o: Sender<ConsoleMessage>, msg: Message, l: &Layers) {
-    match l.send(msg) {
-        Ok(_) => {
-            console::msg(o, format!("transmitting..."), ItemType::Transmitting);
-        }
+fn do_send(msg: Message, l: &Layers, id: u64) -> Result<(), String> {
+    match l.send(msg, id) {
+        Ok(()) => Ok(()),
         Err(e) => { match e {
-            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), ItemType::Error); }
-            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), ItemType::Error); }
-            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), ItemType::Error); }
+            Errors::MessageTooBig => Err(format!("Message too big.")),
+            Errors::SendFailed => Err(format!("Sending of message failed.")),
+            Errors::EncryptionError => Err(format!("Encryption failed.")),
         }}
     }
 }
@@ -202,16 +202,41 @@ fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers
     let n = data.len();
     let msg = Message::file_upload(dstip, without_dirs(&fname), data);
 
-    console::msg(o.clone(), format!("[you] sending file '{}' with {} bytes...", fname, n), ItemType::MyMessage);
-    do_send(o, msg, l);
+    let id = rand::random::<u64>();
+    console::msg_item(
+        o.clone(),
+        Item::new(
+            format!("[you] sending file '{}' with {} bytes...", fname, n),
+            ItemType::MyMessage
+        ).symbol(Symbol::Transmitting).id(id)
+    );
+
+    match do_send(msg, l, id) {
+        Ok(()) => {},
+        Err(msg) => {
+            console::msg(o.clone(), msg, ItemType::Error);
+        }
+    }
 }
 
 fn send_message(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: String) {
 
     let msg = Message::new(dstip, txt.clone().into_bytes());
 
-    console::msg(o.clone(), format!("[you] {}", txt), ItemType::MyMessage);
-    do_send(o, msg, l);
+    let id = rand::random::<u64>();
+    console::msg_item(
+        o.clone(),
+        Item::new(
+            format!("[you] {}", txt),
+            ItemType::MyMessage
+        ).symbol(Symbol::Transmitting).id(id)
+    );
+    match do_send(msg, l, id) {
+        Ok(()) => {},
+        Err(msg) => {
+            console::msg(o.clone(), msg, ItemType::Error);
+        }
+    }
 }
 
 fn send_channel(o: Sender<ConsoleMessage>, c: ConsoleMessage) {
@@ -314,9 +339,12 @@ fn init_screen(model: Arc<Mutex<Model>>) -> Sender<ConsoleMessage> {
         loop { match rx.recv() {
             Ok(msg) => {
                 match msg {
-                    ConsoleMessage::TextMessage(msg) => {
-                        o.println(msg.msg, msg.typ);
+                    ConsoleMessage::TextMessage(item) => {
+                        o.println(item);
                     },
+                    ConsoleMessage::Ack(id) => {
+                        o.ack(id);
+                    }
                     ConsoleMessage::Exit => {
                         o.close();
                         break;

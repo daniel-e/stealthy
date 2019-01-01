@@ -149,7 +149,6 @@ pub struct Layer {
     pub layers: Layers,
 }
 
-
 pub struct Layers {
     encryption_layer: Arc<Box<Encryption>>,
     delivery_layer  : Delivery,
@@ -172,10 +171,10 @@ impl Layers {
         )
     }
 
-    pub fn send(&self, msg: Message) -> Result<u64, Errors> {
+    pub fn send(&self, msg: Message, id: u64) -> Result<(), Errors> {
 
         match self.encryption_layer.encrypt(&msg.buf) {
-            Ok(buf) => self.delivery_layer.send_msg(msg.set_payload(buf)),
+            Ok(buf) => self.delivery_layer.send_msg(msg.set_payload(buf), id),
             _       => Err(Errors::EncryptionError)
         }
     }

@@ -2,37 +2,32 @@ use std::sync::mpsc::Sender;
 use std::process::Command;
 use stealthy::Message;
 use crate::ui_termion::ItemType;
+use crate::ui_termion::Item;
 
 pub enum ConsoleMessage {
-    TextMessage(NormalMessage),
+    TextMessage(Item),
     Exit,
     ScrollUp,
     ScrollDown,
     Refresh,
-}
-
-pub struct NormalMessage {
-    pub msg: String,
-    pub typ: ItemType
-}
-
-impl NormalMessage {
-    pub fn new(msg: String, typ: ItemType) -> NormalMessage {
-        NormalMessage {
-            msg,
-            typ
-        }
-    }
+    Ack(u64),
 }
 
 fn fm_time() -> String {
     time::strftime("%d.%m. %R", &time::now()).unwrap()
 }
 
+pub fn raw_item(o: Sender<ConsoleMessage>, i: Item) {
+    o.send(ConsoleMessage::TextMessage(i)).expect("Error in console::msg");
+}
+
 pub fn raw(o: Sender<ConsoleMessage>, s: String, typ: ItemType) {
-    o.send(ConsoleMessage::TextMessage(
-        NormalMessage::new(format!("{}", s), typ))
-    ).expect("Error in console::msg");
+    raw_item(o, Item::new(format!("{}", s), typ));
+}
+
+pub fn msg_item(o: Sender<ConsoleMessage>, i: Item) {
+    let s = i.msg.clone();
+    raw_item(o, i.message(format!("{} │ {}", fm_time(), s)));
 }
 
 pub fn msg(o: Sender<ConsoleMessage>, s: String, typ: ItemType) {
@@ -51,8 +46,9 @@ pub fn new_file(o: Sender<ConsoleMessage>, m: Message, filename: String) {
     msg(o, format!("[{}] received file '{}'", m.get_ip(), filename), ItemType::NewFile);
 }
 
-pub fn ack_msg(o: Sender<ConsoleMessage>, _id: u64) {
-    msg(o, format!("ack"), ItemType::Ack);
+pub fn ack_msg(o: Sender<ConsoleMessage>, id: u64) {
+    o.send(ConsoleMessage::Ack(id)).expect("Error");
+    //msg(o, format!("ack"), ItemType::Ack);
 }
 
 pub fn new_msg(o: Sender<ConsoleMessage>, m: Message) {

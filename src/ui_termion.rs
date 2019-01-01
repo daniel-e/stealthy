@@ -16,12 +16,13 @@ use std::time::Duration;
 use std::cmp::min;
 use termion::color::Fg;
 
+static TRANSMITTING: char = '◷';
+static ACK: char = '✔';
+
 #[derive(Clone)]
 pub enum ItemType {
     Introduction,
     Received,
-    Ack,
-    Transmitting,
     Error,
     Info,
     NewFile,
@@ -29,9 +30,17 @@ pub enum ItemType {
 }
 
 #[derive(Clone)]
-struct Item {
-    msg: String,
-    typ: ItemType
+pub enum Symbol {
+    Transmitting,
+    Ack,
+}
+
+#[derive(Clone)]
+pub struct Item {
+    pub msg: String,
+    typ: ItemType,
+    symbol: Option<Symbol>,
+    id: Option<u64>,
 }
 
 impl Item {
@@ -39,7 +48,24 @@ impl Item {
         Item {
             msg,
             typ,
+            symbol: None,
+            id: None
         }
+    }
+
+    pub fn symbol(mut self, s: Symbol) -> Item {
+        self.symbol = Some(s);
+        self
+    }
+
+    pub fn message(mut self, msg: String) -> Item {
+        self.msg = msg;
+        self
+    }
+
+    pub fn id(mut self, id: u64) -> Item {
+        self.id = Some(id);
+        self
     }
 }
 
@@ -104,11 +130,28 @@ impl TermOut {
         self.flush();
     }
 
-    pub fn println(&mut self, s: String, typ: ItemType) {
+    pub fn ack(&mut self, id: u64) {
+        {
+            let mut model = self.model.lock().unwrap();
+            for i in model.buf.iter_mut().rev() {
+                match i.id {
+                    Some(mid) => {
+                        if mid == id {
+                            i.symbol = Some(Symbol::Ack);
+                            break;
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
+        self.redraw();
+    }
+
+    pub fn println(&mut self, i: Item) {
 
         {
             let mut model = self.model.lock().unwrap();
-            let i = Item::new(s, typ);
             if model.scroll_offset > 0 {
                 model.scroll_offset += TermOut::split_line(&i).len();
             }
@@ -207,7 +250,7 @@ impl TermOut {
         // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of UTF-8 characters
         s.msg.chars().collect::<Vec<char>>()
             .chunks(TermOut::window_width())
-            .map(|x| Item::new(x.iter().collect(), s.typ.clone()))
+            .map(|x| s.clone().message(x.iter().collect()))
             .collect()
     }
 
@@ -247,10 +290,8 @@ impl TermOut {
             match s.typ {
                 ItemType::Received => write!(self.stdout, "{}", Fg(termion::color::LightGreen)).unwrap(),
                 ItemType::Info => write!(self.stdout, "{}", Fg(termion::color::Yellow)).unwrap(),
-                ItemType::Transmitting => write!(self.stdout, "{}", Fg(termion::color::Blue)).unwrap(),
                 ItemType::Introduction => write!(self.stdout, "{}", Fg(termion::color::Green)).unwrap(),
                 ItemType::Error => write!(self.stdout, "{}", Fg(termion::color::Red)).unwrap(),
-                ItemType::Ack => write!(self.stdout, "{}", Fg(termion::color::Yellow)).unwrap(),
                 ItemType::NewFile => write!(self.stdout, "{}", Fg(termion::color::LightWhite)).unwrap(),
                 ItemType::MyMessage => write!(self.stdout, "{}", Fg(termion::color::Green)).unwrap(),
             };
@@ -260,6 +301,30 @@ impl TermOut {
                    s.msg,
                    termion::color::Fg(termion::color::Reset)
             ).expect("Error.");
+
+            match s.symbol {
+                Some(symbol) => {
+                    match symbol {
+                        Symbol::Transmitting => {
+                            write!(self.stdout, "{}{}{}{}",
+                                   Fg(termion::color::LightYellow),
+                                   termion::cursor::Goto(16, y as u16 + 2),
+                                   TRANSMITTING,
+                                   termion::color::Fg(termion::color::Reset)
+                            ).expect("Error.");
+                        },
+                        Symbol::Ack => {
+                            write!(self.stdout, "{}{}{}{}",
+                                   Fg(termion::color::Green),
+                                   termion::cursor::Goto(16, y as u16 + 2),
+                                   ACK,
+                                   termion::color::Fg(termion::color::Reset)
+                            ).expect("Error.");
+                        }
+                    }
+                },
+                _ => {}
+            }
         }
 
 

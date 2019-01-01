@@ -183,10 +183,10 @@ impl Delivery {
         }});
     }
 
-    pub fn send_msg(&self, msg: Message) -> Result<u64, Errors> {
+    pub fn send_msg(&self, msg: Message, id: u64) -> Result<(), Errors> {
 
         // Split big message into smaller messages.
-        let mut small_messages = Self::split_message(&msg);
+        let mut small_messages = Self::split_message(&msg, id);
 
         let mut queue = self.pending.lock().expect("delivery::send_msg: pending failed");
 
@@ -202,14 +202,12 @@ impl Delivery {
             }
         }
 
-        let id = small_messages.id;
         queue.push(small_messages);
-        Ok(id)
+        Ok(())
     }
 
-    fn split_message(msg: &Message) -> SmallMessages {
+    fn split_message(msg: &Message, id: u64) -> SmallMessages {
 
-        let id = rand::random::<u64>();
         let mut parts: Vec<SmallMessage> = Vec::new();
         let mut i: u32 = 1;
 

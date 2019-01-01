@@ -19,9 +19,9 @@ use cr::digest::Digest;
 use stealthy::{Message, IncomingMessage, Errors, Layers, Layer};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
 use crate::arguments::{parse_arguments, Arguments};
-use crate::console::{ConsoleMessage, Color};
+use crate::console::ConsoleMessage;
 
-use crate::ui_termion::{UserInput, ControlType, TermIn, TermOut};
+use crate::ui_termion::{UserInput, ControlType, TermIn, TermOut, ItemType};
 use crate::ui_termion::Model;
 
 type HInput = TermIn;
@@ -112,9 +112,9 @@ fn help_message(o: Sender<ConsoleMessage>) {
     ];
 
     for v in lines {
-        console::msg(o.clone(), String::from(v), Color::White)
+        console::msg(o.clone(), String::from(v), ItemType::Info)
     }
-    console::raw(o, String::from(" "), Color::White);
+    console::raw(o, String::from(" "), ItemType::Info);
 }
 
 
@@ -148,11 +148,11 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
         let (_, b) = txt.as_str().split_at(5);
         match read_file(b) {
             Ok(data) => {
-                console::msg(o.clone(), String::from("Transmitting data ..."), Color::White);
+                console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info);
                 send_message(String::from("\n") + data.as_str(), o.clone(), l, dstip);
             },
             _ => {
-                console::msg(o.clone(), String::from("Could not read file."), Color::White);
+                console::msg(o.clone(), String::from("Could not read file."), ItemType::Error);
             }
         }
         return;
@@ -165,7 +165,7 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
                 send_file(data, b.to_string(), o, l, dstip);
             },
             Err(s) => {
-                console::msg(o, String::from(s), Color::White);
+                console::msg(o, String::from(s), ItemType::Error);
             }
         }
         return;
@@ -176,10 +176,10 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
             help_message(o.clone());
         },
         "/uptime" | "/up" => {
-            console::msg(o, format!("up {}", decode_uptime(uptime())), Color::White);
+            console::msg(o, format!("up {}", decode_uptime(uptime())), ItemType::Info);
         },
         _ => {
-            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), Color::White);
+            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info);
         }
     };
 }
@@ -187,12 +187,12 @@ fn parse_command(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Stri
 fn do_send(o: Sender<ConsoleMessage>, msg: Message, l: &Layers) {
     match l.send(msg) {
         Ok(_) => {
-            console::msg(o, format!("transmitting..."), Color::Blue);
+            console::msg(o, format!("transmitting..."), ItemType::Transmitting);
         }
         Err(e) => { match e {
-            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), Color::Red); }
-            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), Color::Red); }
-            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), Color::Red); }
+            Errors::MessageTooBig => { console::msg(o, format!("Message too big."), ItemType::Error); }
+            Errors::SendFailed => { console::msg(o, format!("Sending of message failed."), ItemType::Error); }
+            Errors::EncryptionError => { console::msg(o, format!("Encryption failed."), ItemType::Error); }
         }}
     }
 }
@@ -202,7 +202,7 @@ fn send_file(data: Vec<u8>, fname: String, o: Sender<ConsoleMessage>, l: &Layers
     let n = data.len();
     let msg = Message::file_upload(dstip, without_dirs(&fname), data);
 
-    console::msg(o.clone(), format!("[you] sending file '{}' with {} bytes...", fname, n), Color::Yellow);
+    console::msg(o.clone(), format!("[you] sending file '{}' with {} bytes...", fname, n), ItemType::MyMessage);
     do_send(o, msg, l);
 }
 
@@ -210,7 +210,7 @@ fn send_message(txt: String, o: Sender<ConsoleMessage>, l: &Layers, dstip: Strin
 
     let msg = Message::new(dstip, txt.clone().into_bytes());
 
-    console::msg(o.clone(), format!("[you] {}", txt), Color::White);
+    console::msg(o.clone(), format!("[you] {}", txt), ItemType::MyMessage);
     do_send(o, msg, l);
 }
 
@@ -232,33 +232,39 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
 
 fn welcome(args: &Arguments, o: Sender<ConsoleMessage>, layer: &Layer) {
     for l in logo::get_logo() {
-        console::raw(o.clone(), l, Color::Green);
+        console::raw(o.clone(), l, ItemType::Introduction);
     }
-    console::raw(o.clone(), format!("The most secure ICMP messenger."), Color::BrightGreen);
-    console::raw(o.clone(), format!(" "), Color::White);
-    console::raw(o.clone(), format!("┌─────────────────────┬──────────────────┐"), Color::BrightGreen);
-    console::raw(o.clone(), format!("│ Listening on device │ {}               │", args.device), Color::BrightGreen);
-    console::raw(o.clone(), format!("│ Talking to IP       │ {:16} │", args.dstip), Color::BrightGreen);
-    console::raw(o.clone(), format!("└─────────────────────┴──────────────────┘"), Color::BrightGreen);
-    console::raw(o.clone(), format!(" "), Color::White);
-    console::raw(o.clone(), format!("Type /help to get a list of available commands."), Color::BrightGreen);
-    console::raw(o.clone(), format!("Esc or Ctrl+D to quit."), Color::BrightGreen);
+
+    let v = vec![
+        format!("The most secure ICMP messenger."),
+        format!(" "),
+        format!("┌─────────────────────┬──────────────────┐"),
+        format!("│ Listening on device │ {}               │", args.device),
+        format!("│ Talking to IP       │ {:16} │", args.dstip),
+        format!("└─────────────────────┴──────────────────┘"),
+        format!(" "),
+        format!("Type /help to get a list of available commands."),
+        format!("Esc or Ctrl+D to quit.")
+    ];
+    for i in v {
+        console::raw(o.clone(), i, ItemType::Introduction);
+    }
 
     if args.hybrid_mode {
         let mut h = Sha1::new();
 
         h.input(&layer.layers.encryption_key());
         let s = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of encryption key : {}", s), Color::Yellow);
+        console::raw(o.clone(), format!("Hash of encryption key : {}", s), ItemType::Introduction);
 
         h.reset();
         h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
         let q = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of your public key: {}", q), Color::Yellow);
+        console::raw(o.clone(), format!("Hash of your public key: {}", q), ItemType::Introduction);
     }
-    console::raw(o.clone(), format!(" "), Color::White);
-    console::raw(o.clone(), format!("Happy chatting..."), Color::BrightGreen);
-    console::raw(o.clone(), format!(" "), Color::White);
+    console::raw(o.clone(), format!(" "), ItemType::Introduction);
+    console::raw(o.clone(), format!("Happy chatting..."), ItemType::Introduction);
+    console::raw(o.clone(), format!(" "), ItemType::Introduction);
 }
 
 
@@ -309,7 +315,7 @@ fn init_screen(model: Arc<Mutex<Model>>) -> Sender<ConsoleMessage> {
             Ok(msg) => {
                 match msg {
                     ConsoleMessage::TextMessage(msg) => {
-                        o.println(msg.msg, msg.col);
+                        o.println(msg.msg, msg.typ);
                     },
                     ConsoleMessage::Exit => {
                         o.close();

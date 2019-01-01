@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 
 use termion;
-use crate::console::Color;
 use std::io::stdout;
 use termion::raw::IntoRawMode;
 use std::io::Write;
@@ -15,10 +14,37 @@ use std::thread;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 use std::cmp::min;
+use termion::color::Fg;
 
+#[derive(Clone)]
+pub enum ItemType {
+    Introduction,
+    Received,
+    Ack,
+    Transmitting,
+    Error,
+    Info,
+    NewFile,
+    MyMessage,
+}
+
+#[derive(Clone)]
+struct Item {
+    msg: String,
+    typ: ItemType
+}
+
+impl Item {
+    pub fn new(msg: String, typ: ItemType) -> Item {
+        Item {
+            msg,
+            typ,
+        }
+    }
+}
 
 pub struct Model {
-    buf: Vec<String>,
+    buf: Vec<Item>,
     input: Vec<u8>,
     scroll_offset: usize,
 }
@@ -31,6 +57,10 @@ impl Model {
             scroll_offset: 0,
         }
     }
+
+    //pub fn messages(&self) -> Vec<String> {
+    //    self.buf.iter().map(|x| x.msg.clone()).collect()
+    //}
 }
 
 pub enum ControlType {
@@ -74,14 +104,15 @@ impl TermOut {
         self.flush();
     }
 
-    pub fn println(&mut self, s: String, color: Color) {
+    pub fn println(&mut self, s: String, typ: ItemType) {
 
         {
             let mut model = self.model.lock().unwrap();
+            let i = Item::new(s, typ);
             if model.scroll_offset > 0 {
-                model.scroll_offset += TermOut::split_line(&s).len();
+                model.scroll_offset += TermOut::split_line(&i).len();
             }
-            model.buf.push(s);
+            model.buf.push(i);
         }
         self.redraw();
     }
@@ -172,15 +203,15 @@ impl TermOut {
         TermOut::size().0 as usize - 2
     }
 
-    fn split_line(s: &String) -> Vec<String> {
+    fn split_line(s: &Item) -> Vec<Item> {
         // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of UTF-8 characters
-        s.chars().collect::<Vec<char>>()
+        s.msg.chars().collect::<Vec<char>>()
             .chunks(TermOut::window_width())
-            .map(|x| x.iter().collect())
+            .map(|x| Item::new(x.iter().collect(), s.typ.clone()))
             .collect()
     }
 
-    fn lines(buf: &Vec<String>) -> Vec<String> {
+    fn lines(buf: &Vec<Item>) -> Vec<Item> {
         buf.iter()
             .map(|v| TermOut::split_line(v))
             .flatten()
@@ -209,10 +240,26 @@ impl TermOut {
 
         for (y, line) in buf.iter().enumerate() {
             let mut s = line.clone();
-            while s.chars().count() < screen_width {
-                s.push(' ');
+            while s.msg.chars().count() < screen_width {
+                s.msg.push(' ');
             }
-            write!(self.stdout, "{}{}", termion::cursor::Goto(2, y as u16 + 2), s).expect("Error.");
+
+            match s.typ {
+                ItemType::Received => write!(self.stdout, "{}", Fg(termion::color::LightGreen)).unwrap(),
+                ItemType::Info => write!(self.stdout, "{}", Fg(termion::color::Yellow)).unwrap(),
+                ItemType::Transmitting => write!(self.stdout, "{}", Fg(termion::color::Blue)).unwrap(),
+                ItemType::Introduction => write!(self.stdout, "{}", Fg(termion::color::Green)).unwrap(),
+                ItemType::Error => write!(self.stdout, "{}", Fg(termion::color::Red)).unwrap(),
+                ItemType::Ack => write!(self.stdout, "{}", Fg(termion::color::Yellow)).unwrap(),
+                ItemType::NewFile => write!(self.stdout, "{}", Fg(termion::color::LightWhite)).unwrap(),
+                ItemType::MyMessage => write!(self.stdout, "{}", Fg(termion::color::Green)).unwrap(),
+            };
+
+            write!(self.stdout, "{}{}{}",
+                   termion::cursor::Goto(2, y as u16 + 2),
+                   s.msg,
+                   termion::color::Fg(termion::color::Reset)
+            ).expect("Error.");
         }
 
 

@@ -15,7 +15,6 @@ use crate::delivery::Delivery;
 use crate::binding::Network;
 use crypto::sha2::Sha256;
 use crypto::digest::Digest;
-use std::time::Duration;
 
 pub enum ErrorType {
     DecryptionError,

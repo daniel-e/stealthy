@@ -16,7 +16,7 @@ use rand::{thread_rng, Rng};
 use cr::sha1::Sha1;
 use cr::digest::Digest;
 
-use stealthy::{Message, IncomingMessage, Errors, Layers, Layer};
+use stealthy::{Message, IncomingMessage, Layers, Layer};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::ConsoleMessage;
@@ -365,7 +365,7 @@ fn main() {
     let output = init_screen(model.clone());
 
     // Input
-    let i = HInput::new(model.clone());
+    let i = HInput::new(model);
 
     // Creates a thread which waits for messages on a channel to be written to o.
     let status_tx = status_message_loop(output.clone());

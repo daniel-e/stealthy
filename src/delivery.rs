@@ -297,9 +297,8 @@ impl SendObject {
         for i in &self.small_messages.messages {
             let message = self.msg.set_payload(Delivery::serialize(i));
             match Network::send_msg(message, self.shared.clone(), i.mini_id) {
-                Ok(id) => {
-                    //small_messages.acks.insert(i.mini_id);
-                }
+                Ok(_id) => {
+                },
                 Err(_) => {
                     self.status_tx.send(format!("delivery.rs::send_msg failed.")).expect("Send failed.");
                     // TODO remove small_message from delivery.rs:Delivery:self.pending on error

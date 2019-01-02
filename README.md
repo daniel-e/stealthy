@@ -36,18 +36,6 @@ cargo build --release
 
 The binary `stealthy` can be found in the directory `./target/release/`.
 
-Steahlty calls `notify-send` to show notifications for new messages on the desktop. You can disable this feature at compile time:
-
-    cargo build --features "no_notify"
-
-List of features:
-
-| Feature | Description |
-|---------|-------------|
-| no_notify       | Disable desktop notifications via notify-send. |
-| show_dropped    | Show dropped packets which are not on the whitelist. |
-
-
 ### Capabilities
 Stealthy needs raw sockets which are not allowed for non-privileged users. Hence, you have two options to execute the binary. First, you could run it as root which is not recommended from a security point of view. Second (which is recommended) you could give the binary the appropriate capabilities. As root do:
 
@@ -55,15 +43,28 @@ Stealthy needs raw sockets which are not allowed for non-privileged users. Hence
 
 Now, you can use stealthy as a non-privileged user.
 
-### Test
+### Test (optional)
 
 Open two terminals and execute stealthy in each terminal without any arguments. The clients should be able to talk to each other.
+
+### Compile time features (optional)
+Steahlty calls `notify-send` to show notifications for new messages on the desktop. You can disable this feature at compile time:
+
+    cargo build --features "no_notify"
+
+Here is a list of all compile time features:
+
+| Feature | Description |
+|---------|-------------|
+| no_notify       | Disable desktop notifications via notify-send. |
+| show_dropped    | Show dropped packets which are not on the whitelist. |
 
 ## Running stealthy
 
 Stealthy requires at least two command line arguments:
-* `-i` specifies the network interface which is used to listen for incoming messages
-* `-d` specifies the IP address of the receiver
+* `-i` specifies the network interface which is used to listen for incoming messages.
+* `-d` specifies the IP address of the receiver. For a group chat you can provide several IPs each separated by a comma.
+
 
 
 ### Message status
@@ -72,7 +73,7 @@ Next to the messages that you have sent you can see a status symbol.
 
 ![status](status.png)
 
-* A green check is shown when your message has been received by all clients of the chat.
+* A green check is shown when your message has been received by all clients.
 * A yellow number shows how many ACKs are pending.
 
 ### Choosing between symmetric and asymmetric encryption

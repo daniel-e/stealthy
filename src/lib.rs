@@ -25,6 +25,8 @@ pub mod xip {
         pub fn from_comma_list(s: &str) -> IpAddresses {
             IpAddresses {
                 ips: s.split(",")
+                    .map(|x| String::from(x).trim().to_string())
+                    .filter(|x| x.len() > 0)
                     .map(|x| x.parse().expect("Found invalid IP address."))
                     .collect()
             }

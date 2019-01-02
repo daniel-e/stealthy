@@ -245,7 +245,7 @@ fn extend_line_to_screen_width(i: &Item, screen_width: usize) -> Item {
 
 fn symbol_for_item(item: &Item) -> String {
     if item.id.len() == 0 {
-        return format!(" ");
+        return format!("");
     }
 
     if item.acks_received >= item.id.len() {
@@ -262,6 +262,9 @@ fn symbol_for_item(item: &Item) -> String {
 
 fn write_symbol(o: &mut RawTerminal<Stdout>, item: &Item, y: usize) {
     let symbol = symbol_for_item(item);
+    if symbol.len() == 0 {
+        return;
+    }
     write!(o, "{}{}{}",
            termion::cursor::Goto(16, y as u16 + 2),
            symbol,

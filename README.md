@@ -7,9 +7,10 @@ Stealthy is a simple messenger application which runs in the terminal without an
 **Features**
 
 * The communication is end-to-end encrypted. You can chose symmetric encryption or asymmetric encryption.
-* No server is involved. The clients communicate directly with each other. Hence, every client needs to be reachable via an IP address.
 * The communication is hidden to some degree as communication is masked as ICMP requests.
+* No server is involved. The clients communicate directly with each other. Hence, every client needs to be reachable via an IP address.
 * Offers file upload functionality via ICMP requests.
+* Group chat (currently for symmetric encryption only).
 
 ## Installing
 
@@ -65,6 +66,14 @@ Stealthy requires at least two command line arguments:
 * `-d` specifies the IP address of the receiver
 
 
+### Message status
+
+Next to the messages that you have sent you can see a status symbol.
+
+![status](status.png)
+
+* A green check is shown when your message has been received by all clients of the chat.
+* A yellow number shows how many ACKs are pending.
 
 ### Choosing between symmetric and asymmetric encryption
 

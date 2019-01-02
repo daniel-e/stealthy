@@ -24,7 +24,7 @@ use crate::console::ConsoleMessage;
 
 use crate::ui_termion::TermOut;
 use crate::ui_in::{TermIn, UserInput};
-use crate::model::{ItemType, Model, Item, Symbol};
+use crate::model::{ItemType, Model, Item};
 
 type HInput = TermIn;
 type HOutput = TermOut;
@@ -179,32 +179,49 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
     };
 }
 
-fn msg_transmitting(o: Channel, id: u64, s: String) {
-
-    console::msg_item(
-        o,Item::new(s,ItemType::MyMessage).symbol(Symbol::Transmitting).id(id)
-    );
+fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message, u64) {
+    (Message::file_upload(dstip, without_dirs(fname), data), rand::random::<u64>())
 }
 
 fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 
-    for dstip in dstips.as_strings() {
-        let n = data.len();
-        let msg = Message::file_upload(dstip, without_dirs(&fname), &data);
+    let n = data.len();
+    let mut item = Item::new(format!("[you] sending file '{}' with {} bytes...", fname, n), ItemType::MyMessage);
 
-        let id = rand::random::<u64>();
-        msg_transmitting(o.clone(), id, format!("[you] sending file '{}' with {} bytes...", fname, n));
+    let v = dstips.as_strings()
+        .iter()
+        .map(|dstip| create_upload_data(dstip.clone(), &fname, &data))
+        .collect::<Vec<_>>();
+
+    for (_, id) in &v {
+        item = item.add_id(*id);
+    }
+    console::msg_item(o.clone(),item);
+
+    for (msg, id) in v {
         l.send(msg, id, true);
     }
 }
 
+fn create_data(dstip: String, txt: &String) -> (Message, u64) {
+    (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
+}
+
 fn send_message(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 
-    for dstip in dstips.as_strings() {
-        let msg = Message::new(dstip, txt.clone().into_bytes());
+    let mut item = Item::new(format!("[you] {}", txt), ItemType::MyMessage);
 
-        let id = rand::random::<u64>();
-        msg_transmitting(o.clone(), id, format!("[you] {}", txt));
+    let v = dstips.as_strings()
+        .iter()
+        .map(|dstip| create_data(dstip.clone(), &txt))
+        .collect::<Vec<_>>();
+
+    for (_, id) in &v {
+        item = item.add_id(*id);
+    }
+    console::msg_item(o.clone(),item);
+
+    for (msg, id) in v {
         l.send(msg, id, false);
     }
 }

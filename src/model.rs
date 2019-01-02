@@ -38,9 +38,10 @@ impl Model {
     }
 
     pub fn ack(&mut self, id: u64) {
-        for i in self.buf.iter_mut().rev() {
-            if i.id.is_some() && i.id.unwrap() == id {
-                i.symbol = Some(Symbol::Ack);
+        for item in self.buf.iter_mut().rev() {
+            let exists = item.id.iter().find(|i| **i == id).is_some();
+            if exists {
+                item.acks_received += 1;
                 break;
             }
         }
@@ -55,8 +56,7 @@ impl Model {
 pub struct Item {
     pub msg: String,
     pub typ: ItemType,
-    pub symbol: Option<Symbol>,
-    pub id: Option<Vec<u64>>, // In group chat settings one item can have several IDs.
+    pub id: Vec<u64>,  // In group chat scenarios one item can have several IDs.
     pub acks_received: usize,
 }
 
@@ -66,16 +66,9 @@ impl Item {
         Item {
             msg,
             typ,
-            symbol: None,
-            id: None,
+            id: vec![],
             acks_received: 0
         }
-    }
-
-    /// Sets the symbol of an item.
-    pub fn symbol(mut self, s: Symbol) -> Item {
-        self.symbol = Some(s);
-        self
     }
 
     /// Sets the message of an item.
@@ -85,8 +78,8 @@ impl Item {
     }
 
     /// Sets the id of the item.
-    pub fn id(mut self, id: u64) -> Item {
-        self.id = Some(id);
+    pub fn add_id(mut self, id: u64) -> Item {
+        self.id.push(id);
         self
     }
 }
@@ -100,11 +93,4 @@ pub enum ItemType {
     Info,
     NewFile,
     MyMessage,
-}
-
-// This is the status symbol to display for a message.
-#[derive(Clone)]
-pub enum Symbol {
-    Transmitting,
-    Ack,
 }

@@ -8,9 +8,8 @@ use termion::color::Fg;
 use termion::raw::RawTerminal;
 use termion::raw::IntoRawMode;
 
-use crate::model::{Symbol, Item, ItemType, Model};
+use crate::model::{Item, ItemType, Model};
 
-static TRANSMITTING: char = '◷';
 static ACK: char = '✔';
 static NUMBERS: &str = "➀➁➂➃➄➅➆➇➈➉";
 
@@ -167,9 +166,9 @@ impl TermOut {
         // Show messages.
         for (y, line) in buf.iter().enumerate() {
             let s = extend_line_to_screen_width(line, screen_width);
-            write_color(&mut self.stdout, s.typ);
+            write_color(&mut self.stdout, s.typ.clone());
             write_at(&mut self.stdout, 2, y + 2, &s.msg);
-            write_symbol(&mut self.stdout, s.symbol, y);
+            write_symbol(&mut self.stdout, &s, y);
         }
 
         // Show input field.
@@ -210,7 +209,7 @@ impl TermOut {
     /// for the first line.
     fn remove_symbol(mut v: Vec<Item>) -> Vec<Item> {
         for i in v.iter_mut().skip(1) {
-            i.symbol = None;
+            i.id.clear();
         }
         v
     }
@@ -244,30 +243,30 @@ fn extend_line_to_screen_width(i: &Item, screen_width: usize) -> Item {
     s
 }
 
-fn write_symbol(o: &mut RawTerminal<Stdout>, symbol: Option<Symbol>, y: usize) {
-    match symbol {
-        Some(symbol) => {
-            match symbol {
-                Symbol::Transmitting => {
-                    write!(o, "{}{}{}{}",
-                           Fg(termion::color::LightYellow),
-                           termion::cursor::Goto(16, y as u16 + 2),
-                           TRANSMITTING,
-                           termion::color::Fg(termion::color::Reset)
-                    ).expect("Error.");
-                },
-                Symbol::Ack => {
-                    write!(o, "{}{}{}{}",
-                           Fg(termion::color::Green),
-                           termion::cursor::Goto(16, y as u16 + 2),
-                           ACK,
-                           termion::color::Fg(termion::color::Reset)
-                    ).expect("Error.");
-                }
-            }
-        },
-        _ => {}
+fn symbol_for_item(item: &Item) -> String {
+    if item.id.len() == 0 {
+        return format!(" ");
     }
+
+    if item.acks_received >= item.id.len() {
+        return format!("{}{}", Fg(termion::color::Green), ACK);
+    }
+
+    // pending cannot be zero
+    let pending = item.id.len() - item.acks_received;
+    let p = min(pending, 10) - 1;
+    let v = NUMBERS.chars().collect::<Vec<_>>();
+
+    format!("{}{}", Fg(termion::color::LightYellow), v[p])
+}
+
+fn write_symbol(o: &mut RawTerminal<Stdout>, item: &Item, y: usize) {
+    let symbol = symbol_for_item(item);
+    write!(o, "{}{}{}",
+           termion::cursor::Goto(16, y as u16 + 2),
+           symbol,
+           termion::color::Fg(termion::color::Reset)
+    ).expect("Write failed.");
 }
 
 fn write_at(o: &mut RawTerminal<Stdout>, x: usize, y: usize, s: &str) {

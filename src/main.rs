@@ -124,7 +124,6 @@ fn uptime() -> i64 {
     unsafe {
         time::get_time().sec - GLOBAL_STATE.clone().unwrap().start_time.sec
     }
-asdf
 }
 
 fn init_global_state() {

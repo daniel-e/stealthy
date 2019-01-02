@@ -29,7 +29,6 @@ fn try_gcc(lib: &str, msg: &str) {
 fn main() {
 
     try_gcc("-lpcap", "pcap not found. On Ubuntu try 'sudo apt-get install libpcap-dev' before continuing.");
-    try_gcc("-lncursesw", "ncursesw not found. On Ubuntu try 'sudo apt-get install libncursesw5-dev' before continuing.");
     try_gcc("-lcrypto", "crypto not found. On Ubuntu try 'sudo apt-get install libssl-dev' before continuing.");
 
     let out_dir = env::var("OUT_DIR").unwrap();

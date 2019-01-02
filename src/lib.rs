@@ -158,16 +158,16 @@ pub struct Layers {
 
 impl Layers {
 
-    pub fn symmetric(hexkey: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
+    pub fn symmetric(hexkey: &String, device: &String, status_tx: Sender<String>, accept_ip: &[String]) -> Result<Layer, &'static str> {
 
-        Layers::init(Box::new(SymmetricEncryption::new(hexkey)?), device, status_tx)
+        Layers::init(Box::new(SymmetricEncryption::new(hexkey)?), device, status_tx, accept_ip)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, status_tx: Sender<String>, accept_ip: &[String]) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(
                 AsymmetricEncryption::new(&pubkey_file, &privkey_file)?
-            ), device, status_tx
+            ), device, status_tx, accept_ip
         )
     }
 
@@ -200,7 +200,7 @@ impl Layers {
 
     // ------ private functions
 
-    fn init(e: Box<Encryption>, device: &String, status_tx: Sender<String>) -> Result<Layer, &'static str> {
+    fn init(e: Box<Encryption>, device: &String, status_tx: Sender<String>, accept_ip: &[String]) -> Result<Layer, &'static str> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
@@ -208,7 +208,7 @@ impl Layers {
         let (tx2, rx2) = channel();
         Ok(Layers::new(e,
             Delivery::new(
-                Network::new(device, tx1, status_tx.clone()),
+                Network::new(device, tx1, status_tx.clone(), accept_ip),
                 tx2,
                 rx1,
                 status_tx.clone(),

@@ -207,10 +207,10 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
     let ret =
         if args.hybrid_mode {
             // use asymmetric encryption
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx)
+            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx, &[args.dstip.clone()])
         } else {
             // use symmetric encryption
-            Layers::symmetric(&args.secret_key, &args.device, status_tx)
+            Layers::symmetric(&args.secret_key, &args.device, status_tx, &[args.dstip.clone()])
         };
     ret.expect("Initialization failed.")
 }
@@ -224,8 +224,9 @@ fn welcome(args: &Arguments, o: Channel, layer: &Layer) {
         format!("The most secure ICMP messenger."),
         format!(" "),
         format!("┌─────────────────────┬──────────────────┐"),
-        format!("│ Listening on device │ {}               │", args.device),
+        format!("│ Listening on device │ {:16} │", args.device),
         format!("│ Talking to IP       │ {:16} │", args.dstip),
+        format!("│ Accepting IPs       │ {:16} │", args.dstip),
         format!("└─────────────────────┴──────────────────┘"),
         format!(" "),
         format!("Type /help to get a list of available commands."),

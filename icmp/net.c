@@ -183,7 +183,7 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 	char      buf[128];
 	u_int32_t size_ethernet = SIZE_ETHERNET;
 
-#if DEBUG_NETC
+#ifdef DEBUG_NETC
     FILE* f;
     int c;
     f = fopen("/tmp/icmp.log", "a");
@@ -213,7 +213,7 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 	// check length of packet
 	if (iplen < iphdrlen * 4) {
 		a->cb(a->target, 0, 0, INVALID_IP_LENGTH, 0);
-#if DEBUG_NETC
+#ifdef DEBUG_NETC
 		fprintf(f, "Packet has invalid length.\n");
 		fflush(f);
 		fclose(f);
@@ -228,7 +228,7 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 
 	if (h->len < size_ethernet + iphdrlen * 4 + sizeof(struct icmp)) {
 		a->cb(a->target, 0, 0, INVALID, 0);
-#if DEBUG_NETC
+#ifdef DEBUG_NETC
 		fprintf(f, "Packet has invalid length (2).\n");
 		fflush(f);
 		fclose(f);
@@ -256,7 +256,7 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 
 	if (iphdrlen * 4 + sizeof(struct icmp) > iplen) {
 		a->cb(a->target, 0, 0, INVALID, 0);
-#if DEBUG_NETC
+#ifdef DEBUG_NETC
 		fprintf(f, "Packet has invalid length (3).\n");
 		fflush(f);
 		fclose(f);
@@ -266,7 +266,7 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 
 	if (h->len < size_ethernet + iphdrlen * 4 + sizeof(struct icmp) + datalen) {
 		a->cb(a->target, 0, 0, INVALID, 0);
-#if DEBUG_NETC
+#ifdef DEBUG_NETC
 		fprintf(f, "Packet has invalid length (4).\n");
 		fflush(f);
 		fclose(f);
@@ -274,7 +274,7 @@ void got_packet(u_char* args, const struct pcap_pkthdr* h, const u_char* packet)
 		return;
 	}
 
-#if DEBUG_NETC
+#ifdef DEBUG_NETC
 		fprintf(f, "Calling callback. type = %d, datalen = %d.\n", type, datalen);
 		fflush(f);
 		for (c = 0; c < datalen; c++) {
@@ -301,6 +301,15 @@ static void* worker_thread(void* args)
 int recv_callback(void* target, const char* dev, callback cb) {
 
 	pcap_t* handle = setup_pcap(dev, "icmp && icmp[icmptype] = 8");
+
+#ifdef DEBUG_NETC
+    FILE* f;
+    f = fopen("/tmp/icmp.log", "a");
+    fprintf(f, "recv_callback: listening on device %s", dev);
+    fflush(f);
+    fclose(f);
+#endif
+
 	if (handle) {
 		pthread_t t;
 		struct arguments* args = (struct arguments*) malloc(sizeof(struct arguments));

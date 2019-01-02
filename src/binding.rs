@@ -93,6 +93,7 @@ pub struct Network {
     tx_msg           : Sender<IncomingMessage>,
 	shared           : Arc<Mutex<SharedData>>,
 	status_tx        : Sender<String>,
+	accept_ip: Vec<String>,
 }
 
 fn current_millis() -> i64 {
@@ -101,7 +102,7 @@ fn current_millis() -> i64 {
 }
 
 impl Network {
-	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>) -> Box<Network> {
+	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>, accept_ip: &[String]) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : HashMap::new(),
@@ -111,7 +112,8 @@ impl Network {
 		let mut n = Box::new(Network {
 			shared: s.clone(),
             tx_msg: tx_msg,
-			status_tx: status_tx
+			status_tx: status_tx,
+			accept_ip: accept_ip.iter().cloned().collect(),
 		});
 
 		n.init_callback(dev);
@@ -157,6 +159,11 @@ impl Network {
 
 	// This method is called with the encrypted content in buf.
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
+
+		if self.accept_ip.iter().find(|&x| *x == ip).is_none() {
+			// Ignore packet as it comes from an IP which is not accepted.
+			return;
+		}
 
 		#[cfg(feature="debugout")]
 		self.status_tx.send(String::from("[Network::recv_packet()] called.")).expect("send failed");

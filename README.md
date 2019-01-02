@@ -74,7 +74,7 @@ Next to the messages that you have sent you can see a status symbol.
 ![status](status.png)
 
 * A green check is shown when your message has been received by all clients.
-* A yellow number shows how many ACKs are pending.
+* A yellow number shows how many ACKs are pending. If more than nine ACKs are pending a 10 is shown.
 
 ### Choosing between symmetric and asymmetric encryption
 

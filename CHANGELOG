@@ -1,0 +1,9 @@
+0.0.2
+
+* speed up file uploads by using larger packets (increases max packet size from 128B to 8KB)
+* reduced delay when receiving packets
+* file uploads in background
+* get rid of ncurses and switched to rust termion
+* get rid of "transmitting" and "ack" messages; instead send status is displayed next to the message
+* requires at Rust >=1.31.0 (edition 2018)
+* updated versions of dependencies

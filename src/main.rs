@@ -229,6 +229,7 @@ fn welcome(args: &Arguments, o: Channel, layer: &Layer) {
         format!("└─────────────────────┴──────────────────┘"),
         format!(" "),
         format!("Type /help to get a list of available commands."),
+        format!("Check https://github.com/daniel-e/stealthy for more documentation."),
         format!("Esc or Ctrl+D to quit.")
     ];
 

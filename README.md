@@ -1,7 +1,48 @@
 # Stealthy
-Stealthy is a small chat application for the console which uses ICMP echo requests (ping) for the communication with other clients because ICMP echo requests offer some advantages compared to TCP connections. First, if a firewall is configured to block TCP connections there's a pretty good chance that this firewall is not configured to reject ping messages so that a communication is often possible even when you're behind a firewall. Second, the communication is hidden. Ping packets are often ignored by system administrators and will not be investigated. Thus, when using stealthy the fact that a communication is happening will often not be recognized.
 
-**All communication is encrypted**! Currently you can choose between a pure symmetric encryption with Blowfish or an hybrid approach where Blowfish is used to encrypt the messages and RSA is used to encrypt the encryption key that is used for the Blowfish encryption.
+Stealthy is a simple messenger application which runs in the terminal without any graphical UI. It uses ICMP echo requests to communicate with other clients - the same method used by the ping utility on Linux systems. As firewalls are usually configured to allow ICMP echo requests, stealthy can bypass many of them.
+
+**Features**
+
+* The communication is end-to-end encrypted. You can chose symmetric encryption or asymmetric encryption.
+* No server is involved. The clients communicate directly with each other. Hence, every client needs to be reachable via an IP address.
+* The communication is hidden to some degree as communication is masked as ICMP requests.
+* Offers file upload functionality via ICMP requests.
+
+## Installing
+
+### Requirements
+
+Stealthy requires Rust >=1.31. You can install it via rustup:
+
+    curl https://sh.rustup.rs -sSf | sh
+
+On Ubuntu the following packages are required to compile the sources:
+
+    sudo apt-get update
+    sudo apt-get install build-essential libpcap-dev libssl-dev
+    
+### Compile
+```bash
+# checkout the sources
+git clone https://github.com/daniel-e/stealthy.git
+# build the sources
+cd stealthy
+cargo build --release
+```
+
+The binary `stealthy` can be found in the directory `./target/release/`.
+
+### Capabilities
+Stealthy needs raw sockets which are not allowed for non-privileged users. Hence, you have two options to execute the binary. First, you could run it as root which is not recommended from a security point of view. Second (which is recommended) you could give the binary the appropriate capabilities. As root do:
+
+    setcap cap_net_raw+ep ./target/release/stealthy
+
+Now, you can use stealthy as a non-privileged user.
+
+### Test
+
+Open two terminals and execute stealthy in each terminal without any arguments. The clients should be able to talk to each other.
 
 ## Running stealthy
 
@@ -10,9 +51,12 @@ Stealthy requires at least two command line arguments:
 * `-d` specifies the IP address of the receiver
 
 
+
+### Choosing between symmetric and asymmetric encryption
+
 Further, stealthy can be used in two encryption modes: symmetric encryption and hybrid encryption.
 
-**Symmetric encryption** is choosen with the command line argument `-e` followed by a 128 bit encryption key in hexadecimal (i.e. 32 characters in the range 0..9 and a..f). If -e is not given the default key `11111111111111111111111111111111` is used. Although the messages are not transmitted in plaintext when the default key is used everyone who is in the possession of that key could decrypt your messages. Thus, **use the default key with caution**!
+**Symmetric encryption** is choosen with the command line argument `-e` followed by a 128 bit encryption key in hexadecimal (i.e. 32 characters in the range 0..9 and a..f). If -e is not given the default key `11111111111111111111111111111111` is used. **Use the default key with caution!** Although the messages are not transmitted in plaintext when the default key is used everyone who knows this key could decrypt your messages.
 
 Examples to use stealthy with symmetric encryption:
 ```bash
@@ -50,59 +94,7 @@ openssl rsa -in rsa_priv.pem -pubout > rsa_pub.pem
 ```
 
 
-## Installation
-
-### Binary
-
-For Linux you can download a binary which has been compiled for Linux Mint 17 and has been tested successfully for Linux Mint 17, 17.1 and Ubuntu 14.04, 15.04 and 15.10.
-
-[https://github.com/daniel-e/stealthy/releases/download/stealthy-0.0.1/stealthy](https://github.com/daniel-e/stealthy/releases/download/stealthy-0.0.1/stealthy)
-
-### From sources
-
-Before you can use stealthy you need some packages to be able to compile the sources successfully. When you're running Ubuntu you should install the following packages (if not already installed):
-
-```
-sudo apt-get update
-sudo apt-get install build-essential libpcap-dev libssl-dev libncursesw5-dev
-```
-
-Stealthy is written in the Rust programming language. Currently, there is not Rust package for Ubuntu available so you have to install Rust manually. You can install Rust in /opt/rust/ as follows:
-
-
-```bash
-# download rust
-wget https://static.rust-lang.org/dist/rust-1.0.0-x86_64-unknown-linux-gnu.tar.gz
-
-# install rust
-tar xzf rust-1.0.0-x86_64-unknown-linux-gnu.tar.gz
-cd rust-1.0.0-x86_64-unknown-linux-gnu/
-./install.sh --prefix=/opt/rust
-
-# export the search paths for the rust binary and rust libraries
-export PATH=/opt/rust/bin/:$PATH
-export LD_LIBRARY_PATH=/opt/rust/lib/:$LD_LIBRARY_PATH
-```
-
-Now, that you have installed all requirements you can compile stealthy as follows:
-
-```bash
-# checkout the sources
-git clone https://github.com/daniel-e/stealthy.git
-# build the sources
-cd stealthy
-cargo build
-```
-
-You can now start stealthy with the command ```sudo ./target/debug/stealthy```.
-
-### From sources with Docker
-
-Checkout the sources.
-
 ## Limitations
-
-* Stealthy needs to be executed as root. This is due to the fact that stealthy needs to send raw IP packets which is only possible when the process is running in privilege mode.
 
 * Stealthy currently works only on systems with a little-endian architecture, like Intel processors.
 

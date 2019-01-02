@@ -1,3 +1,9 @@
 all:
-	docker build --no-cache=true -t test_stealthy/1 .
-	docker run -t --rm test_stealthy/1
+	docker build --no-cache -t stealthy/1 .
+
+cache:
+	docker build -t stealthy/1 .
+
+
+run:
+	docker run -t -i --rm stealthy/1

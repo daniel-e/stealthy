@@ -1,11 +1,11 @@
-FROM ubuntu:16.10
+FROM ubuntu:18.10
 
 RUN apt-get update
-RUN apt-get -y install apt-utils
-RUN apt-get -y install curl aptitude build-essential
-RUN apt-get -y install git
+RUN apt-get -y install apt-utils aptitude git curl
 
-RUN apt-get -y install libpcap-dev libncursesw5-dev libssl-dev ncurses-dev
+#RUN apt-get -y install build-essential
+#RUN apt-get -y install libpcap-dev libssl-dev
 
-ADD run.sh /tmp/
-CMD ["/bin/bash", "-c", "/tmp/run.sh"]
+CMD ["/bin/bash"]
+#ADD run.sh /tmp/
+#CMD ["/bin/bash", "-c", "/tmp/run.sh"]

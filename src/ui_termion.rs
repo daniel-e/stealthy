@@ -12,6 +12,7 @@ use crate::model::{Symbol, Item, ItemType, Model};
 
 static TRANSMITTING: char = '◷';
 static ACK: char = '✔';
+static NUMBERS: &str = "➀➁➂➃➄➅➆➇➈➉";
 
 /// Write messages to the terminal.
 pub struct TermOut {

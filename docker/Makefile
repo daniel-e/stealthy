@@ -6,4 +6,4 @@ cache:
 
 
 run:
-	docker run -t -i --rm stealthy/1
+	docker run -t -i --rm --privileged -v ${HOME}:/host stealthy/1

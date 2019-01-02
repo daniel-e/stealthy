@@ -19,4 +19,7 @@ dirs = "1.0.4"
 termion = "1.5.1"
 
 [features]
+default = []
 debugout = []
+no_notify = []
+no_show_dropped = []

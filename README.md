@@ -35,6 +35,18 @@ cargo build --release
 
 The binary `stealthy` can be found in the directory `./target/release/`.
 
+Steahlty calls `notify-send` to show notifications for new messages on the desktop. You can disable this feature at compile time:
+
+    cargo build --features "no_notify"
+
+List of features:
+
+| Feature | Description |
+|---------|-------------|
+| no_notify       | Disable desktop notifications via notify-send. |
+| show_dropped    | Show dropped packets which are not on the whitelist. |
+
+
 ### Capabilities
 Stealthy needs raw sockets which are not allowed for non-privileged users. Hence, you have two options to execute the binary. First, you could run it as root which is not recommended from a security point of view. Second (which is recommended) you could give the binary the appropriate capabilities. As root do:
 

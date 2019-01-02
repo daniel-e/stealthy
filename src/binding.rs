@@ -5,6 +5,8 @@ use std::time::Duration;
 
 use crate::{IncomingMessage, Message, Errors, MessageType};
 use crate::packet::{Packet, IdType};
+use crate::xip::IpAddresses;
+
 use std::collections::HashMap;
 
 const RETRY_TIMEOUT: i64      = 15000;  // TODO
@@ -102,7 +104,7 @@ fn current_millis() -> i64 {
 }
 
 impl Network {
-	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>, accept_ip: &[String]) -> Box<Network> {
+	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>, accept_ip: &IpAddresses) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : HashMap::new(),
@@ -113,7 +115,7 @@ impl Network {
 			shared: s.clone(),
             tx_msg: tx_msg,
 			status_tx: status_tx,
-			accept_ip: accept_ip.iter().cloned().collect(),
+			accept_ip: accept_ip.as_strings().into_iter().collect()
 		});
 
 		n.init_callback(dev);
@@ -160,13 +162,8 @@ impl Network {
 	// This method is called with the encrypted content in buf.
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
 
-		if self.accept_ip.iter().find(|&x| *x == ip).is_none() {
-			// Ignore packet as it comes from an IP which is not accepted.
-			return;
-		}
-
 		#[cfg(feature="debugout")]
-		self.status_tx.send(String::from("[Network::recv_packet()] called.")).expect("send failed");
+		self.status_tx.send(String::from("[Network::recv_packet()] ============= called =============")).expect("send failed");
 
 		if len == 0 {
 			// TODO: hack: ip is the reason for the invalid packet
@@ -174,6 +171,14 @@ impl Network {
 			self.status_tx.send(
 				format!("[Network::recv_packet()] received invalid packet: {}", ip)).unwrap();
 			*/
+			return;
+		}
+
+		if self.accept_ip.iter().find(|&x| *x == ip).is_none() {
+			// Ignore packet as it comes from an IP which is not accepted.
+			#[cfg(feature = "show_dropped")]
+			self.status_tx.send(format!("Dropped packet from {} / {:?}", ip, self.accept_ip)).expect("Send failed.");
+
 			return;
 		}
 

@@ -13,8 +13,33 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use crate::cryp::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
 use crate::delivery::Delivery;
 use crate::binding::Network;
+
+pub mod xip {
+    use std::net::Ipv4Addr;
+
+    pub struct IpAddresses {
+        ips: Vec<Ipv4Addr>
+    }
+
+    impl IpAddresses {
+        pub fn from_comma_list(s: &str) -> IpAddresses {
+            IpAddresses {
+                ips: s.split(",")
+                    .map(|x| x.parse().expect("Found invalid IP address."))
+                    .collect()
+            }
+        }
+
+        pub fn as_strings(&self) -> Vec<String> {
+            self.ips.iter().map(|x| x.to_string()).collect()
+        }
+    }
+}
+
+
 use crypto::sha2::Sha256;
 use crypto::digest::Digest;
+use crate::xip::IpAddresses;
 
 pub enum ErrorType {
     DecryptionError,
@@ -76,7 +101,7 @@ fn sanitize_filename(s: String) -> String {
 }
 
 impl Message {
-    pub fn file_upload(ip: String, fname: String, data: Vec<u8>) -> Message {
+    pub fn file_upload(ip: String, fname: String, data: &Vec<u8>) -> Message {
         let mut buffer = Vec::from(fname.as_bytes());
         buffer.push(0);
         buffer.extend(data.iter());
@@ -158,12 +183,12 @@ pub struct Layers {
 
 impl Layers {
 
-    pub fn symmetric(hexkey: &String, device: &String, status_tx: Sender<String>, accept_ip: &[String]) -> Result<Layer, &'static str> {
+    pub fn symmetric(hexkey: &String, device: &String, status_tx: Sender<String>, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(SymmetricEncryption::new(hexkey)?), device, status_tx, accept_ip)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, status_tx: Sender<String>, accept_ip: &[String]) -> Result<Layer, &'static str> {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, status_tx: Sender<String>, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(
                 AsymmetricEncryption::new(&pubkey_file, &privkey_file)?
@@ -200,7 +225,7 @@ impl Layers {
 
     // ------ private functions
 
-    fn init(e: Box<Encryption>, device: &String, status_tx: Sender<String>, accept_ip: &[String]) -> Result<Layer, &'static str> {
+    fn init(e: Box<Encryption>, device: &String, status_tx: Sender<String>, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers

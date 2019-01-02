@@ -56,7 +56,8 @@ pub struct Item {
     pub msg: String,
     pub typ: ItemType,
     pub symbol: Option<Symbol>,
-    pub id: Option<u64>,
+    pub id: Option<Vec<u64>>, // In group chat settings one item can have several IDs.
+    pub acks_received: usize,
 }
 
 impl Item {
@@ -66,7 +67,8 @@ impl Item {
             msg,
             typ,
             symbol: None,
-            id: None
+            id: None,
+            acks_received: 0
         }
     }
 

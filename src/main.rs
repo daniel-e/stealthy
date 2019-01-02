@@ -17,6 +17,8 @@ use crypto::digest::Digest;
 
 use stealthy::{Message, IncomingMessage, Layers, Layer};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
+use stealthy::xip::IpAddresses;
+
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::ConsoleMessage;
 
@@ -134,7 +136,7 @@ fn init_global_state() {
     };
 }
 
-fn parse_command(txt: String, o: Channel, l: &Layers, dstip: String) {
+fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
@@ -142,7 +144,7 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstip: String) {
         match read_file(b) {
             Ok(data) => {
                 console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info);
-                send_message(String::from("\n") + data.as_str(), o.clone(), l, dstip);
+                send_message(String::from("\n") + data.as_str(), o.clone(), l, dstips);
             },
             _ => {
                 console::msg(o.clone(), String::from("Could not read file."), ItemType::Error);
@@ -155,7 +157,7 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstip: String) {
         let (_, b) = txt.as_str().split_at(8);
         match read_bin_file(b) {
             Ok(data) => {
-                send_file(data, b.to_string(), o, l, dstip);
+                send_file(data, b.to_string(), o, l, dstips);
             },
             Err(s) => {
                 console::msg(o, String::from(s), ItemType::Error);
@@ -184,49 +186,55 @@ fn msg_transmitting(o: Channel, id: u64, s: String) {
     );
 }
 
-fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstip: String) {
+fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 
-    let n = data.len();
-    let msg = Message::file_upload(dstip, without_dirs(&fname), data);
+    for dstip in dstips.as_strings() {
+        let n = data.len();
+        let msg = Message::file_upload(dstip, without_dirs(&fname), &data);
 
-    let id = rand::random::<u64>();
-    msg_transmitting(o, id, format!("[you] sending file '{}' with {} bytes...", fname, n));
-    l.send(msg, id, true);
+        let id = rand::random::<u64>();
+        msg_transmitting(o.clone(), id, format!("[you] sending file '{}' with {} bytes...", fname, n));
+        l.send(msg, id, true);
+    }
 }
 
-fn send_message(txt: String, o: Channel, l: &Layers, dstip: String) {
+fn send_message(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 
-    let msg = Message::new(dstip, txt.clone().into_bytes());
+    for dstip in dstips.as_strings() {
+        let msg = Message::new(dstip, txt.clone().into_bytes());
 
-    let id = rand::random::<u64>();
-    msg_transmitting(o, id, format!("[you] {}", txt));
-    l.send(msg, id, false);
+        let id = rand::random::<u64>();
+        msg_transmitting(o.clone(), id, format!("[you] {}", txt));
+        l.send(msg, id, false);
+    }
 }
 
-fn get_layer(args: &Arguments, status_tx: Sender<String>) -> Layer {
+fn get_layer(args: &Arguments, status_tx: Sender<String>, dstips: &IpAddresses) -> Layer {
     let ret =
         if args.hybrid_mode {
             // use asymmetric encryption
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx, &[args.dstip.clone()])
+            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx, dstips)
         } else {
             // use symmetric encryption
-            Layers::symmetric(&args.secret_key, &args.device, status_tx, &[args.dstip.clone()])
+            Layers::symmetric(&args.secret_key, &args.device, status_tx, dstips)
         };
     ret.expect("Initialization failed.")
 }
 
-fn welcome(args: &Arguments, o: Channel, layer: &Layer) {
+fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
     for l in logo::get_logo() {
         console::raw(o.clone(), l, ItemType::Introduction);
     }
+
+    let ips = dstips.as_strings().join(", ");
 
     let v = vec![
         format!("The most secure ICMP messenger."),
         format!(" "),
         format!("┌─────────────────────┬──────────────────┐"),
         format!("│ Listening on device │ {:16} │", args.device),
-        format!("│ Talking to IP       │ {:16} │", args.dstip),
-        format!("│ Accepting IPs       │ {:16} │", args.dstip),
+        format!("│ Talking to IPs      │ {:16} │", ips),
+        format!("│ Accepting IPs       │ {:16} │", ips),
         format!("└─────────────────────┴──────────────────┘"),
         format!(" "),
         format!("Type /help to get a list of available commands."),
@@ -268,7 +276,7 @@ fn status_message_loop(o: Channel) -> Sender<String> {
     tx
 }
 
-fn input_loop(o: Channel, mut i: HInput, l: Layers, dstip: String, model: ArcModel, out: ArcOut) {
+fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: ArcModel, out: ArcOut) {
 
     loop { match i.read_char() {
         UserInput::Character(buf) => {
@@ -304,9 +312,9 @@ fn input_loop(o: Channel, mut i: HInput, l: Layers, dstip: String, model: ArcMod
             out.lock().unwrap().refresh();
             if s.len() > 0 {
                 if s.starts_with("/") {
-                    parse_command(s, o.clone(), &l, dstip.clone());
+                    parse_command(s, o.clone(), &l, &dstips);
                 } else {
-                    send_message(s, o.clone(), &l, dstip.clone());
+                    send_message(s, o.clone(), &l, &dstips);
                 }
             }
         }
@@ -344,6 +352,8 @@ fn main() {
     // Parse command line arguments.
 	let args = parse_arguments().expect("Cannot parse arguments");;
 
+    let dstips = IpAddresses::from_comma_list(&args.dstip);
+
     // The model stores all information which is required to show the screen.
     let model = Arc::new(Mutex::new(Model::new()));
 
@@ -357,13 +367,13 @@ fn main() {
     // Creates a thread which waits for messages on a channel to be written to out.
     let status_tx = status_message_loop(tx.clone());
 
-    let layer = get_layer(&args, status_tx);
+    let layer = get_layer(&args, status_tx, &dstips);
 
-    welcome(&args, tx.clone(), &layer);
+    welcome(&args, tx.clone(), &layer, &dstips);
 
     // this is the loop which handles messages received via rx
     recv_loop(tx.clone(), layer.rx);
 
-    input_loop(tx.clone(), i, layer.layers, args.dstip, model, out);
+    input_loop(tx.clone(), i, layer.layers, dstips, model, out);
 }
 

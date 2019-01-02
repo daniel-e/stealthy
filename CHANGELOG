@@ -7,3 +7,4 @@
 * get rid of "transmitting" and "ack" messages; instead send status is displayed next to the message
 * requires at Rust >=1.31.0 (edition 2018)
 * updated versions of dependencies
+* disable notify feature at compile time

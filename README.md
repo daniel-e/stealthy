@@ -2,6 +2,8 @@
 
 Stealthy is a simple messenger application which runs in the terminal without any graphical UI. It uses ICMP echo requests to communicate with other clients - the same method used by the ping utility on Linux systems. As firewalls are usually configured to allow ICMP echo requests, stealthy can bypass many of them.
 
+![stealthy](screenshot.png)
+
 **Features**
 
 * The communication is end-to-end encrypted. You can chose symmetric encryption or asymmetric encryption.

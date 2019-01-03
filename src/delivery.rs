@@ -300,7 +300,13 @@ impl SendObject {
                 Ok(_id) => {
                 },
                 Err(_) => {
-                    self.status_tx.send(format!("delivery.rs::send_msg failed.")).expect("Send failed.");
+                    self.status_tx.send(
+                        format!("{}{}{}",
+                                "Sending of message failed. ",
+                                "Maybe you don't have the permission to create raw sockets. ",
+                                "Check the documentation for more details."
+                        ))
+                        .expect("Send failed.");
                     // TODO remove small_message from delivery.rs:Delivery:self.pending on error
                     break;
                 }

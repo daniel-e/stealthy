@@ -17,6 +17,7 @@ pub enum UserInput {
     End,
     PageDown,
     PageUp,
+    CtrlR
 }
 
 /// Use to receive user input.
@@ -55,6 +56,9 @@ impl TermIn {
 
     fn map_input(buf: Vec<u8>) -> Option<UserInput> {
 
+        //println!("{:?}", buf);
+        //thread::sleep(Duration::from_secs(3));
+
         if buf == vec![27] {                 // Escape
             Some(UserInput::Escape)
         } else if buf == vec![4] {           // Ctrl + D
@@ -69,6 +73,8 @@ impl TermIn {
             Some(UserInput::ArrowDown)
         } else if buf == vec![27, 91, 70] {  // End
             Some(UserInput::End)
+        } else if buf == vec![18] {          // Ctrl + R
+            Some(UserInput::CtrlR)
         } else if buf.len() < 3 {            // Some character
             Some(UserInput::Character(buf))
         } else if buf == vec![27, 91, 53, 126] { // Page up

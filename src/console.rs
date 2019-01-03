@@ -5,6 +5,7 @@ use crate::model::Item;
 
 #[cfg(not(feature = "no_notify"))]
 use std::process::Command;
+use crate::model::Source;
 
 pub enum ConsoleMessage {
     TextMessage(Item),
@@ -12,37 +13,32 @@ pub enum ConsoleMessage {
     Exit,
 }
 
-fn fm_time() -> String {
-    time::strftime("%d.%m. %R", &time::now()).unwrap()
-}
-
 pub fn raw_item(o: Sender<ConsoleMessage>, i: Item) {
     o.send(ConsoleMessage::TextMessage(i)).expect("Error in console::msg");
 }
 
-pub fn raw(o: Sender<ConsoleMessage>, s: String, typ: ItemType) {
-    raw_item(o, Item::new(format!("{}", s), typ));
+pub fn raw(o: Sender<ConsoleMessage>, s: String, typ: ItemType, from: Source) {
+    raw_item(o, Item::new(format!("{}", s), typ, from));
 }
 
 pub fn msg_item(o: Sender<ConsoleMessage>, i: Item) {
-    let s = i.msg.clone();
-    raw_item(o, i.message(format!("{} │ {}", fm_time(), s)));
+    raw_item(o, i);
 }
 
-pub fn msg(o: Sender<ConsoleMessage>, s: String, typ: ItemType) {
-    raw(o, format!("{} │ {}", fm_time(), s), typ);
+pub fn msg(o: Sender<ConsoleMessage>, s: String, typ: ItemType, from: Source) {
+    raw(o, format!("{}", s), typ, from);
 }
 
 pub fn error(o: Sender<ConsoleMessage>, s: String) {
-    msg(o, s, ItemType::Error);
+    msg(o, s, ItemType::Error, Source::System);
 }
 
 pub fn status(o: Sender<ConsoleMessage>, s: String) {
-    msg(o, s, ItemType::Info);
+    msg(o, s, ItemType::Info, Source::System);
 }
 
 pub fn new_file(o: Sender<ConsoleMessage>, m: Message, filename: String) {
-    msg(o, format!("[{}] received file '{}'", m.get_ip(), filename), ItemType::NewFile);
+    msg(o, format!("received file '{}'", filename), ItemType::NewFile, Source::Ip(m.get_ip()));
 }
 
 pub fn ack_msg(o: Sender<ConsoleMessage>, id: u64) {
@@ -57,7 +53,7 @@ fn notify(ip: String, o: Sender<ConsoleMessage>) {
         .arg("3000")
         .arg(format!("new message from {}", ip))
         .status().is_err() {
-        msg(o, format!("calling notify-send failed"), ItemType::Error);
+        msg(o, format!("calling notify-send failed"), ItemType::Error, Source::System);
     }
 }
 
@@ -68,13 +64,13 @@ pub fn new_msg(o: Sender<ConsoleMessage>, m: Message) {
 
     match s {
         Ok(s)  => {
-            msg(o.clone(), format!("[{}] {}", ip, s), ItemType::Received);
+            msg(o.clone(), format!("{}", s), ItemType::Received, Source::Ip(ip.clone()));
 
             #[cfg(not(feature = "no_notify"))]
             notify(ip, o);
         }
         Err(_) => {
-            msg(o, format!("[{}] error: could not decode message", ip), ItemType::Error);
+            msg(o, format!("error: could not decode message"), ItemType::Error, Source::Ip(ip));
         }
     }
 }

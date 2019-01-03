@@ -1,4 +1,6 @@
-static MAX_BUF_LEN: usize = 20;
+use time::Tm;
+
+static MAX_BUF_LEN: usize = 500;
 
 pub struct Model {
     /// List of all messages for the main window.
@@ -59,22 +61,39 @@ impl Model {
 }
 
 #[derive(Clone)]
+pub enum Source {
+    Ip(String),
+    You,
+    System,
+    Raw,
+}
+
+#[derive(Clone)]
 pub struct Item {
     pub msg: String,
     pub typ: ItemType,
     pub id: Vec<u64>,  // In group chat scenarios one item can have several IDs.
     pub acks_received: usize,
+    pub tim: Tm,
+    from: Source,
 }
 
 impl Item {
     /// Creates a new item without a symbol and without an id.
-    pub fn new(msg: String, typ: ItemType) -> Item {
+    pub fn new(msg: String, typ: ItemType, from: Source) -> Item {
         Item {
             msg,
             typ,
             id: vec![],
-            acks_received: 0
+            acks_received: 0,
+            tim: time::now(),
+            from,
         }
+    }
+
+    pub fn raw(mut self) -> Item {
+        self.from = Source::Raw;
+        self
     }
 
     /// Sets the message of an item.
@@ -87,6 +106,10 @@ impl Item {
     pub fn add_id(mut self, id: u64) -> Item {
         self.id.push(id);
         self
+    }
+
+    pub fn source(&self) -> Source {
+        self.from.clone()
     }
 }
 

@@ -26,6 +26,7 @@ use crate::ui_termion::TermOut;
 use crate::ui_in::{TermIn, UserInput};
 use crate::model::{ItemType, Model, Item};
 use std::iter::repeat;
+use crate::model::Source;
 
 type HInput = TermIn;
 type HOutput = TermOut;
@@ -38,27 +39,28 @@ fn help_message(o: Channel) {
     write_lines(o, &vec![
         "Commands always start with a slash:",
         " ",
-        "/help               - this help message",
-        "/uptime, /up        - uptime",
-        "/cat <filename>     - send content of an UTF-8 encoded text file",
-        "/upload <filename>  - send binary file",
+        "/help              - this help message",
+        "/uptime, /up       - uptime",
+        "/cat <filename>    - send content of an UTF-8 encoded text file",
+        "/upload <filename> - send binary file",
         " ",
         "Keys:",
         " ",
-        "arrow up            - scroll to older messages",
-        "arrow down          - scroll to latest messages",
-        "page up             - scroll one page up",
-        "page down           - scroll one page down",
-        "end                 - scroll to last message in buffer",
-        "esc or ctrl+d       - quit",
+        "arrow up     - scroll to older messages",
+        "arrow dow    - scroll to latest messages",
+        "page up      - scroll one page up",
+        "page down    - scroll one page down",
+        "end          - scroll to last message in buffer",
+        "ctrl+r       - switch to plain messages and back to normal view",
+        "esc | ctrl+d - quit",
         " "
-    ], ItemType::Info);
+    ], ItemType::Info, Source::System);
 }
 
-fn write_lines(o: Channel, lines: &[&str], typ: ItemType) {
+fn write_lines(o: Channel, lines: &[&str], typ: ItemType, from: Source) {
 
     for v in lines {
-        console::raw(o.clone(), String::from(*v), typ.clone())
+        console::raw(o.clone(), String::from(*v), typ.clone(), from.clone())
     }
 }
 
@@ -144,11 +146,11 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
         let (_, b) = txt.as_str().split_at(5);
         match read_file(b) {
             Ok(data) => {
-                console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info);
+                console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info, Source::System);
                 send_message(String::from("\n") + data.as_str(), o.clone(), l, dstips);
             },
             _ => {
-                console::msg(o.clone(), String::from("Could not read file."), ItemType::Error);
+                console::msg(o.clone(), String::from("Could not read file."), ItemType::Error, Source::System);
             }
         }
         return;
@@ -161,7 +163,7 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
                 send_file(data, b.to_string(), o, l, dstips);
             },
             Err(s) => {
-                console::msg(o, String::from(s), ItemType::Error);
+                console::msg(o, String::from(s), ItemType::Error, Source::System);
             }
         }
         return;
@@ -172,10 +174,10 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
             help_message(o.clone());
         },
         "/uptime" | "/up" => {
-            console::msg(o, format!("up {}", decode_uptime(uptime())), ItemType::Info);
+            console::msg(o, format!("up {}", decode_uptime(uptime())), ItemType::Info, Source::System);
         },
         _ => {
-            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info);
+            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info, Source::System);
         }
     };
 }
@@ -187,7 +189,11 @@ fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message
 fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 
     let n = data.len();
-    let mut item = Item::new(format!("[you] sending file '{}' with {} bytes...", fname, n), ItemType::MyMessage);
+    let mut item = Item::new(
+        format!("sending file '{}' with {} bytes...", fname, n),
+        ItemType::MyMessage,
+        model::Source::You
+    );
 
     let v = dstips.as_strings()
         .iter()
@@ -210,7 +216,7 @@ fn create_data(dstip: String, txt: &String) -> (Message, u64) {
 
 fn send_message(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 
-    let mut item = Item::new(format!("[you] {}", txt), ItemType::MyMessage);
+    let mut item = Item::new(format!("{}", txt), ItemType::MyMessage, model::Source::You);
 
     let v = dstips.as_strings()
         .iter()
@@ -254,7 +260,7 @@ fn normalize(v: &[&String], c: char) -> (Vec<String>, usize) {
 
 fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
     for l in logo::get_logo() {
-        console::raw(o.clone(), l, ItemType::Introduction);
+        console::raw(o.clone(), l, ItemType::Introduction, Source::System);
     }
 
     let ips = dstips.as_strings().join(", ");
@@ -278,7 +284,8 @@ fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
     write_lines(
         o.clone(),
         v.iter().map(|x| x.as_str()).collect::<Vec<_>>().as_slice(),
-        ItemType::Introduction
+        ItemType::Introduction,
+            Source::System
     );
 
     if args.hybrid_mode {
@@ -286,16 +293,16 @@ fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
 
         h.input(&layer.layers.encryption_key());
         let s = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of encryption key : {}", s), ItemType::Introduction);
+        console::raw(o.clone(), format!("Hash of encryption key : {}", s), ItemType::Introduction, Source::System);
 
         h.reset();
         h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
         let q = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of your public key: {}", q), ItemType::Introduction);
+        console::raw(o.clone(), format!("Hash of your public key: {}", q), ItemType::Introduction, Source::System);
     }
-    console::raw(o.clone(), format!(" "), ItemType::Introduction);
-    console::raw(o.clone(), format!("Happy chatting..."), ItemType::Introduction);
-    console::raw(o.clone(), format!(" "), ItemType::Introduction);
+    console::raw(o.clone(), format!(" "), ItemType::Introduction, Source::System);
+    console::raw(o.clone(), format!("Happy chatting..."), ItemType::Introduction, Source::System);
+    console::raw(o.clone(), format!(" "), ItemType::Introduction, Source::System);
 }
 
 
@@ -339,6 +346,9 @@ fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: 
         },
         UserInput::PageUp => {
             out.lock().unwrap().page_up();
+        },
+        UserInput::CtrlR => {
+            out.lock().unwrap().toggle_raw_view();
         },
         UserInput::Enter => {
             let s = model.lock().unwrap().apply_enter();

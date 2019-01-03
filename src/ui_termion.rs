@@ -9,6 +9,7 @@ use termion::raw::RawTerminal;
 use termion::raw::IntoRawMode;
 
 use crate::model::{Item, ItemType, Model};
+use crate::model::Source;
 
 static ACK: char = '✔';
 static NUMBERS: &str = "➀➁➂➃➄➅➆➇➈➉";
@@ -22,6 +23,7 @@ pub struct TermOut {
     // view on the messages in the window. Therefore, adjust_scroll_offset() needs to be called
     // when a new message has been added to the buffer in the model.
     scroll_offset: usize,
+    raw_view: bool,
 }
 
 impl TermOut {
@@ -30,7 +32,8 @@ impl TermOut {
         TermOut {
             stdout: stdout().into_raw_mode().expect("No raw mode possible."),
             model: model,
-            scroll_offset: 0
+            scroll_offset: 0,
+            raw_view: false
         }.init()
     }
 
@@ -51,7 +54,7 @@ impl TermOut {
     /// The message is added to the model.
     pub fn adjust_scroll_offset(&mut self, i: Item) {
         if self.scroll_offset > 0 {
-            self.increase_scroll_offset(TermOut::split_line(&i).len());
+            self.increase_scroll_offset(TermOut::split_line(self,&i).len());
         }
 
         self.redraw();
@@ -72,14 +75,14 @@ impl TermOut {
     }
 
     pub fn page_up(&mut self) {
-        for _ in 0..TermOut::window_height() {
+        for _ in 0..self.window_height() {
             self.scroll_up_1();
         }
         self.redraw();
     }
 
     pub fn page_down(&mut self) {
-        for _ in 0..TermOut::window_height() {
+        for _ in 0..self.window_height() {
             self.scroll_down_1();
         }
         self.redraw();
@@ -90,6 +93,12 @@ impl TermOut {
         self.redraw();
     }
 
+    pub fn toggle_raw_view(&mut self) {
+        self.raw_view = !self.raw_view;
+        self.increase_scroll_offset(0);
+        write!(self.stdout, "{}", termion::clear::All, ).expect("Write error.");
+        self.redraw();
+    }
     // ===========================================================================================
 
     fn init(mut self) -> TermOut {
@@ -108,9 +117,9 @@ impl TermOut {
     fn increase_scroll_offset(&mut self, n: usize) {
         let model = self.model.lock().unwrap();
         // The number of lines in the window.
-        let window_height = TermOut::window_height();
+        let window_height = self.window_height();
         // The number of lines required to show all messages. One message can consume multiple lines.
-        let buffer_lines = TermOut::lines(&model.buf).len();
+        let buffer_lines = self.lines(&model.buf).len();
 
         if buffer_lines > window_height {
             let max_off = buffer_lines - window_height;
@@ -155,15 +164,52 @@ impl TermOut {
         ).expect("Error.");
     }
 
+    fn fm_time(&self, i: &Item) -> String {
+        time::strftime("%d.%m. %R", &i.tim).unwrap()
+    }
+
+    fn txt(&self, i: &Item) -> String {
+        if self.raw_view {
+            return format!("{}", i.msg.clone());
+        }
+        let t = self.fm_time(&i);
+        match i.source() {
+            Source::Ip(ip) => {
+                format!("{} | [{}] {}", t, ip, i.msg.clone())
+            },
+            Source::You => {
+                format!("{} | [you] {}", t, i.msg.clone())
+            },
+            Source::System => {
+                let p = match i.typ {
+                    ItemType::Introduction => {
+                        String::from("")
+                    },
+                    _ => {
+                        t + " | "
+                    }
+                };
+                format!("{}{}", p, i.msg.clone())
+            },
+            Source::Raw => {
+                format!("{}", i.msg.clone())
+            }
+        }
+    }
 
     fn redraw(&mut self) {
-        self.draw_window();
+        if !self.raw_view {
+            self.draw_window();
+        }
+
+        let wx = self.window_x_offset();
+        let wy = self.window_y_offset();
 
         let model = self.model.lock().unwrap();
-        let screen_width = TermOut::window_width();
-        let screen_height = TermOut::window_height();
+        let screen_width = self.window_width();
+        let screen_height = self.window_height();
 
-        let buffer = TermOut::lines(&model.buf);
+        let buffer = self.lines(&model.buf);
         let n = buffer.len();
         let mut p = 0;
 
@@ -177,21 +223,59 @@ impl TermOut {
 
         // Show messages.
         for (y, line) in buf.iter().enumerate() {
-            let s = extend_line_to_screen_width(line, screen_width);
-            write_color(&mut self.stdout, s.typ.clone());
-            write_at(&mut self.stdout, 2, y + 2, &s.msg);
-            write_symbol(&mut self.stdout, &s, y);
+            let t = self.txt(&line); // formatted line
+            let m = extend_line_to_screen_width(t, screen_width);
+
+            write_color(&mut self.stdout, line.typ.clone());
+            write_at(&mut self.stdout, wx, y + wy, &m);
+            if !self.raw_view {
+                write_symbol(&mut self.stdout, line, y);
+            }
         }
 
         // Show input field.
-        write_input_field(&mut self.stdout, model.input.clone());
+        if !self.raw_view {
+            write_input_field(&mut self.stdout, model.input.clone());
+        }
 
         // Show scroll status.
-        if self.scroll_offset > 0 {
+        if !self.raw_view && self.scroll_offset > 0 {
             write_scroll_status(&mut self.stdout, p, buffer.len());
         }
 
         self.stdout.flush().unwrap();
+    }
+
+    fn window_x_offset(&self) -> usize {
+        if self.raw_view {
+            1
+        } else {
+            2
+        }
+    }
+
+    fn window_y_offset(&self) -> usize {
+        if self.raw_view {
+            1
+        } else {
+            2
+        }
+    }
+
+    fn window_height(&self) -> usize {
+        if self.raw_view {
+            TermOut::size().1 as usize
+        } else {
+            TermOut::size().1 as usize - 4
+        }
+    }
+
+    fn window_width(&self) -> usize {
+        if self.raw_view {
+            TermOut::size().0 as usize
+        } else {
+            TermOut::size().0 as usize - 2
+        }
     }
 
     // ===========================================================================================
@@ -200,19 +284,11 @@ impl TermOut {
         termion::terminal_size().unwrap()
     }
 
-    fn window_height() -> usize {
-        TermOut::size().1 as usize - 4
-    }
-
-    fn window_width() -> usize {
-        TermOut::size().0 as usize - 2
-    }
-
-    fn split_line(s: &Item) -> Vec<Item> {
+    fn split_line(&self, s: &Item) -> Vec<Item> {
         // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of UTF-8 characters
-        TermOut::remove_symbol(s.msg.chars().collect::<Vec<char>>()
-            .chunks(TermOut::window_width())
-            .map(|x| s.clone().message(x.iter().collect()))
+        TermOut::remove_symbol(self.txt(s).chars().collect::<Vec<char>>()
+            .chunks(self.window_width())
+            .map(|x| s.clone().message(x.iter().collect()).raw())
             .collect()
         )
     }
@@ -226,9 +302,9 @@ impl TermOut {
         v
     }
 
-    fn lines(buf: &Vec<Item>) -> Vec<Item> {
+    fn lines(&self, buf: &Vec<Item>) -> Vec<Item> {
         buf.iter()
-            .map(|v| TermOut::split_line(v))
+            .map(|v| self.split_line(v))
             .flatten()
             .collect()
     }
@@ -247,12 +323,12 @@ fn write_color(o: &mut RawTerminal<Stdout>, typ: ItemType) {
     }.unwrap();
 }
 
-fn extend_line_to_screen_width(i: &Item, screen_width: usize) -> Item {
-    let mut s = i.clone();
-    while s.msg.chars().count() < screen_width {
-        s.msg.push(' ');
+fn extend_line_to_screen_width(s: String, screen_width: usize) -> String {
+    let mut v = s;
+    while v.chars().count() < screen_width {
+        v.push(' ');
     }
-    s
+    v
 }
 
 fn symbol_for_item(item: &Item) -> String {

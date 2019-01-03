@@ -25,6 +25,7 @@ use crate::console::ConsoleMessage;
 use crate::ui_termion::TermOut;
 use crate::ui_in::{TermIn, UserInput};
 use crate::model::{ItemType, Model, Item};
+use std::iter::repeat;
 
 type HInput = TermIn;
 type HOutput = TermOut;
@@ -238,6 +239,19 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>, dstips: &IpAddresses) 
     ret.expect("Initialization failed.")
 }
 
+fn chars(n: usize, c: char) -> String {
+    repeat(c).take(n).collect()
+}
+
+fn normalize(v: &[&String], c: char) -> (Vec<String>, usize) {
+    let maxlen = v.iter().map(|x| x.len()).max().unwrap();
+    let r = v.iter()
+        .map(|&s| s.clone() + &chars(maxlen - s.len() + 1, c))
+        .collect::<Vec<String>>();
+    let x = r.iter().map(|s| s.len()).max().unwrap();
+    (r, x)
+}
+
 fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
     for l in logo::get_logo() {
         console::raw(o.clone(), l, ItemType::Introduction);
@@ -245,14 +259,16 @@ fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
 
     let ips = dstips.as_strings().join(", ");
 
+    let (values, n) = normalize(&[&args.device, &ips, &ips], ' ');
+
     let v = vec![
         format!("The most secure ICMP messenger."),
         format!(" "),
-        format!("┌─────────────────────┬──────────────────┐"),
-        format!("│ Listening on device │ {:16} │", args.device),
-        format!("│ Talking to IPs      │ {:16} │", ips),
-        format!("│ Accepting IPs       │ {:16} │", ips),
-        format!("└─────────────────────┴──────────────────┘"),
+        format!("┌─────────────────────┬─{}┐", chars(n, '─')),
+        format!("│ Listening on device │ {}│", values[0]),
+        format!("│ Talking to IPs      │ {}│", values[1]),
+        format!("│ Accepting IPs       │ {}│", values[2]),
+        format!("└─────────────────────┴─{}┘", chars(n, '─')),
         format!(" "),
         format!("Type /help to get a list of available commands."),
         format!("Check https://github.com/daniel-e/stealthy for more documentation."),

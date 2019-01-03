@@ -147,7 +147,10 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
         match read_file(b) {
             Ok(data) => {
                 console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info, Source::System);
-                send_message(String::from("\n") + data.as_str(), o.clone(), l, dstips);
+                let s = data.as_str();
+                for line in s.split("\n") {
+                    send_message(line.to_string().trim_right().to_string(), o.clone(), l, dstips);
+                }
             },
             _ => {
                 console::msg(o.clone(), String::from("Could not read file."), ItemType::Error, Source::System);

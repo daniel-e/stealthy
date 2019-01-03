@@ -354,7 +354,7 @@ fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: 
     }}
 }
 
-fn init_screen(model: ArcModel, out: ArcOut) -> Channel {
+fn init_screen(mdl: ArcModel, out: ArcOut) -> Channel {
 
     // The sender "tx" is used at other locations to send messages to the output.
     let (tx, rx) = channel::<ConsoleMessage>();
@@ -362,11 +362,11 @@ fn init_screen(model: ArcModel, out: ArcOut) -> Channel {
     thread::spawn(move || {
         loop { match rx.recv().unwrap() {
             ConsoleMessage::TextMessage(item) => {
-                model.lock().unwrap().add_message(item.clone());
+                mdl.lock().unwrap().add_message(item.clone());
                 out.lock().unwrap().adjust_scroll_offset(item);
             },
             ConsoleMessage::Ack(id) => {
-                model.lock().unwrap().ack(id);
+                mdl.lock().unwrap().ack(id);
                 out.lock().unwrap().refresh();
             },
             // We need this as otherwise "out" is not dropped and the terminal state

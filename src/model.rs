@@ -1,3 +1,5 @@
+static MAX_BUF_LEN: usize = 20;
+
 pub struct Model {
     /// List of all messages for the main window.
     pub buf: Vec<Item>,
@@ -49,6 +51,10 @@ impl Model {
 
     pub fn add_message(&mut self, i: Item) {
         self.buf.push(i);
+        // TODO not very efficient
+        while self.buf.len() > MAX_BUF_LEN {
+            self.buf.remove(0);
+        }
     }
 }
 

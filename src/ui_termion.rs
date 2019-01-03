@@ -17,6 +17,10 @@ static NUMBERS: &str = "➀➁➂➃➄➅➆➇➈➉";
 pub struct TermOut {
     stdout: RawTerminal<Stdout>,
     model: Arc<Mutex<Model>>,
+    // The scroll_offset is the amount of "arrows up".
+    // When the user scrolls, i.e. the scroll_offset > 0, then a new message should not change the
+    // view on the messages in the window. Therefore, adjust_scroll_offset() needs to be called
+    // when a new message has been added to the buffer in the model.
     scroll_offset: usize,
 }
 
@@ -47,8 +51,9 @@ impl TermOut {
     /// The message is added to the model.
     pub fn adjust_scroll_offset(&mut self, i: Item) {
         if self.scroll_offset > 0 {
-            self.scroll_offset += TermOut::split_line(&i).len();
+            self.increase_scroll_offset(TermOut::split_line(&i).len());
         }
+
         self.redraw();
     }
 
@@ -100,15 +105,21 @@ impl TermOut {
         self.stdout.flush().expect("Flush error.");
     }
 
-    fn scroll_up_1(&mut self) {
+    fn increase_scroll_offset(&mut self, n: usize) {
         let model = self.model.lock().unwrap();
+        // The number of lines in the window.
         let window_height = TermOut::window_height();
+        // The number of lines required to show all messages. One message can consume multiple lines.
         let buffer_lines = TermOut::lines(&model.buf).len();
 
         if buffer_lines > window_height {
             let max_off = buffer_lines - window_height;
-            self.scroll_offset = min(max_off, self.scroll_offset + 1);
+            self.scroll_offset = min(max_off, self.scroll_offset + n);
         }
+    }
+
+    fn scroll_up_1(&mut self) {
+        self.increase_scroll_offset(1);
     }
 
     fn scroll_down_1(&mut self) {
@@ -143,6 +154,7 @@ impl TermOut {
                termion::cursor::Goto(maxx, maxy - 2)
         ).expect("Error.");
     }
+
 
     fn redraw(&mut self) {
         self.draw_window();

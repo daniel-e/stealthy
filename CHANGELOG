@@ -9,3 +9,4 @@
 * updated versions of dependencies
 * disable notify feature at compile time via --features "no_notify"
 * group chat (currently for symmetric encryption only)
+* raw mode (show messages without time and source prefix

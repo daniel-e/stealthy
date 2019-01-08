@@ -2,12 +2,14 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
+use std::convert::From;
 
 use crate::{IncomingMessage, Message, Errors, MessageType};
 use crate::packet::{Packet, IdType};
 use crate::xip::IpAddresses;
 
 use std::collections::HashMap;
+use std::iter::repeat;
 
 const RETRY_TIMEOUT: i64      = 15000;  // TODO
 const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);
@@ -36,6 +38,7 @@ extern "C" fn callback(target: *mut Network, buf: *const u8, len: u32, typ: u32,
 			unsafe { (*target).recv_packet(buf, len, string_from_cstr(srcip)); }
 		},
 		1 => { // pong
+			unsafe { (*target).pong(buf, len, string_from_cstr(srcip)); }
 		},
 		2 => {
 			unsafe { (*target).recv_packet(buf, len, String::from("invalid length")); }
@@ -113,13 +116,14 @@ impl Network {
 		// Network must be on the heap because of the callback function.
 		let mut n = Box::new(Network {
 			shared: s.clone(),
-            tx_msg: tx_msg,
-			status_tx: status_tx,
+            tx_msg,
+			status_tx: status_tx.clone(),
 			accept_ip: accept_ip.as_strings().into_iter().collect()
 		});
 
 		n.init_callback(dev);
 		n.init_retry_event_receiver(s.clone());
+		Network::ping(status_tx, 100, accept_ip.as_strings().pop().unwrap());
 		n
 	}
 
@@ -157,6 +161,36 @@ impl Network {
 				}
 			}
 		}
+	}
+
+	fn ping(status_tx: Sender<String>, n: usize, ip: String) {
+		status_tx.send(format!("probing {} {}...", ip, n)).unwrap();
+		let s = format!("PROBING:{}/", n);
+		let b = s.as_bytes();
+		if n < b.len() {
+			panic!("Invalid n.");
+		}
+		let v = b.iter().cloned().chain(repeat(1 as u8).take(n - s.len())).collect();
+		Network::send_data_as_ping(v, ip.clone());
+	}
+
+	pub fn pong(&mut self, buf: *const u8, len: u32, ip: String) {
+
+		match Packet::deserialize(buf, len, ip.clone()) {
+			Some(p) => {
+				if p.data.len() < 10 {
+					return;
+				}
+				let v = "PROBING:".as_bytes();
+				let (l, r) = p.data.split_at(8);
+				if v == l {
+					
+					self.status_tx.send(format!("pong {} {}", len, ip)).unwrap();
+				}
+			},
+			_ => {}
+		}
+
 	}
 
 	// This method is called with the encrypted content in buf.

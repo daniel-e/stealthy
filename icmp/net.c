@@ -300,7 +300,7 @@ static void* worker_thread(void* args)
 
 int recv_callback(void* target, const char* dev, callback cb) {
 
-	pcap_t* handle = setup_pcap(dev, "icmp && icmp[icmptype] = 8");
+	pcap_t* handle = setup_pcap(dev, "icmp && (icmp[icmptype] = 8 || icmp[icmptype] = 0)");
 
 #ifdef DEBUG_NETC
     FILE* f;

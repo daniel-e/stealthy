@@ -27,7 +27,7 @@ use crate::ui_in::{TermIn, UserInput};
 use crate::model::{ItemType, Model, Item};
 use std::iter::repeat;
 use crate::model::Source;
-//use stealthy::binding::Network;
+use stealthy::binding::Network;
 
 type HInput = TermIn;
 type HOutput = TermOut;
@@ -434,15 +434,6 @@ fn main() {
 
     // this is the loop which handles messages received via rx
     recv_loop(tx.clone(), layer.rx);
-
-    /*
-    {
-        let v = vec![1,2,3,4,5,6,7,8,9,10];
-        let ip = dstips.as_strings().pop().unwrap();
-        let id = Network::send_data_as_ping(v, ip.clone());
-        status_tx.send(format!("probing {}...", ip)).unwrap();
-    }
-    */
 
     input_loop(tx.clone(), i, layer.layers, dstips, model, out);
 }

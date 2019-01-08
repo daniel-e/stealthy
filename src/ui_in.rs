@@ -82,7 +82,7 @@ impl TermIn {
         } else if buf == vec![27, 91, 54, 126] { // Page down
             Some(UserInput::PageDown)
         } else {
-            None
+            Some(UserInput::Character(buf))
         }
     }
 

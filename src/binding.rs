@@ -356,4 +356,15 @@ impl Network {
 			send_icmp(ip.as_ptr(), v.as_ptr(), v.len() as u16) == 0
 		}
 	}
+
+	pub fn send_data_as_ping(buf: Vec<u8>, ip: String) -> Result<u64, ()> {
+
+		let id = rand::random::<u64>();
+		let p = Packet::new(buf, ip, id);
+		if Network::transmit(p) {
+			Ok(id)
+		} else {
+			Err(())
+		}
+	}
 }

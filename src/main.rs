@@ -27,6 +27,7 @@ use crate::ui_in::{TermIn, UserInput};
 use crate::model::{ItemType, Model, Item};
 use std::iter::repeat;
 use crate::model::Source;
+//use stealthy::binding::Network;
 
 type HInput = TermIn;
 type HOutput = TermOut;
@@ -323,8 +324,22 @@ fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: 
 
     loop { match i.read_char() {
         UserInput::Character(buf) => {
-            model.lock().unwrap().update_input(buf);
+            let mut v = vec![];
+            for c in buf {
+                let mut m = model.lock().unwrap();
+                if c == 13 {
+                    let s = m.apply_enter();
+                    send_message(s, o.clone(), &l, &dstips);
+                } else {
+                    v.push(c);
+                    if String::from_utf8(v.clone()).is_ok() {
+                        m.update_input(v.clone());
+                        v.clear();
+                    }
+                }
+            }
             out.lock().unwrap().refresh();
+
         },
         UserInput::Escape | UserInput::CtrlD => {
             out.lock().unwrap().close();
@@ -413,12 +428,21 @@ fn main() {
     // Creates a thread which waits for messages on a channel to be written to out.
     let status_tx = status_message_loop(tx.clone());
 
-    let layer = get_layer(&args, status_tx, &dstips);
+    let layer = get_layer(&args, status_tx.clone(), &dstips);
 
     welcome(&args, tx.clone(), &layer, &dstips);
 
     // this is the loop which handles messages received via rx
     recv_loop(tx.clone(), layer.rx);
+
+    /*
+    {
+        let v = vec![1,2,3,4,5,6,7,8,9,10];
+        let ip = dstips.as_strings().pop().unwrap();
+        let id = Network::send_data_as_ping(v, ip.clone());
+        status_tx.send(format!("probing {}...", ip)).unwrap();
+    }
+    */
 
     input_loop(tx.clone(), i, layer.layers, dstips, model, out);
 }

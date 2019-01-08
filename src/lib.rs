@@ -1,10 +1,10 @@
-mod binding;
 mod delivery;
 mod packet;
 mod rsa;
 mod rsatools;
 mod blowfish;
 mod cryp;
+pub mod binding;
 
 use std::thread;
 use std::sync::Arc;

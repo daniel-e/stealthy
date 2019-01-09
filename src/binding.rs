@@ -99,9 +99,8 @@ pub struct Network {
 	shared           : Arc<Mutex<SharedData>>,
 	status_tx        : Sender<String>,
 	accept_ip: Vec<String>,
-	min_siz: usize,
-	max_siz: usize,
 	pub current_siz: usize,
+	ping_id: u32,
 }
 
 fn current_millis() -> i64 {
@@ -116,21 +115,22 @@ impl Network {
 			packets : HashMap::new(),
 		}));
 
+		let ping_id = rand::random::<u32>();
+
 		// Network must be on the heap because of the callback function.
 		let mut n = Box::new(Network {
 			shared: s.clone(),
             tx_msg,
 			status_tx: status_tx.clone(),
 			accept_ip: accept_ip.as_strings().into_iter().collect(),
-			min_siz: 128,
-			max_siz: 8192,
-			current_siz: 128
+			current_siz: 128,
+			ping_id,
 		});
 
 		n.init_callback(dev);
 		n.init_retry_event_receiver(s.clone());
 
-		Network::ping(status_tx, 128, accept_ip.as_strings().pop().unwrap());
+		Network::ping(status_tx, 8192, accept_ip.as_strings().pop().unwrap(), ping_id);
 		n
 	}
 
@@ -172,14 +172,13 @@ impl Network {
 
 	fn msg(status_tx: Sender<String>, s: String) {
 		thread::spawn(move || {
-			thread::sleep(Duration::from_secs(1));
+			thread::sleep(Duration::from_millis(200));
 			status_tx.send(s).unwrap();
 		});
 	}
 
-	fn ping(status_tx: Sender<String>, n: usize, ip: String) {
-		//_status_tx.send(format!("probing {} {}...", ip, n)).unwrap();
-		let s = format!("PROBING:{:08}/", n);
+	fn ping(status_tx: Sender<String>, n: usize, ip: String, ping_id: u32) {
+		let s = format!("PROBING:{:12}/", ping_id);
 		let b = s.as_bytes();
 		if n < b.len() {
 			panic!("Invalid n.");
@@ -191,14 +190,16 @@ impl Network {
 	}
 
 	fn is_probing(buf: &[u8]) -> bool {
-		let v = "PROBING:".as_bytes().to_vec();
-		let d = buf.iter().cloned().take(8).collect::<Vec<_>>();
-		v == d
+		buf.iter().cloned().take(8).collect::<Vec<_>>() == "PROBING:".as_bytes().to_vec()
 	}
 
-	fn probing_size(buf: &[u8]) -> usize {
-		let len = String::from_utf8(buf.iter().cloned().skip(8).take(8).collect::<Vec<_>>()).unwrap();
-		len.parse::<usize>().unwrap()
+	fn probing_id(buf: &[u8]) -> u32 {
+		String::from_utf8(buf.iter()
+			.cloned()
+			.skip(8)
+			.take(12)
+			.collect::<Vec<_>>()
+		).unwrap_or(String::from("0")).trim().parse::<u32>().unwrap_or(0)
 	}
 
 	pub fn pong(&mut self, buf: *const u8, len: u32, ip: String) {
@@ -211,29 +212,9 @@ impl Network {
 				if !Network::is_probing(&p.data) {
 					return;
 				}
-				let payload_siz = p.data.len();
-				let expected_payload_siz = Network::probing_size(&p.data);
-
-				//self.status_tx.send(format!("exp {}, pay {}", expected_payload_siz, payload_siz)).unwrap();
-
-				if expected_payload_siz == payload_siz {
-					//self.status_tx.send(format!("increasing {} {} {}", self.min_siz, self.current_siz, self.max_siz)).unwrap();
-					self.min_siz = self.current_siz;
-					self.current_siz = (self.min_siz + self.max_siz) / 2;
-					if self.current_siz != self.min_siz {
-						Network::ping(self.status_tx.clone(), self.current_siz, ip);
-					} else {
-						Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
-					}
-				} else {
-					//self.status_tx.send(format!("decreasing {} {} {}", self.min_siz, self.current_siz, self.max_siz));
-					self.max_siz = self.current_siz;
-					self.current_siz = (self.min_siz + self.max_siz) / 2;
-					if self.current_siz != self.min_siz {
-						Network::ping(self.status_tx.clone(), self.current_siz, ip);
-					} else {
-						Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
-					}
+				if Network::probing_id(&p.data) == self.ping_id {
+					self.current_siz = p.data.len();
+					Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
 				}
 			},
 			_ => {}

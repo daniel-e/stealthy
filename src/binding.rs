@@ -124,12 +124,13 @@ impl Network {
 			accept_ip: accept_ip.as_strings().into_iter().collect(),
 			min_siz: 128,
 			max_siz: 8192,
-			current_siz: 8192
+			current_siz: 128
 		});
 
 		n.init_callback(dev);
 		n.init_retry_event_receiver(s.clone());
-		Network::ping(status_tx, 8192, accept_ip.as_strings().pop().unwrap());
+
+		Network::ping(status_tx, 128, accept_ip.as_strings().pop().unwrap());
 		n
 	}
 
@@ -169,7 +170,14 @@ impl Network {
 		}
 	}
 
-	fn ping(_status_tx: Sender<String>, n: usize, ip: String) {
+	fn msg(status_tx: Sender<String>, s: String) {
+		thread::spawn(move || {
+			thread::sleep(Duration::from_secs(1));
+			status_tx.send(s).unwrap();
+		});
+	}
+
+	fn ping(status_tx: Sender<String>, n: usize, ip: String) {
 		//_status_tx.send(format!("probing {} {}...", ip, n)).unwrap();
 		let s = format!("PROBING:{}/", n);
 		let b = s.as_bytes();
@@ -177,7 +185,9 @@ impl Network {
 			panic!("Invalid n.");
 		}
 		let v = b.iter().cloned().chain(repeat(1 as u8).take(n - s.len())).collect();
-		Network::send_data_as_ping(v, ip.clone()).unwrap();
+		if Network::send_data_as_ping(v, ip.clone()).is_err() {
+			Network::msg(status_tx, String::from("No permissions to send data. Please check the documentation for more information."))
+		}
 	}
 
 	pub fn pong(&mut self, buf: *const u8, len: u32, ip: String) {
@@ -204,7 +214,7 @@ impl Network {
 								if self.current_siz != self.min_siz {
 									Network::ping(self.status_tx.clone(), self.current_siz, ip);
 								} else {
-									self.status_tx.send(format!("Maximum payload size is {}.", self.current_siz)).unwrap();
+									Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
 								}
 							} else {
 								//self.status_tx.send(format!("decreasing from {}", self.current_siz));
@@ -213,7 +223,7 @@ impl Network {
 								if self.current_siz != self.min_siz {
 									Network::ping(self.status_tx.clone(), self.current_siz, ip);
 								} else {
-									self.status_tx.send(format!("Maximum payload size is {}.", self.current_siz)).unwrap();
+									Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
 								}
 							}
 						},

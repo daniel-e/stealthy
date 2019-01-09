@@ -179,15 +179,26 @@ impl Network {
 
 	fn ping(status_tx: Sender<String>, n: usize, ip: String) {
 		//_status_tx.send(format!("probing {} {}...", ip, n)).unwrap();
-		let s = format!("PROBING:{}/", n);
+		let s = format!("PROBING:{:08}/", n);
 		let b = s.as_bytes();
 		if n < b.len() {
 			panic!("Invalid n.");
 		}
-		let v = b.iter().cloned().chain(repeat(1 as u8).take(n - s.len())).collect();
+		let v = b.iter().cloned().chain(repeat(1 as u8).take(n - b.len())).collect();
 		if Network::send_data_as_ping(v, ip.clone()).is_err() {
 			Network::msg(status_tx, String::from("No permissions to send data. Please check the documentation for more information."))
 		}
+	}
+
+	fn is_probing(buf: &[u8]) -> bool {
+		let v = "PROBING:".as_bytes().to_vec();
+		let d = buf.iter().cloned().take(8).collect::<Vec<_>>();
+		v == d
+	}
+
+	fn probing_size(buf: &[u8]) -> usize {
+		let len = String::from_utf8(buf.iter().cloned().skip(8).take(8).collect::<Vec<_>>()).unwrap();
+		len.parse::<usize>().unwrap()
 	}
 
 	pub fn pong(&mut self, buf: *const u8, len: u32, ip: String) {
@@ -197,37 +208,31 @@ impl Network {
 				if p.data.len() < 10 {
 					return;
 				}
-				let v = "PROBING:".as_bytes();
-				let (l, r) = p.data.split_at(8);
-				if v == l {
-					match r.iter().position(|&x| x == 47) {
-						Some(pos) => {
-							let s = r.iter().take(pos).cloned().collect::<Vec<u8>>();
-							let n = String::from_utf8(s).unwrap();
-							let c = n.parse::<usize>().unwrap();
-							let b = r.iter().skip(pos + 1).take(c).all(|&x| x == 1);
-							let k = r.iter().skip(pos + 1).take(c).count() + 8 + pos + 1;
-							if k == c && b {
-								//self.status_tx.send(format!("pong {} {} {}, increasing", len, ip, n)).unwrap();
-								self.min_siz = self.current_siz;
-								self.current_siz = (self.min_siz + self.max_siz) / 2;
-								if self.current_siz != self.min_siz {
-									Network::ping(self.status_tx.clone(), self.current_siz, ip);
-								} else {
-									Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
-								}
-							} else {
-								//self.status_tx.send(format!("decreasing from {}", self.current_siz));
-								self.max_siz = self.current_siz;
-								self.current_siz = (self.min_siz + self.max_siz) / 2;
-								if self.current_siz != self.min_siz {
-									Network::ping(self.status_tx.clone(), self.current_siz, ip);
-								} else {
-									Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
-								}
-							}
-						},
-						_ => {}
+				if !Network::is_probing(&p.data) {
+					return;
+				}
+				let payload_siz = p.data.len();
+				let expected_payload_siz = Network::probing_size(&p.data);
+
+				//self.status_tx.send(format!("exp {}, pay {}", expected_payload_siz, payload_siz)).unwrap();
+
+				if expected_payload_siz == payload_siz {
+					//self.status_tx.send(format!("increasing {} {} {}", self.min_siz, self.current_siz, self.max_siz)).unwrap();
+					self.min_siz = self.current_siz;
+					self.current_siz = (self.min_siz + self.max_siz) / 2;
+					if self.current_siz != self.min_siz {
+						Network::ping(self.status_tx.clone(), self.current_siz, ip);
+					} else {
+						Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
+					}
+				} else {
+					//self.status_tx.send(format!("decreasing {} {} {}", self.min_siz, self.current_siz, self.max_siz));
+					self.max_siz = self.current_siz;
+					self.current_siz = (self.min_siz + self.max_siz) / 2;
+					if self.current_siz != self.min_siz {
+						Network::ping(self.status_tx.clone(), self.current_siz, ip);
+					} else {
+						Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
 					}
 				}
 			},
@@ -386,6 +391,7 @@ impl Network {
 		// is received before message is sent.
 		Network::add_packet(shared.clone(), p.clone());
 
+		//println!("!!!!!!!!!!!!!! {} !!!!!!!!!!!!!!!!!!", p.data.len());
 		let id = p.id;
 		if Network::transmit(p) {
 			Ok(id)

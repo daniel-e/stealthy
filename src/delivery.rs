@@ -199,8 +199,11 @@ impl Delivery {
 
     pub fn send_msg(msg: Message, id: u64, pending: Arc<Mutex<Vec<SmallMessages>>>, shared: Arc<Mutex<SharedData>>, status_tx: Sender<String>, siz: usize) -> SendObject {
 
+        // Total allowed payload: siz (= Network::current_siz)
+        // SmallMessage header size: 17B
+
         // Split big message into smaller messages.
-        let mut small_messages = Self::split_message(&msg, id, siz);
+        let mut small_messages = Self::split_message(&msg, id, siz - 17);
 
         // Save ids for acks.
         let j = &small_messages.messages;
@@ -226,6 +229,8 @@ impl Delivery {
 
         let mut parts: Vec<SmallMessage> = Vec::new();
         let mut i: u32 = 1;
+
+        //println!("!!!!!!!!!!!!! {} !!!!!!!!!!", maxsiz);
 
         let chunks = msg.buf.chunks(maxsiz);
         let n = chunks.len();
@@ -253,10 +258,10 @@ impl Delivery {
     fn serialize(m: &SmallMessage) -> Vec<u8> {
 
         let mut v: Vec<u8> = Vec::new();
-        v.push(1);                                  // version u8
-        push_value(&mut v, m.id, 8);          // id u64
-        push_value(&mut v, m.n as u64, 4);    // number of messages u32
-        push_value(&mut v, m.seq as u64, 4);  // seq u32
+        v.push(1);                                  // version u8               1B
+        push_value(&mut v, m.id, 8);          // id u64                   8B
+        push_value(&mut v, m.n as u64, 4);    // number of messages u32   4B
+        push_value(&mut v, m.seq as u64, 4);  // seq u32                  4B
         push_slice(&mut v, &m.buf);                   // message: variable len
         v
     }

@@ -66,15 +66,17 @@ impl Packet {
 
 	pub fn serialize(&self) -> Vec<u8> {
 
+		// if you change someting check delivery::send_msg
+
 		// version + type
-		let mut v: Vec<u8> = vec![1, self.typ];
+		let mut v: Vec<u8> = vec![1, self.typ];         // 2B
 		// id
 		let mut t = self.id;
-		for _ in 0..8 {
+		for _ in 0..8 {                                // 8B
 			v.push(t as u8);
 			t = t >> 8;
 		}
-		// data / payload
+		// data / payload                              // data
 		for k in self.data.clone() {
 			v.push(k);
 		}

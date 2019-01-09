@@ -99,6 +99,9 @@ pub struct Network {
 	shared           : Arc<Mutex<SharedData>>,
 	status_tx        : Sender<String>,
 	accept_ip: Vec<String>,
+	min_siz: usize,
+	max_siz: usize,
+	pub current_siz: usize,
 }
 
 fn current_millis() -> i64 {
@@ -118,12 +121,15 @@ impl Network {
 			shared: s.clone(),
             tx_msg,
 			status_tx: status_tx.clone(),
-			accept_ip: accept_ip.as_strings().into_iter().collect()
+			accept_ip: accept_ip.as_strings().into_iter().collect(),
+			min_siz: 128,
+			max_siz: 8192,
+			current_siz: 8192
 		});
 
 		n.init_callback(dev);
 		n.init_retry_event_receiver(s.clone());
-		Network::ping(status_tx, 100, accept_ip.as_strings().pop().unwrap());
+		Network::ping(status_tx, 8192, accept_ip.as_strings().pop().unwrap());
 		n
 	}
 
@@ -163,15 +169,15 @@ impl Network {
 		}
 	}
 
-	fn ping(status_tx: Sender<String>, n: usize, ip: String) {
-		status_tx.send(format!("probing {} {}...", ip, n)).unwrap();
+	fn ping(_status_tx: Sender<String>, n: usize, ip: String) {
+		//_status_tx.send(format!("probing {} {}...", ip, n)).unwrap();
 		let s = format!("PROBING:{}/", n);
 		let b = s.as_bytes();
 		if n < b.len() {
 			panic!("Invalid n.");
 		}
 		let v = b.iter().cloned().chain(repeat(1 as u8).take(n - s.len())).collect();
-		Network::send_data_as_ping(v, ip.clone());
+		Network::send_data_as_ping(v, ip.clone()).unwrap();
 	}
 
 	pub fn pong(&mut self, buf: *const u8, len: u32, ip: String) {
@@ -184,8 +190,35 @@ impl Network {
 				let v = "PROBING:".as_bytes();
 				let (l, r) = p.data.split_at(8);
 				if v == l {
-					
-					self.status_tx.send(format!("pong {} {}", len, ip)).unwrap();
+					match r.iter().position(|&x| x == 47) {
+						Some(pos) => {
+							let s = r.iter().take(pos).cloned().collect::<Vec<u8>>();
+							let n = String::from_utf8(s).unwrap();
+							let c = n.parse::<usize>().unwrap();
+							let b = r.iter().skip(pos + 1).take(c).all(|&x| x == 1);
+							let k = r.iter().skip(pos + 1).take(c).count() + 8 + pos + 1;
+							if k == c && b {
+								//self.status_tx.send(format!("pong {} {} {}, increasing", len, ip, n)).unwrap();
+								self.min_siz = self.current_siz;
+								self.current_siz = (self.min_siz + self.max_siz) / 2;
+								if self.current_siz != self.min_siz {
+									Network::ping(self.status_tx.clone(), self.current_siz, ip);
+								} else {
+									self.status_tx.send(format!("Maximum payload size is {}.", self.current_siz)).unwrap();
+								}
+							} else {
+								//self.status_tx.send(format!("decreasing from {}", self.current_siz));
+								self.max_siz = self.current_siz;
+								self.current_siz = (self.min_siz + self.max_siz) / 2;
+								if self.current_siz != self.min_siz {
+									Network::ping(self.status_tx.clone(), self.current_siz, ip);
+								} else {
+									self.status_tx.send(format!("Maximum payload size is {}.", self.current_siz)).unwrap();
+								}
+							}
+						},
+						_ => {}
+					}
 				}
 			},
 			_ => {}

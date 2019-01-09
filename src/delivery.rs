@@ -49,7 +49,7 @@ pub struct Delivery {
     _status_tx   : Sender<String>
 }
 
-const MAX_MESSAGE_PART_SIZE: usize = 8192;
+//const MAX_MESSAGE_PART_SIZE: usize = 8192;
 
 impl Delivery {
 
@@ -185,6 +185,10 @@ impl Delivery {
         }});
     }
 
+    pub fn max_size(&self) -> usize {
+        self.network_layer.current_siz
+    }
+
     pub fn get_pending(&self) -> Arc<Mutex<Vec<SmallMessages>>> {
         self.pending.clone()
     }
@@ -193,10 +197,10 @@ impl Delivery {
         self.network_layer.shared_data()
     }
 
-    pub fn send_msg(msg: Message, id: u64, pending: Arc<Mutex<Vec<SmallMessages>>>, shared: Arc<Mutex<SharedData>>, status_tx: Sender<String>) -> SendObject {
+    pub fn send_msg(msg: Message, id: u64, pending: Arc<Mutex<Vec<SmallMessages>>>, shared: Arc<Mutex<SharedData>>, status_tx: Sender<String>, siz: usize) -> SendObject {
 
         // Split big message into smaller messages.
-        let mut small_messages = Self::split_message(&msg, id);
+        let mut small_messages = Self::split_message(&msg, id, siz);
 
         // Save ids for acks.
         let j = &small_messages.messages;
@@ -218,12 +222,12 @@ impl Delivery {
         o
     }
 
-    fn split_message(msg: &Message, id: u64) -> SmallMessages {
+    fn split_message(msg: &Message, id: u64, maxsiz: usize) -> SmallMessages {
 
         let mut parts: Vec<SmallMessage> = Vec::new();
         let mut i: u32 = 1;
 
-        let chunks = msg.buf.chunks(MAX_MESSAGE_PART_SIZE);
+        let chunks = msg.buf.chunks(maxsiz);
         let n = chunks.len();
 
         for win in chunks {

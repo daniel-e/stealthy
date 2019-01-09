@@ -204,11 +204,12 @@ impl Layers {
         let e = self.encryption_layer.clone();
         let p = self.delivery_layer.get_pending();
         let shared = self.delivery_layer.get_shared();
+        let n = self.delivery_layer.max_size();
 
         let t = thread::spawn(move || {
             match e.encrypt(&msg.buf) {
                 Ok(buf) => {
-                    Delivery::send_msg(msg.set_payload(buf), id, p, shared, s.clone()).run();
+                    Delivery::send_msg(msg.set_payload(buf), id, p, shared, s.clone(), n).run();
                 },
                 _ => {
                     s.send(format!("Encryption failed.")).expect("Send failed.");

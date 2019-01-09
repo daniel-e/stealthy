@@ -27,7 +27,6 @@ use crate::ui_in::{TermIn, UserInput};
 use crate::model::{ItemType, Model, Item};
 use std::iter::repeat;
 use crate::model::Source;
-use stealthy::binding::Network;
 
 type HInput = TermIn;
 type HOutput = TermOut;

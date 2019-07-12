@@ -10,6 +10,7 @@ use termion::raw::IntoRawMode;
 
 use crate::model::{Item, ItemType, Model};
 use crate::model::Source;
+use crate::tools::rot13;
 
 static ACK: char = '✔';
 static NUMBERS: &str = "➀➁➂➃➄➅➆➇➈➉";
@@ -24,6 +25,7 @@ pub struct TermOut {
     // when a new message has been added to the buffer in the model.
     scroll_offset: usize,
     raw_view: bool,
+    scramble_view: bool,
 }
 
 impl TermOut {
@@ -33,7 +35,8 @@ impl TermOut {
             stdout: stdout().into_raw_mode().expect("No raw mode possible."),
             model: model,
             scroll_offset: 0,
-            raw_view: false
+            raw_view: false,
+            scramble_view: false,
         }.init()
     }
 
@@ -99,6 +102,12 @@ impl TermOut {
         write!(self.stdout, "{}", termion::clear::All, ).expect("Write error.");
         self.redraw();
     }
+
+    pub fn toggle_scramble_view(&mut self) {
+        self.scramble_view = !self.scramble_view;
+        self.redraw();
+    }
+
     // ===========================================================================================
 
     fn init(mut self) -> TermOut {
@@ -169,16 +178,27 @@ impl TermOut {
     }
 
     fn txt(&self, i: &Item) -> String {
+        let msg = i.msg.to_string();
+
         if self.raw_view {
-            return format!("{}", i.msg.clone());
+            return format!("{}", msg);
         }
+
+        // Optionally Scramble
+        let maybe_scrambled_msg = if self.scramble_view {
+            scramble(&i.msg)
+        } else {
+            msg.clone()
+        };
+
+        // Formatting
         let t = self.fm_time(&i);
         match i.source() {
             Source::Ip(ip) => {
-                format!("{} | [{}] {}", t, ip, i.msg.clone())
+                format!("{} | [{}] {}", t, ip, maybe_scrambled_msg)
             },
             Source::You => {
-                format!("{} | [you] {}", t, i.msg.clone())
+                format!("{} | [you] {}", t, maybe_scrambled_msg)
             },
             Source::System => {
                 let p = match i.typ {
@@ -189,10 +209,10 @@ impl TermOut {
                         t + " | "
                     }
                 };
-                format!("{}{}", p, i.msg.clone())
+                format!("{}{}", p, msg)
             },
             Source::Raw => {
-                format!("{}", i.msg.clone())
+                format!("{}", msg)
             }
         }
     }
@@ -401,3 +421,6 @@ fn write_scroll_status(o: &mut RawTerminal<Stdout>, current: usize, len: usize) 
     ).expect("Error.");
 }
 
+fn scramble(i: &String) -> String {
+    i.chars().map(|c| rot13(c)).collect::<String>()
+}

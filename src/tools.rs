@@ -79,3 +79,8 @@ pub fn insert_delimiter(s: &str) -> String {
     }
 }
 
+pub fn rot13(c: char) -> char {
+    let x = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    let y = "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm";
+    x.find(c).map_or(' ', |p| y.chars().nth(p).expect("Error"))
+}

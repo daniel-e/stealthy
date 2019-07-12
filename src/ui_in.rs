@@ -17,7 +17,8 @@ pub enum UserInput {
     End,
     PageDown,
     PageUp,
-    CtrlR
+    CtrlR,
+    CtrlS,
 }
 
 /// Use to receive user input.
@@ -75,6 +76,8 @@ impl TermIn {
             Some(UserInput::End)
         } else if buf == vec![18] {          // Ctrl + R
             Some(UserInput::CtrlR)
+        } else if buf == vec![19] {          // Ctrl + S
+            Some(UserInput::CtrlS)
         } else if buf.len() < 3 {            // Some character
             Some(UserInput::Character(buf))
         } else if buf == vec![27, 91, 53, 126] { // Page up

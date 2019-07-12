@@ -367,6 +367,9 @@ fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: 
         UserInput::CtrlR => {
             out.lock().unwrap().toggle_raw_view();
         },
+        UserInput::CtrlS => {
+            out.lock().unwrap().toggle_scramble_view();
+        },
         UserInput::Enter => {
             let s = model.lock().unwrap().apply_enter();
             out.lock().unwrap().refresh();

@@ -149,7 +149,7 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
                 console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info, Source::System);
                 let s = data.as_str();
                 for line in s.split("\n") {
-                    send_message(line.to_string().trim_right().to_string(), o.clone(), l, dstips);
+                    send_message(line.to_string().trim_end().to_string(), o.clone(), l, dstips);
                 }
             },
             _ => {

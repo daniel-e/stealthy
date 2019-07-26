@@ -81,6 +81,7 @@ fn process_incoming_message(o: Channel, msg: IncomingMessage) {
         IncomingMessage::Ack(id) => { console::ack_msg(o.clone(), id); }
         IncomingMessage::Error(_, s) => { console::error(o.clone(), s); }
         IncomingMessage::FileUpload(msg) => { process_upload(o.clone(), msg) }
+        IncomingMessage::AckProgress(id, done, total) => { console::ack_msg_progress(o.clone(), id, done, total); }
     }
 }
 
@@ -186,28 +187,46 @@ fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 }
 
 fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message, u64) {
-    (Message::file_upload(dstip, without_dirs(fname), data), rand::random::<u64>())
+    (
+        Message::file_upload(dstip, without_dirs(fname), data),
+        rand::random::<u64>()
+    )
 }
 
+/// Sends a file in background.
+///
+/// # Arguments
+///
+/// * `data` - Content of the file (binary data).
+/// * `fname` - Name of the file.
+/// * `o` - Sender object to which messages are sent to.
 fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
 
     let n = data.len();
+
+    // This is sent to the console to show the user information about the file upload.
     let mut item = Item::new(
         format!("sending file '{}' with {} bytes...", fname, n),
-        ItemType::MyMessage,
+        ItemType::UploadMessage,
         model::Source::You
-    );
+    ).add_size(n);
 
+    // Create a tuple (Message, u64) for each destination IP. For each IP a unique ID is created.
     let v = dstips.as_strings()
         .iter()
         .map(|dstip| create_upload_data(dstip.clone(), &fname, &data))
         .collect::<Vec<_>>();
 
+    // Add the file upload id to the item which is shown to the user. This ID allows us to
+    // update the status of this item, e.g. once the file upload is finished.
     for (_, id) in &v {
         item = item.add_id(*id);
     }
+
+    // Show the message.
     console::msg_item(o.clone(),item);
 
+    // Now, start the file transfer in the background for each given IP.
     for (msg, id) in v {
         l.send(msg, id, true);
     }
@@ -397,6 +416,10 @@ fn init_screen(mdl: ArcModel, out: ArcOut) -> Channel {
             },
             ConsoleMessage::Ack(id) => {
                 mdl.lock().unwrap().ack(id);
+                out.lock().unwrap().refresh();
+            },
+            ConsoleMessage::AckProgress(id, done, total) => {
+                mdl.lock().unwrap().ack_progress(id, done, total);
                 out.lock().unwrap().refresh();
             },
             // We need this as otherwise "out" is not dropped and the terminal state

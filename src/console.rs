@@ -10,6 +10,7 @@ use crate::model::Source;
 pub enum ConsoleMessage {
     TextMessage(Item),
     Ack(u64),
+    AckProgress(u64, usize, usize),
     Exit,
 }
 
@@ -43,6 +44,11 @@ pub fn new_file(o: Sender<ConsoleMessage>, m: Message, filename: String) {
 
 pub fn ack_msg(o: Sender<ConsoleMessage>, id: u64) {
     o.send(ConsoleMessage::Ack(id)).expect("Error");
+}
+
+pub fn ack_msg_progress(o: Sender<ConsoleMessage>, id: u64, done: usize, total: usize) {
+    // TODO: "done" actually is number of pending acks
+    o.send(ConsoleMessage::AckProgress(id, done, total)).expect("Error");
 }
 
 #[cfg(not(feature = "no_notify"))]

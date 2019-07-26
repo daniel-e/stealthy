@@ -177,6 +177,13 @@ impl TermOut {
         time::strftime("%d.%m. %R", &i.tim).unwrap()
     }
 
+    fn progress_bar(&self, pending: usize, total: usize, len: usize) -> String {
+        let k = len * (total - pending) / total;
+        let s_transmitted = std::iter::repeat('█').take(k).collect::<String>();
+        let s_remaining = std::iter::repeat('░').take(len - k).collect::<String>();
+        format!("|{}{}| {:.2}%", s_transmitted, s_remaining, (total - pending) as f64 / total as f64 * 100.0)
+    }
+
     fn txt(&self, i: &Item) -> String {
         let msg = i.msg.to_string();
 
@@ -198,7 +205,14 @@ impl TermOut {
                 format!("{} | [{}] {}", t, ip, maybe_scrambled_msg)
             },
             Source::You => {
-                format!("{} | [you] {}", t, maybe_scrambled_msg)
+                match i.typ {
+                    ItemType::UploadMessage => {
+                        format!("{} | [you] {} {}", t, maybe_scrambled_msg, self.progress_bar(i.pending_acks, i.total_acks, 40))
+                    },
+                    _ => {
+                        format!("{} | [you] {}", t, maybe_scrambled_msg)
+                    }
+                }
             },
             Source::System => {
                 let p = match i.typ {
@@ -340,6 +354,7 @@ fn write_color(o: &mut RawTerminal<Stdout>, typ: ItemType) {
         ItemType::Error => write!(o, "{}", Fg(termion::color::Red)),
         ItemType::NewFile => write!(o, "{}", Fg(termion::color::LightWhite)),
         ItemType::MyMessage => write!(o, "{}", Fg(termion::color::Green)),
+        ItemType::UploadMessage => write!(o, "{}", Fg(termion::color::Green)),
     }.unwrap();
 }
 

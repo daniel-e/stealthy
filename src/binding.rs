@@ -328,11 +328,16 @@ impl Network {
     }
 
     fn handle_ack(&mut self, p: Packet) {
-		if self.shared.lock()
+		let item = self.shared.lock()
 			.expect("Lock failed.")
 			.packets
-			.remove(&p.id).is_some() {
-			self.tx_msg.send(IncomingMessage::Ack(p.id)).expect("Send failed.");
+			.remove(&p.id);
+		match item {
+			Some(value) => {
+				//self.status_tx.send(format!("NEW ACK: {}", value.p.data.len())).unwrap();
+				self.tx_msg.send(IncomingMessage::Ack(p.id)).expect("Send failed.");
+			},
+			_ => {}
 		}
   	}
 

@@ -41,11 +41,25 @@ impl Model {
         s
     }
 
+    // Is called when we receive an ack for a file upload.
+    /// `id` - id of the item in the buffer
+    /// `nbytes` - number of bytes of the corresponding package that was transmitted
     pub fn ack(&mut self, id: u64) {
         for item in self.buf.iter_mut().rev() {
             let exists = item.id.iter().find(|i| **i == id).is_some();
             if exists {
                 item.acks_received += 1;
+                break;
+            }
+        }
+    }
+
+    pub fn ack_progress(&mut self, id: u64, done: usize, total: usize) {
+        for item in self.buf.iter_mut().rev() {
+            let exists = item.id.iter().find(|i| **i == id).is_some();
+            if exists {
+                item.pending_acks = done;
+                item.total_acks = total;
                 break;
             }
         }
@@ -75,6 +89,8 @@ pub struct Item {
     pub id: Vec<u64>,  // In group chat scenarios one item can have several IDs.
     pub acks_received: usize,
     pub tim: Tm,
+    pub total_acks: usize,
+    pub pending_acks: usize,
     from: Source,
 }
 
@@ -88,7 +104,15 @@ impl Item {
             acks_received: 0,
             tim: time::now(),
             from,
+            total_acks: 0,
+            pending_acks: 0
         }
+    }
+
+    pub fn add_size(mut self, n: usize) -> Item {
+        self.total_acks = n;
+        self.pending_acks = n;
+        self
     }
 
     pub fn raw(mut self) -> Item {
@@ -122,4 +146,5 @@ pub enum ItemType {
     Info,
     NewFile,
     MyMessage,
+    UploadMessage,
 }

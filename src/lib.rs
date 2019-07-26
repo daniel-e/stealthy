@@ -51,8 +51,9 @@ pub enum ErrorType {
 pub enum IncomingMessage {
     New(Message),
     Ack(u64),
+    AckProgress(u64, usize, usize),
     Error(ErrorType, String),
-    FileUpload(Message)
+    FileUpload(Message),
 }
 
 unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
@@ -324,7 +325,8 @@ impl Layers {
                 }
             },
             IncomingMessage::Ack(_) => Some(m),
-            IncomingMessage::Error(_, _) => Some(m)
+            IncomingMessage::Error(_, _) => Some(m),
+            IncomingMessage::AckProgress(_, _, _) => Some(m)
         }
     }
 }

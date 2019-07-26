@@ -11,6 +11,7 @@ use crypto::sha2::Sha256;
 #[cfg(feature="debugout")]
 use crypto::digest::Digest;
 use crate::binding::SharedData;
+use std::net::Incoming;
 
 #[derive(Clone)]
 struct SmallMessage {
@@ -156,10 +157,15 @@ impl Delivery {
                                 _ => { } // TODO error handling
                             }
                         }
+                        IncomingMessage::AckProgress(id, done, total) => {
+
+                        },
                         IncomingMessage::Ack(id) => { // TODO beautify + performance for uploads
                             let mut q = queue.lock().expect("delivery: lock failed");  // lock guard on Vec<SmallMessages>
                             let mut idx = 0;
                             let mut b = false;
+                            let mut nbytes = 0;
+
                             for i in q.iter() {
                                 if i.acks.contains(&id) {
                                     b = true;
@@ -167,8 +173,17 @@ impl Delivery {
                                 }
                                 idx += 1;
                             }
+
                             if b {
+                                for m in &q[idx].messages {
+                                    if m.id == id {
+
+                                        nbytes = m.buf.len();
+                                    }
+                                }
                                 q[idx].acks.remove(&id);
+                                tx.send(IncomingMessage::AckProgress(q[idx].id.clone(), q[idx].acks.len(), q[idx].messages.len())).is_err();
+
                                 if q[idx].acks.len() == 0 { // received all akcs
                                     let iid = q[idx].id.clone();
                                     q.swap_remove(idx);

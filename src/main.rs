@@ -444,6 +444,9 @@ fn main() {
 
     let tx = create_console_sender(model.clone(), view.clone());
 
+    // TODO replace status_message_loop by tx?
+    // TODO have only one loop? for keyboard events, status message events and other events
+    
     let layer = get_layer(&args, status_message_loop(tx.clone()), &dstips);
 
     welcome(&args, tx.clone(), &layer, &dstips);

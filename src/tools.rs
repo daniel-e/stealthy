@@ -1,6 +1,17 @@
-use std::fs::File;
 use std::io::Read;
 use std::io::Write;
+use rand::{thread_rng, Rng};
+use std::fs::{File, OpenOptions};
+
+#[allow(dead_code)]
+pub fn log_to_file(s: String) {
+    match OpenOptions::new().append(true).create(true).open("/tmp/stealthy.log") {
+        Ok(mut f) => {
+            f.write_all(s.as_bytes()).expect("Cannot write into file.");
+        },
+        _ => panic!("Cannot open log file.")
+    }
+}
 
 pub fn without_dirs(fname: &str) -> String {
 
@@ -82,5 +93,13 @@ pub fn insert_delimiter(s: &str) -> String {
 pub fn rot13(c: char) -> char {
     let x = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
     let y = "NOPQRSTUVWXYZABCDEFGHIJKLMnopqrstuvwxyzabcdefghijklm";
-    x.find(c).map_or(' ', |p| y.chars().nth(p).expect("Error"))
+    x.find(c).map_or(' ', |p| y.chars().nth(p).expect("ROT13 error"))
+}
+
+pub fn random_str(n: usize) -> String {
+    let chars = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = thread_rng();
+    String::from_utf8(
+        (0..n).map(|_| { chars[rng.gen::<usize>() % chars.len()] }).collect()
+    ).unwrap()
 }

@@ -22,13 +22,13 @@ pub enum UserInput {
 }
 
 /// Use to receive user input.
-pub struct TermIn {
+pub struct InputKeyboard {
     rx: Receiver<u8>,
 }
 
-impl TermIn {
+impl InputKeyboard {
 
-    pub fn new() -> TermIn {
+    pub fn new() -> InputKeyboard {
 
         // The sender tx is used by the thread below to send bytes from stdin
         // to the receiver rx. The method next_char listens on the receiver.
@@ -40,7 +40,7 @@ impl TermIn {
             }
         });
 
-        TermIn { rx }
+        InputKeyboard { rx }
     }
 
     fn next_char(&self) -> Vec<u8> {

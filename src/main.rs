@@ -10,7 +10,6 @@ mod ui_in;
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use rand::{thread_rng, Rng};
 
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
@@ -22,19 +21,17 @@ use stealthy::xip::IpAddresses;
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::ConsoleMessage;
 
-use crate::ui_termion::TermOut;
-use crate::ui_in::{TermIn, UserInput};
+use crate::ui_termion::View;
+use crate::ui_in::{InputKeyboard, UserInput};
 use crate::model::{ItemType, Model, Item};
 use std::iter::repeat;
 use crate::model::Source;
 
-type HInput = TermIn;
-type HOutput = TermOut;
 type ArcModel = Arc<Mutex<Model>>;
-type ArcOut = Arc<Mutex<HOutput>>;
-type Channel = Sender<ConsoleMessage>;
+type ArcView = Arc<Mutex<View>>;
+type ConsoleSender = Sender<ConsoleMessage>;
 
-fn help_message(o: Channel) {
+fn help_message(o: ConsoleSender) {
 
     write_lines(o, &vec![
         "Commands always start with a slash:",
@@ -57,14 +54,16 @@ fn help_message(o: Channel) {
     ], ItemType::Info, Source::System);
 }
 
-fn write_lines(o: Channel, lines: &[&str], typ: ItemType, from: Source) {
+fn write_lines(o: ConsoleSender, lines: &[&str], typ: ItemType, from: Source) {
 
     for v in lines {
         console::raw(o.clone(), String::from(*v), typ.clone(), from.clone())
     }
 }
 
-fn recv_loop(o: Channel, rx: Receiver<IncomingMessage>) {
+
+
+fn recv_loop(o: ConsoleSender, rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || {
         loop { match rx.recv() {
@@ -74,7 +73,7 @@ fn recv_loop(o: Channel, rx: Receiver<IncomingMessage>) {
     });
 }
 
-fn process_incoming_message(o: Channel, msg: IncomingMessage) {
+fn process_incoming_message(o: ConsoleSender, msg: IncomingMessage) {
 
     match msg {
         IncomingMessage::New(msg) => { console::new_msg(o.clone(), msg); }
@@ -85,16 +84,7 @@ fn process_incoming_message(o: Channel, msg: IncomingMessage) {
     }
 }
 
-fn random_str(n: usize) -> String {
-
-    let chars = b"abcdefghijklmnopqrstuvwxyz0123456789";
-    let mut rng = thread_rng();
-    String::from_utf8(
-        (0..n).map(|_| { chars[rng.gen::<usize>() % chars.len()] }).collect()
-    ).unwrap()
-}
-
-fn process_upload(o: Channel, msg: Message) {
+fn process_upload(o: ConsoleSender, msg: Message) {
 
     if msg.get_filename().is_none() {
         console::error(o.clone(), format!("Could not get filename of received file upload."));
@@ -106,7 +96,7 @@ fn process_upload(o: Channel, msg: Message) {
 
     let fname = msg.get_filename().unwrap();
     let data = msg.get_filedata().unwrap();
-    let dst = format!("/tmp/stealthy_{}_{}", random_str(10), &fname);
+    let dst = format!("/tmp/stealthy_{}_{}", tools::random_str(10), &fname);
     console::new_file(o.clone(), msg, fname);
 
     if write_data(&dst, data) {
@@ -140,7 +130,7 @@ fn init_global_state() {
     };
 }
 
-fn parse_command(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
+fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
@@ -200,7 +190,7 @@ fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message
 /// * `data` - Content of the file (binary data).
 /// * `fname` - Name of the file.
 /// * `o` - Sender object to which messages are sent to.
-fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
+fn send_file(data: Vec<u8>, fname: String, console: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
 
     let n = data.len();
 
@@ -224,7 +214,7 @@ fn send_file(data: Vec<u8>, fname: String, o: Channel, l: &Layers, dstips: &IpAd
     }
 
     // Show the message.
-    console::msg_item(o.clone(),item);
+    console::msg_item(console.clone(),item);
 
     // Now, start the file transfer in the background for each given IP.
     for (msg, id) in v {
@@ -236,7 +226,7 @@ fn create_data(dstip: String, txt: &String) -> (Message, u64) {
     (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
 }
 
-fn send_message(txt: String, o: Channel, l: &Layers, dstips: &IpAddresses) {
+fn send_message(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
 
     let mut item = Item::new(format!("{}", txt), ItemType::MyMessage, model::Source::You);
 
@@ -280,7 +270,7 @@ fn normalize(v: &[&String], c: char) -> (Vec<String>, usize) {
     (r, x)
 }
 
-fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
+fn welcome(args: &Arguments, o: ConsoleSender, layer: &Layer, dstips: &IpAddresses) {
     for l in logo::get_logo() {
         console::raw(o.clone(), l, ItemType::Introduction, Source::System);
     }
@@ -328,7 +318,12 @@ fn welcome(args: &Arguments, o: Channel, layer: &Layer, dstips: &IpAddresses) {
 }
 
 
-fn status_message_loop(o: Channel) -> Sender<String> {
+
+
+
+
+
+fn status_message_loop(o: ConsoleSender) -> Sender<String> {
 
     let (tx, rx) = channel::<String>();
     thread::spawn(move || { loop { match rx.recv() {
@@ -338,9 +333,11 @@ fn status_message_loop(o: Channel) -> Sender<String> {
     tx
 }
 
-fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: ArcModel, out: ArcOut) {
+fn keyboad_loop(o: ConsoleSender, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
 
-    loop { match i.read_char() {
+    let mut input = InputKeyboard::new();
+
+    loop { match input.read_char() {
         UserInput::Character(buf) => {
             let mut v = vec![];
             for c in buf {
@@ -356,42 +353,42 @@ fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: 
                     }
                 }
             }
-            out.lock().unwrap().refresh();
+            view.lock().unwrap().refresh();
 
         },
         UserInput::Escape | UserInput::CtrlD => {
-            out.lock().unwrap().close();
+            view.lock().unwrap().close();
             o.send(ConsoleMessage::Exit).expect("Send failed.");
             break;
         },
         UserInput::ArrowDown => {
-            out.lock().unwrap().scroll_down();
+            view.lock().unwrap().scroll_down();
         },
         UserInput::ArrowUp => {
-            out.lock().unwrap().scroll_up();
+            view.lock().unwrap().scroll_up();
         },
         UserInput::Backspace => {
             model.lock().unwrap().apply_backspace();
-            out.lock().unwrap().refresh();
+            view.lock().unwrap().refresh();
         },
         UserInput::End => {
-            out.lock().unwrap().key_end();
+            view.lock().unwrap().key_end();
         },
         UserInput::PageDown => {
-            out.lock().unwrap().page_down();
+            view.lock().unwrap().page_down();
         },
         UserInput::PageUp => {
-            out.lock().unwrap().page_up();
+            view.lock().unwrap().page_up();
         },
         UserInput::CtrlR => {
-            out.lock().unwrap().toggle_raw_view();
+            view.lock().unwrap().toggle_raw_view();
         },
         UserInput::CtrlS => {
-            out.lock().unwrap().toggle_scramble_view();
+            view.lock().unwrap().toggle_scramble_view();
         },
         UserInput::Enter => {
             let s = model.lock().unwrap().apply_enter();
-            out.lock().unwrap().refresh();
+            view.lock().unwrap().refresh();
             if s.len() > 0 {
                 if s.starts_with("/") {
                     parse_command(s, o.clone(), &l, &dstips);
@@ -403,7 +400,7 @@ fn input_loop(o: Channel, mut i: HInput, l: Layers, dstips: IpAddresses, model: 
     }}
 }
 
-fn init_screen(mdl: ArcModel, out: ArcOut) -> Channel {
+fn create_console_sender(model: ArcModel, view: ArcView) -> ConsoleSender {
 
     // The sender "tx" is used at other locations to send messages to the output.
     let (tx, rx) = channel::<ConsoleMessage>();
@@ -411,16 +408,16 @@ fn init_screen(mdl: ArcModel, out: ArcOut) -> Channel {
     thread::spawn(move || {
         loop { match rx.recv().unwrap() {
             ConsoleMessage::TextMessage(item) => {
-                mdl.lock().unwrap().add_message(item.clone());
-                out.lock().unwrap().adjust_scroll_offset(item);
+                model.lock().unwrap().add_message(item.clone());
+                view.lock().unwrap().adjust_scroll_offset(item);
             },
             ConsoleMessage::Ack(id) => {
-                mdl.lock().unwrap().ack(id);
-                out.lock().unwrap().refresh();
+                model.lock().unwrap().ack(id);
+                view.lock().unwrap().refresh();
             },
             ConsoleMessage::AckProgress(id, done, total) => {
-                mdl.lock().unwrap().ack_progress(id, done, total);
-                out.lock().unwrap().refresh();
+                model.lock().unwrap().ack_progress(id, done, total);
+                view.lock().unwrap().refresh();
             },
             // We need this as otherwise "out" is not dropped and the terminal state
             // is not restored.
@@ -443,12 +440,9 @@ fn main() {
     // The model stores all information which is required to show the screen.
     let model = Arc::new(Mutex::new(Model::new()));
 
-    let out = Arc::new(Mutex::new(HOutput::new(model.clone())));
+    let view = Arc::new(Mutex::new(View::new(model.clone())));
 
-    let tx = init_screen(model.clone(), out.clone());
-
-    // Used to receive user input.
-    let i = HInput::new();
+    let tx = create_console_sender(model.clone(), view.clone());
 
     // Creates a thread which waits for messages on a channel to be written to out.
     let status_tx = status_message_loop(tx.clone());
@@ -460,6 +454,8 @@ fn main() {
     // this is the loop which handles messages received via rx
     recv_loop(tx.clone(), layer.rx);
 
-    input_loop(tx.clone(), i, layer.layers, dstips, model, out);
+    // Waits for data from the keyboard.
+    // If data is received the model and the view will be updated.
+    keyboad_loop(tx.clone(), layer.layers, dstips, model, view);
 }
 

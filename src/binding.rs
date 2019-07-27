@@ -7,6 +7,7 @@ use std::convert::From;
 use crate::{IncomingMessage, Message, Errors, MessageType};
 use crate::packet::{Packet, IdType};
 use crate::xip::IpAddresses;
+use crate::tools;
 
 use std::collections::HashMap;
 use std::iter::repeat;
@@ -137,17 +138,18 @@ impl Network {
 	fn init_retry_event_receiver(&mut self, k: Arc<Mutex<SharedData>>) {
 		thread::spawn(move || { loop {
 			thread::sleep(Duration::from_millis(1000));
-			let mut r = vec![];
+			let mut packets_for_resend = vec![];
 			{
 				for pp in &mut k.lock().unwrap().packets.values_mut() {
 					if current_millis() > pp.millis + RETRY_TIMEOUT {
-						r.push(pp.p.clone());
+						packets_for_resend.push(pp.p.clone());
 						pp.millis = current_millis();
 					}
 				}
 			}
-			for i in r {
-				Network::transmit(i);
+			for packet in packets_for_resend {
+				tools::log_to_file(format!("Resent package with id: {}\n", packet.id));
+				Network::transmit(packet);
 			}
 		}});
 	}
@@ -328,16 +330,12 @@ impl Network {
     }
 
     fn handle_ack(&mut self, p: Packet) {
-		let item = self.shared.lock()
+		if self.shared.lock()
 			.expect("Lock failed.")
 			.packets
-			.remove(&p.id);
-		match item {
-			Some(value) => {
-				//self.status_tx.send(format!("NEW ACK: {}", value.p.data.len())).unwrap();
-				self.tx_msg.send(IncomingMessage::Ack(p.id)).expect("Send failed.");
-			},
-			_ => {}
+			.remove(&p.id).is_some() {
+			//tools::log_to_file(format!("Got ACK with id: {}\n", p.id));
+			self.tx_msg.send(IncomingMessage::Ack(p.id)).expect("Send failed.");
 		}
   	}
 
@@ -377,9 +375,9 @@ impl Network {
 		// is received before message is sent.
 		Network::add_packet(shared.clone(), p.clone());
 
-		//println!("!!!!!!!!!!!!!! {} !!!!!!!!!!!!!!!!!!", p.data.len());
 		let id = p.id;
 		if Network::transmit(p) {
+			//tools::log_to_file(format!("Sent package with id: {}\n", id));
 			Ok(id)
 		} else {
 			Network::remove_packet(shared.clone(), id);
@@ -413,14 +411,20 @@ impl Network {
 	}
 
 	fn wait_for_queue(shared: Arc<Mutex<SharedData>>) {
-		while Network::queue_size(shared.clone()) > 1000 {
+		// IMPORTANT!
+		// It seems that sending too many ICMP packets in a short time results in ICMP echo request
+		// drops. Hence, we limit the number of pending ACKs to 8.
+		// TODO currently the poll mechanism is suboptimal. Ideally we send 8 packets and then
+		// TODO send the next packet when an ACK is received.
+		while Network::queue_size(shared.clone()) > 8 {
 			thread::sleep(Duration::from_millis(50));
 		}
 	}
 
-	fn transmit(p: Packet) -> bool {
-		let v = p.serialize();
-		let ip = p.ip.clone() + "\0";
+	fn transmit(packet: Packet) -> bool {
+		//tools::log_to_file(format!("transmit: sent package with id: {}\n", packet.id));
+		let v = packet.serialize();
+		let ip = packet.ip.clone() + "\0";
 		unsafe {
 			send_icmp(ip.as_ptr(), v.as_ptr(), v.len() as u16) == 0
 		}

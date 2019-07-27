@@ -4,6 +4,7 @@ mod rsa;
 mod rsatools;
 mod blowfish;
 mod cryp;
+pub mod tools;
 pub mod binding;
 
 use std::thread;

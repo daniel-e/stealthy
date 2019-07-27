@@ -16,7 +16,7 @@ static ACK: char = '✔';
 static NUMBERS: &str = "➀➁➂➃➄➅➆➇➈➉";
 
 /// Write messages to the terminal.
-pub struct TermOut {
+pub struct View {
     stdout: RawTerminal<Stdout>,
     model: Arc<Mutex<Model>>,
     // The scroll_offset is the amount of "arrows up".
@@ -28,10 +28,10 @@ pub struct TermOut {
     scramble_view: bool,
 }
 
-impl TermOut {
+impl View {
 
-    pub fn new(model: Arc<Mutex<Model>>) -> TermOut {
-        TermOut {
+    pub fn new(model: Arc<Mutex<Model>>) -> View {
+        View {
             stdout: stdout().into_raw_mode().expect("No raw mode possible."),
             model: model,
             scroll_offset: 0,
@@ -57,7 +57,7 @@ impl TermOut {
     /// The message is added to the model.
     pub fn adjust_scroll_offset(&mut self, i: Item) {
         if self.scroll_offset > 0 {
-            self.increase_scroll_offset(TermOut::split_line(self,&i).len());
+            self.increase_scroll_offset(View::split_line(self, &i).len());
         }
 
         self.redraw();
@@ -110,7 +110,7 @@ impl TermOut {
 
     // ===========================================================================================
 
-    fn init(mut self) -> TermOut {
+    fn init(mut self) -> View {
         write!(self.stdout, "{}{}",
                termion::clear::All,   // clear screen
                termion::cursor::Hide  // hide cursor
@@ -147,7 +147,7 @@ impl TermOut {
     }
 
     fn draw_window(&mut self) {
-        let (maxx, maxy) = TermOut::size();
+        let (maxx, maxy) = View::size();
 
         for x in 2..maxx {
             write!(self.stdout, "{}─{}─{}─",
@@ -298,17 +298,17 @@ impl TermOut {
 
     fn window_height(&self) -> usize {
         if self.raw_view {
-            TermOut::size().1 as usize
+            View::size().1 as usize
         } else {
-            TermOut::size().1 as usize - 4
+            View::size().1 as usize - 4
         }
     }
 
     fn window_width(&self) -> usize {
         if self.raw_view {
-            TermOut::size().0 as usize
+            View::size().0 as usize
         } else {
-            TermOut::size().0 as usize - 2
+            View::size().0 as usize - 2
         }
     }
 
@@ -320,7 +320,7 @@ impl TermOut {
 
     fn split_line(&self, s: &Item) -> Vec<Item> {
         // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of UTF-8 characters
-        TermOut::remove_symbol(self.txt(s).chars().collect::<Vec<char>>()
+        View::remove_symbol(self.txt(s).chars().collect::<Vec<char>>()
             .chunks(self.window_width())
             .map(|x| s.clone().message(x.iter().collect()).raw())
             .collect()
@@ -406,7 +406,7 @@ fn write_at(o: &mut RawTerminal<Stdout>, x: usize, y: usize, s: &str) {
 
 fn write_input_field(o: &mut RawTerminal<Stdout>, input: Vec<u8>) {
 
-    let (maxx, maxy) = TermOut::size();
+    let (maxx, maxy) = View::size();
     let input_field_len = maxx - 2 - 1;
 
     write!(o, "{}", termion::color::Bg(termion::color::Blue)).expect("Error.");
@@ -423,7 +423,7 @@ fn write_input_field(o: &mut RawTerminal<Stdout>, input: Vec<u8>) {
 }
 
 fn write_scroll_status(o: &mut RawTerminal<Stdout>, current: usize, len: usize) {
-    let (maxx, _) = TermOut::size();
+    let (maxx, _) = View::size();
     let s = format!("line:{}/{}", current, len);
     let x = maxx as usize - s.len();
     write!(o, "{}{}{}{}{}{}",

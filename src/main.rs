@@ -3,9 +3,9 @@ mod tools;
 mod rsatools;
 mod arguments;
 mod console;
-mod ui_termion;
+mod view;
 mod model;
-mod ui_in;
+mod keyboad;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -21,8 +21,8 @@ use stealthy::xip::IpAddresses;
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::ConsoleMessage;
 
-use crate::ui_termion::View;
-use crate::ui_in::{InputKeyboard, UserInput};
+use crate::view::View;
+use crate::keyboad::{InputKeyboard, UserInput};
 use crate::model::{ItemType, Model, Item};
 use std::iter::repeat;
 use crate::model::Source;
@@ -444,10 +444,7 @@ fn main() {
 
     let tx = create_console_sender(model.clone(), view.clone());
 
-    // Creates a thread which waits for messages on a channel to be written to out.
-    let status_tx = status_message_loop(tx.clone());
-
-    let layer = get_layer(&args, status_tx.clone(), &dstips);
+    let layer = get_layer(&args, status_message_loop(tx.clone()), &dstips);
 
     welcome(&args, tx.clone(), &layer, &dstips);
 

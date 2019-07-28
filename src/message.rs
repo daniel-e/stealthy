@@ -1,16 +1,7 @@
-use crypto::sha2::Sha256;
-use crypto::digest::Digest;
+//use crypto::sha2::Sha256;
+//use crypto::digest::Digest;
 
-pub enum Errors {
-    MessageTooBig,
-    SendFailed,
-    EncryptionError
-}
-
-pub enum ErrorType {
-    DecryptionError,
-    ReceiveError,
-}
+use crate::error::ErrorType;
 
 unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
 // http://doc.rust-lang.org/std/marker/trait.Sync.html
@@ -27,7 +18,7 @@ impl Clone for MessageType {
     fn clone(&self) -> MessageType {
         match *self {
             MessageType::NewMessage => MessageType::NewMessage,
-            MessageType::AckMessage => MessageType::AckMessage,
+            //MessageType::AckMessage => MessageType::AckMessage,
             MessageType::FileUpload => MessageType::FileUpload
         }
     }
@@ -42,7 +33,7 @@ pub struct Message {
 
 pub enum MessageType {
     NewMessage,
-    AckMessage,
+    //AckMessage,
     FileUpload
 }
 
@@ -58,9 +49,10 @@ impl Message {
         Message::create(ip, buf, MessageType::NewMessage)
     }
 
+    /*
     pub fn ack(ip: String) -> Message {
         Message::create(ip, vec![], MessageType::AckMessage)
-    }
+    }*/
 
     pub fn set_payload(&self, buf: Vec<u8>) -> Message {
         Message::create(self.get_ip(), buf, self.get_type())
@@ -96,15 +88,12 @@ impl Message {
         Some(data.to_vec())
     }
 
+    /*
     pub fn sha2(&self) -> String {
         let mut sha2 = Sha256::new();
         sha2.input(&self.buf);
         sha2.result_str()
-    }
-
-    pub fn some_bytes(&self) -> Vec<u8> {
-        self.buf.iter().take(20).cloned().collect()
-    }
+    }*/
 
     fn create(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
         Message {

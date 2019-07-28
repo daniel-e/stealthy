@@ -6,7 +6,7 @@ mod console;
 mod view;
 mod model;
 mod keyboad;
-mod types;
+mod message;
 mod layer;
 mod cryp;
 mod delivery;
@@ -15,6 +15,7 @@ mod iptools;
 mod blowfish;
 mod packet;
 mod rsa;
+mod error;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -23,7 +24,7 @@ use std::sync::{Arc, Mutex};
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
 
-use crate::types::{Message, IncomingMessage};
+use crate::message::{Message, IncomingMessage};
 use crate::layer::{Layers, Layer};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
 use crate::iptools::IpAddresses;

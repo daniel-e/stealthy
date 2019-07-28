@@ -1,5 +1,5 @@
 use std::sync::mpsc::Sender;
-use crate::types::Message;
+use crate::message::Message;
 use crate::model::ItemType;
 use crate::model::Item;
 

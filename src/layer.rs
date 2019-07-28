@@ -5,7 +5,8 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use crate::cryp::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
 use crate::delivery::Delivery;
 use crate::binding::Network;
-use crate::types::{ErrorType, IncomingMessage, Message, MessageType};
+use crate::message::{IncomingMessage, Message};
+use crate::error::ErrorType;
 use crate::iptools::IpAddresses;
 
 pub struct Layer {

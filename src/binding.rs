@@ -4,8 +4,8 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 use std::convert::From;
 
-use crate::types::{IncomingMessage, Message, MessageType};
-use crate::types::Errors;
+use crate::message::{IncomingMessage, Message, MessageType};
+use crate::error::Errors;
 use crate::packet::{Packet, IdType};
 use crate::iptools::IpAddresses;
 use crate::tools;

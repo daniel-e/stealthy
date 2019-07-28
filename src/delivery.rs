@@ -5,6 +5,7 @@ use std::sync::mpsc::{Receiver, Sender};
 
 use crate::{Message, IncomingMessage};
 use crate::binding::Network;
+use crate::Console;
 
 #[cfg(feature="debugout")]
 use crypto::sha2::Sha256;
@@ -42,11 +43,11 @@ pub struct SmallMessages {
 }
 
 pub struct Delivery {
-    pub pending  : Arc<Mutex<Vec<SmallMessages>>>,
-    incoming     : Arc<Mutex<HashMap<u64, HashMap<u32, SmallMessage>>>>,
-    tx           : Sender<IncomingMessage>,
+    pub pending: Arc<Mutex<Vec<SmallMessages>>>,
+    incoming: Arc<Mutex<HashMap<u64, HashMap<u32, SmallMessage>>>>,
+    tx: Sender<IncomingMessage>,
     network_layer: Box<Network>,
-    _status_tx   : Sender<String>
+    _console: Console
 }
 
 //const MAX_MESSAGE_PART_SIZE: usize = 8192;
@@ -55,14 +56,14 @@ impl Delivery {
 
     /// Via rx1 this layer receives incoming messages from the
     /// network layer (message with encrypted payload).
-    pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>, status_tx: Sender<String>) -> Delivery {
+    pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>, console: Console) -> Delivery {
 
         let d = Delivery {
             pending: Arc::new(Mutex::new(vec![])),
             tx: tx,
             network_layer: n,
             incoming: Arc::new(Mutex::new(HashMap::new())),
-            _status_tx: status_tx,
+            _console: console,
         };
 
         d.init_rx(rx);
@@ -114,7 +115,7 @@ impl Delivery {
         let incoming = self.incoming.clone();
 
         #[cfg(feature="debugout")]
-        let stx = self._status_tx.clone();
+        let stx = self._console.clone();
 
 		thread::spawn(move || { loop { 
             match rx.recv() {
@@ -204,7 +205,7 @@ impl Delivery {
         self.network_layer.shared_data()
     }
 
-    pub fn send_msg(msg: Message, id: u64, pending: Arc<Mutex<Vec<SmallMessages>>>, shared: Arc<Mutex<SharedData>>, status_tx: Sender<String>, siz: usize) -> SendObject {
+    pub fn send_msg(msg: Message, id: u64, pending: Arc<Mutex<Vec<SmallMessages>>>, shared: Arc<Mutex<SharedData>>, console: Console, siz: usize) -> SendObject {
 
         // Total allowed payload: siz (= Network::current_siz)
         // SmallMessage header size: 17B
@@ -226,7 +227,7 @@ impl Delivery {
             msg,
             small_messages,
             shared,
-            status_tx,
+            console,
         };
 
         o
@@ -305,7 +306,7 @@ pub struct SendObject {
     msg: Message,
     small_messages: SmallMessages,
     shared: Arc<Mutex<SharedData>>,
-    status_tx: Sender<String>,
+    console: Console,
 }
 
 impl SendObject {
@@ -316,13 +317,12 @@ impl SendObject {
                 Ok(_id) => {
                 },
                 Err(_) => {
-                    self.status_tx.send(
+                    self.console.status(
                         format!("{}{}{}",
                                 "Sending of message failed. ",
                                 "Maybe you don't have the permission to create raw sockets. ",
                                 "Check the documentation for more details."
-                        ))
-                        .expect("Send failed.");
+                        ));
                     // TODO remove small_message from delivery.rs:Delivery:self.pending on error
                     break;
                 }

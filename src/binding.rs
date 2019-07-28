@@ -9,6 +9,7 @@ use crate::error::Errors;
 use crate::packet::{Packet, IdType};
 use crate::iptools::IpAddresses;
 use crate::tools;
+use crate::Console;
 
 use std::collections::HashMap;
 use std::iter::repeat;
@@ -98,9 +99,9 @@ pub struct SharedData {
 
 #[repr(C)]
 pub struct Network {
-    tx_msg           : Sender<IncomingMessage>,
-	shared           : Arc<Mutex<SharedData>>,
-	status_tx        : Sender<String>,
+    tx_msg: Sender<IncomingMessage>,
+	shared: Arc<Mutex<SharedData>>,
+	console: Console,
 	accept_ip: Vec<String>,
 	pub current_siz: usize,
 	ping_id: u32,
@@ -112,7 +113,7 @@ fn current_millis() -> i64 {
 }
 
 impl Network {
-	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, status_tx: Sender<String>, accept_ip: &IpAddresses) -> Box<Network> {
+	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, console: Console, accept_ip: &IpAddresses) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
 			packets : HashMap::new(),
@@ -124,7 +125,7 @@ impl Network {
 		let mut n = Box::new(Network {
 			shared: s.clone(),
             tx_msg,
-			status_tx: status_tx.clone(),
+			console: console.clone(),
 			accept_ip: accept_ip.as_strings().into_iter().collect(),
 			current_siz: 128,
 			ping_id,
@@ -133,7 +134,7 @@ impl Network {
 		n.init_callback(dev);
 		n.init_retry_event_receiver(s.clone());
 
-		Network::ping(status_tx, 8192, accept_ip.as_strings().pop().unwrap(), ping_id);
+		Network::ping(console, 8192, accept_ip.as_strings().pop().unwrap(), ping_id);
 		n
 	}
 
@@ -164,24 +165,24 @@ impl Network {
 			match r {
 				-1 => {
 					#[cfg(feature="debugout")]
-					self.status_tx.send(String::from("[Network::init_callback] failed")).unwrap();
+					self.console.send(String::from("[Network::init_callback] failed")).unwrap();
 				},
 				_ => {
 					#[cfg(feature="debugout")]
-					self.status_tx.send(String::from("[Network::init_callback] network initialized)")).unwrap();
+					self.console.send(String::from("[Network::init_callback] network initialized)")).unwrap();
 				}
 			}
 		}
 	}
 
-	fn msg(status_tx: Sender<String>, s: String) {
+	fn msg(console: Console, s: String) {
 		thread::spawn(move || {
 			thread::sleep(Duration::from_millis(200));
-			status_tx.send(s).unwrap();
+			console.status(s);
 		});
 	}
 
-	fn ping(status_tx: Sender<String>, n: usize, ip: String, ping_id: u32) {
+	fn ping(console: Console, n: usize, ip: String, ping_id: u32) {
 		let s = format!("PROBING:{:12}/", ping_id);
 		let b = s.as_bytes();
 		if n < b.len() {
@@ -189,7 +190,7 @@ impl Network {
 		}
 		let v = b.iter().cloned().chain(repeat(1 as u8).take(n - b.len())).collect();
 		if Network::send_data_as_ping(v, ip.clone()).is_err() {
-			Network::msg(status_tx, String::from("No permissions to send data. Please check the documentation for more information."))
+			Network::msg(console, String::from("No permissions to send data. Please check the documentation for more information."))
 		}
 	}
 
@@ -218,7 +219,7 @@ impl Network {
 				}
 				if Network::probing_id(&p.data) == self.ping_id {
 					self.current_siz = p.data.len();
-					Network::msg(self.status_tx.clone(), format!("Maximum payload size is {}.", self.current_siz));
+					Network::msg(self.console.clone(), format!("Maximum payload size is {}.", self.current_siz));
 				}
 			},
 			_ => {}
@@ -230,7 +231,7 @@ impl Network {
 	pub fn recv_packet(&mut self, buf: *const u8, len: u32, ip: String) {
 
 		#[cfg(feature="debugout")]
-		self.status_tx.send(String::from("[Network::recv_packet()] ============= called =============")).expect("send failed");
+		self.console.send(String::from("[Network::recv_packet()] ============= called =============")).expect("send failed");
 
 		if len == 0 {
 			// TODO: hack: ip is the reason for the invalid packet
@@ -244,7 +245,7 @@ impl Network {
 		if self.accept_ip.iter().find(|&x| *x == ip).is_none() {
 			// Ignore packet as it comes from an IP which is not accepted.
 			#[cfg(feature = "show_dropped")]
-			self.status_tx.send(format!("Dropped packet from {} / {:?}", ip, self.accept_ip)).expect("Send failed.");
+			self.console.send(format!("Dropped packet from {} / {:?}", ip, self.accept_ip)).expect("Send failed.");
 
 			return;
 		}
@@ -258,7 +259,7 @@ impl Network {
 			for i in 0..len {
 				vv.push(*buf.offset(i as isize));
 			}
-			self.status_tx.send(format!("[Network::recv_packet()] new message; len = {}, {:?}", len, vv)).unwrap();
+			self.console.send(format!("[Network::recv_packet()] new message; len = {}, {:?}", len, vv)).unwrap();
 		}
 
 		let r = Packet::deserialize(buf, len, ip);
@@ -269,19 +270,19 @@ impl Network {
 					self.handle_file_upload(p);
 				} else if p.is_new_message() {
 					#[cfg(feature="debugout")]
-					self.status_tx.send(String::from("[Network::recv_packet()] new message")).unwrap();
+					self.console.send(String::from("[Network::recv_packet()] new message")).unwrap();
                     self.handle_new_message(p);
                 } else if p.is_ack() {
 					//self.status_tx.send(String::from("[Network::recv_packet()] ack")).expect("bindings:ack failed");
                     self.handle_ack(p);
                 } else {
 					#[cfg(feature="debugout")]
-					self.status_tx.send(String::from("[Network::recv_packet()] unknown packet type")).unwrap();
+					self.console.send(String::from("[Network::recv_packet()] unknown packet type")).unwrap();
                 }
 			},
 			None => {
 				#[cfg(feature="debugout")]
-				self.status_tx.send(String::from("[Network::recv_packet()] deserialization failed")).unwrap();
+				self.console.send(String::from("[Network::recv_packet()] deserialization failed")).unwrap();
 			}
 		}
 	}
@@ -318,14 +319,14 @@ impl Network {
             let m = Message::new(p.ip.clone(), p.data.clone());
 
 			#[cfg(feature="debugout")]
-			self.status_tx.send(format!("NEW MESSAGE: {} {}", p.data.len(), m.sha2())).unwrap();
+			self.console.send(format!("NEW MESSAGE: {} {}", p.data.len(), m.sha2())).unwrap();
 
             match self.tx_msg.send(IncomingMessage::New(m)) {
                 Err(_) => println!("handle_new_message: could not deliver message to upper layer"),
                 _      => { }
             }
 			#[cfg(feature="debugout")]
-			self.status_tx.send(String::from("binding.rs::sending ack")).expect("Could not send.");
+			self.console.send(String::from("binding.rs::sending ack")).expect("Could not send.");
             Network::transmit(Packet::create_ack(p));
             // TODO error
         }

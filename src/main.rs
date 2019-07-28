@@ -20,7 +20,7 @@ mod commands;
 mod upload;
 
 use std::thread;
-use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -117,34 +117,16 @@ fn send_message(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
     }
 }
 
-fn get_layer(args: &Arguments, status_tx: Sender<String>, dstips: &IpAddresses) -> Layer {
+fn get_layer(args: &Arguments, console: Console, dstips: &IpAddresses) -> Layer {
     let ret =
         if args.hybrid_mode {
             // use asymmetric encryption
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, status_tx, dstips)
+            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, console, dstips)
         } else {
             // use symmetric encryption
-            Layers::symmetric(&args.secret_key, &args.device, status_tx, dstips)
+            Layers::symmetric(&args.secret_key, &args.device, console, dstips)
         };
     ret.expect("Initialization failed.")
-}
-
-/// Returns a sender object to which status message can be sent to. These message will be
-/// forwarded to the console.
-fn status_message_loop(o: Console) -> Sender<String> {
-
-    let (tx, rx) = channel::<String>();
-    thread::spawn(move || {
-        loop { match rx.recv() {
-            Ok(msg) => {
-                o.status(msg)
-            },
-            Err(er) => {
-                o.error(format!("status_message_loop: failed. {:?}", er))
-            }
-        }}
-    });
-    tx
 }
 
 fn keyboad_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
@@ -295,7 +277,7 @@ fn main() {
     // TODO replace status_message_loop by tx?
     // TODO have only one loop? for keyboard events, status message events and other events
 
-    let layer = get_layer(&args, status_message_loop(c.clone()), &dstips);
+    let layer = get_layer(&args, c.clone(), &dstips);
 
     // Show welchome message.
     outputs::welcome(&args, c.clone(), &layer, &dstips);

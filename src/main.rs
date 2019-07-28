@@ -38,25 +38,35 @@ type ArcModel = Arc<Mutex<Model>>;
 type ArcView = Arc<Mutex<View>>;
 pub type ConsoleSender = Sender<ConsoleMessage>;
 
+/// Listens for incoming messages from the network.
 fn recv_loop(o: ConsoleSender, rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || {
         loop { match rx.recv() {
-            Ok(msg) => process_incoming_message(o.clone(), msg),
-            Err(e) => console::error(o.clone(), format!("recv_loop: failed to receive message. {:?}", e))
+            Ok(msg) => {
+                match msg {
+                    IncomingMessage::New(msg) => {
+                        console::new_msg(o.clone(), msg);
+                    }
+                    IncomingMessage::Ack(id) => {
+                        console::ack_msg(o.clone(), id);
+                    }
+                    IncomingMessage::Error(_, s) => {
+                        console::error(o.clone(), s);
+                    }
+                    IncomingMessage::FileUpload(msg) => {
+                        process_upload(o.clone(), msg)
+                    }
+                    IncomingMessage::AckProgress(id, done, total) => {
+                        console::ack_msg_progress(o.clone(), id, done, total);
+                    }
+                }
+            },
+            Err(e) =>  {
+                console::error(o.clone(), format!("recv_loop: failed to receive message. {:?}", e))
+            }
         }}
     });
-}
-
-fn process_incoming_message(o: ConsoleSender, msg: IncomingMessage) {
-
-    match msg {
-        IncomingMessage::New(msg) => { console::new_msg(o.clone(), msg); }
-        IncomingMessage::Ack(id) => { console::ack_msg(o.clone(), id); }
-        IncomingMessage::Error(_, s) => { console::error(o.clone(), s); }
-        IncomingMessage::FileUpload(msg) => { process_upload(o.clone(), msg) }
-        IncomingMessage::AckProgress(id, done, total) => { console::ack_msg_progress(o.clone(), id, done, total); }
-    }
 }
 
 fn process_upload(o: ConsoleSender, msg: Message) {

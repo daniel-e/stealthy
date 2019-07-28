@@ -220,8 +220,10 @@ fn create_console(model: ArcModel, view: ArcView) -> Console {
                 view.lock().unwrap().refresh();
             },
             ConsoleMessage::AckProgress(id, done, total) => {
-                model.lock().unwrap().ack_progress(id, done, total);
-                view.lock().unwrap().refresh();
+                let refresh= model.lock().unwrap().ack_progress(id, done, total);
+                if refresh {
+                    view.lock().unwrap().refresh();
+                }
             },
             // We need this as otherwise "out" is not dropped and the terminal state
             // is not restored.

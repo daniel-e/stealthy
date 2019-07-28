@@ -12,6 +12,7 @@ pub struct Model {
     pub last_key: SystemTime,
     scrambled: bool,
     pub scramble_timeout: u32,
+    last_ack_progress_view_update: SystemTime,
 }
 
 impl Model {
@@ -22,6 +23,7 @@ impl Model {
             last_key: SystemTime::now(),
             scrambled: false,
             scramble_timeout: 20,
+            last_ack_progress_view_update: SystemTime::now(),
         }
     }
 
@@ -82,15 +84,26 @@ impl Model {
         }
     }
 
-    pub fn ack_progress(&mut self, id: u64, done: usize, total: usize) {
+    pub fn ack_progress(&mut self, id: u64, done: usize, total: usize) -> bool {
+        let mut exists = false;
         for item in self.buf.iter_mut().rev() {
-            let exists = item.id.iter().find(|i| **i == id).is_some();
+            exists = item.id.iter().find(|i| **i == id).is_some();
             if exists {
                 item.pending_acks = done;
                 item.total_acks = total;
                 break;
             }
         }
+        // Do not refresh the display too often as otherwise the console will have a slack.
+        let mut refresh = false;
+        if exists {
+            let elapsed = self.last_ack_progress_view_update.elapsed().unwrap().as_millis();
+            if elapsed > 20 {
+                refresh = true;
+                self.last_ack_progress_view_update = SystemTime::now();
+            }
+        }
+        done == total || refresh
     }
 
     pub fn add_message(&mut self, i: Item) {

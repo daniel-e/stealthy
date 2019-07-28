@@ -6,6 +6,7 @@ mod console;
 mod view;
 mod model;
 mod keyboad;
+mod types;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -14,9 +15,10 @@ use std::sync::{Arc, Mutex};
 use crypto::sha1::Sha1;
 use crypto::digest::Digest;
 
-use stealthy::{Message, IncomingMessage, Layers, Layer};
+use stealthy::types::{Message, IncomingMessage};
+use stealthy::{Layers, Layer};
 use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
-use stealthy::xip::IpAddresses;
+use stealthy::iptools::IpAddresses;
 
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::ConsoleMessage;

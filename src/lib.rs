@@ -4,8 +4,10 @@ mod rsa;
 mod rsatools;
 mod blowfish;
 mod cryp;
+pub mod iptools;
 pub mod tools;
 pub mod binding;
+pub mod types;
 
 use std::thread;
 use std::sync::Arc;
@@ -14,163 +16,15 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use crate::cryp::{Encryption, SymmetricEncryption, AsymmetricEncryption};  // Implemenation for encryption layer
 use crate::delivery::Delivery;
 use crate::binding::Network;
-
-pub mod xip {
-    use std::net::Ipv4Addr;
-
-    pub struct IpAddresses {
-        ips: Vec<Ipv4Addr>
-    }
-
-    impl IpAddresses {
-        pub fn from_comma_list(s: &str) -> IpAddresses {
-            IpAddresses {
-                ips: s.split(",")
-                    .map(|x| String::from(x).trim().to_string())
-                    .filter(|x| x.len() > 0)
-                    .map(|x| x.parse().expect("Found invalid IP address."))
-                    .collect()
-            }
-        }
-
-        pub fn as_strings(&self) -> Vec<String> {
-            self.ips.iter().map(|x| x.to_string()).collect()
-        }
-    }
-}
+use crate::types::{ErrorType, IncomingMessage, Message, MessageType};
 
 
-use crypto::sha2::Sha256;
-use crypto::digest::Digest;
-use crate::xip::IpAddresses;
-
-pub enum ErrorType {
-    DecryptionError,
-    ReceiveError,
-}
-
-pub enum IncomingMessage {
-    New(Message),
-    Ack(u64),
-    AckProgress(u64, usize, usize),
-    Error(ErrorType, String),
-    FileUpload(Message),
-}
-
-unsafe impl Sync for IncomingMessage { } // TODO XXX is it thread safe?
-// http://doc.rust-lang.org/std/marker/trait.Sync.html
-
-pub enum MessageType {
-    NewMessage,
-    AckMessage,
-    FileUpload
-}
-
-
-impl Clone for MessageType {
-    fn clone(&self) -> MessageType {
-        match *self {
-            MessageType::NewMessage => MessageType::NewMessage,
-            MessageType::AckMessage => MessageType::AckMessage,
-            MessageType::FileUpload => MessageType::FileUpload
-        }
-    }
-}
-
+use crate::iptools::IpAddresses;
 
 pub enum Errors {
 	MessageTooBig,
 	SendFailed,
     EncryptionError
-}
-
-
-pub struct Message {
-    /// Contains the destination ip for outgoing messages, source ip from incoming messages.
-	ip : String,
-    typ: MessageType,
-	buf: Vec<u8>,
-}
-
-
-fn replace_char(c: char) -> char {
-    match c {
-        'a'...'z' | 'A'...'Z' | '0'...'9' | '-' | '.' => c,
-        _ => '_'
-    }
-}
-
-fn sanitize_filename(s: String) -> String {
-    s.chars().map(|c| replace_char(c)).collect()
-}
-
-impl Message {
-    pub fn file_upload(ip: String, fname: String, data: &Vec<u8>) -> Message {
-        let mut buffer = Vec::from(fname.as_bytes());
-        buffer.push(0);
-        buffer.extend(data.iter());
-        Message::create(ip, buffer, MessageType::FileUpload)
-    }
-
-	pub fn new(ip: String, buf: Vec<u8>) -> Message {
-        Message::create(ip, buf, MessageType::NewMessage)
-    }
-
-	pub fn ack(ip: String) -> Message {
-        Message::create(ip, vec![], MessageType::AckMessage)
-    }
-
-    pub fn set_payload(&self, buf: Vec<u8>) -> Message {
-        Message::create(self.get_ip(), buf, self.get_type())
-    }
-
-    pub fn get_payload(&self) -> Vec<u8> { self.buf.clone() }
-
-    /// Returns the destination ip for outgoing messages or the source ip from incoming messages.
-    pub fn get_ip(&self) -> String { self.ip.clone() }
-
-    pub fn get_type(&self) -> MessageType { self.typ.clone() }
-
-    pub fn get_filename(&self) -> Option<String> {
-        let pos = self.get_payload().iter().position(|x| *x == 0 as u8);
-        if pos.is_none() {
-            // invalid format; TODO error
-            return None;
-        }
-        let payload = self.get_payload();
-        let (fname, _) = payload.split_at(pos.unwrap());
-        let filename = String::from_utf8(fname.to_vec()).expect("XXXXXXXX"); // TODO error
-        Some(sanitize_filename(filename))
-    }
-
-    pub fn get_filedata(&self) -> Option<Vec<u8>> {
-        let pos = self.get_payload().iter().position(|x| *x == 0 as u8);
-        if pos.is_none() {
-            // invalid format; TODO error
-            return None;
-        }
-        let payload = self.get_payload();
-        let (_, data) = payload.split_at(pos.unwrap() + 1);
-        Some(data.to_vec())
-    }
-
-    pub fn sha2(&self) -> String {
-        let mut sha2 = Sha256::new();
-        sha2.input(&self.buf);
-        sha2.result_str()
-    }
-
-    pub fn some_bytes(&self) -> Vec<u8> {
-        self.buf.iter().take(20).cloned().collect()
-    }
-
-    fn create(ip: String, buf: Vec<u8>, typ: MessageType) -> Message {
-		Message {
-			ip: ip,
-			buf: buf,
-            typ: typ,
-		}
-	}
 }
 
 pub struct Layer {
@@ -183,7 +37,6 @@ pub struct Layers {
     delivery_layer  : Arc<Box<Delivery>>,
     status_tx       : Sender<String>,
 }
-
 
 impl Layers {
 

@@ -6,7 +6,7 @@ use std::convert::From;
 
 use crate::{IncomingMessage, Message, Errors, MessageType};
 use crate::packet::{Packet, IdType};
-use crate::xip::IpAddresses;
+use crate::iptools::IpAddresses;
 use crate::tools;
 
 use std::collections::HashMap;

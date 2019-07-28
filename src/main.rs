@@ -26,6 +26,7 @@ use crate::keyboad::{InputKeyboard, UserInput};
 use crate::model::{ItemType, Model, Item};
 use std::iter::repeat;
 use crate::model::Source;
+use std::time::Duration;
 
 type ArcModel = Arc<Mutex<Model>>;
 type ArcView = Arc<Mutex<View>>;
@@ -36,10 +37,11 @@ fn help_message(o: ConsoleSender) {
     write_lines(o, &vec![
         "Commands always start with a slash:",
         " ",
-        "/help              - this help message",
-        "/uptime, /up       - uptime",
-        "/cat <filename>    - send content of an UTF-8 encoded text file",
-        "/upload <filename> - send binary file",
+        "/help                 - this help message",
+        "/uptime, /up          - uptime",
+        "/cat <filename>       - send content of an UTF-8 encoded text file",
+        "/upload <filename>    - send binary file",
+        "/set scramble <value> - set timeout in seconds when to scramble content (default: 20)",
         " ",
         "Keys:",
         " ",
@@ -49,6 +51,7 @@ fn help_message(o: ConsoleSender) {
         "page down    - scroll one page down",
         "end          - scroll to last message in buffer",
         "ctrl+r       - switch to plain messages and back to normal view",
+        "ctrl+s       - toggle scrambling",
         "esc | ctrl+d - quit",
         " "
     ], ItemType::Info, Source::System);
@@ -130,6 +133,20 @@ fn init_global_state() {
     };
 }
 
+fn parse_command_set(txt: String, o: ConsoleSender) -> bool {
+    let txt_parts = txt.split(' ').collect::<Vec<_>>();
+    if !(txt_parts.len() != 3 && txt_parts[1] != "scramble") {
+        let n = txt_parts[2].parse::<u32>();
+        if n.is_ok() {
+            let val = n.unwrap();
+            o.send(ConsoleMessage::SetScrambleTimeout(val)).unwrap();
+            o.send(ConsoleMessage::TextMessage(Item::new_system(&format!("Value set to {} seconds.", val)))).unwrap();
+            return true;
+        }
+    }
+    false
+}
+
 fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
@@ -146,6 +163,13 @@ fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses
             _ => {
                 console::msg(o.clone(), String::from("Could not read file."), ItemType::Error, Source::System);
             }
+        }
+        return;
+    }
+
+    if txt.starts_with("/set ") {
+        if !parse_command_set(txt, o.clone()) {
+            o.send(ConsoleMessage::TextMessage(Item::new_system("Command not understood."))).unwrap();
         }
         return;
     }
@@ -334,70 +358,76 @@ fn status_message_loop(o: ConsoleSender) -> Sender<String> {
 }
 
 fn keyboad_loop(o: ConsoleSender, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
-
     let mut input = InputKeyboard::new();
 
-    loop { match input.read_char() {
-        UserInput::Character(buf) => {
-            let mut v = vec![];
-            for c in buf {
-                let mut m = model.lock().unwrap();
-                if c == 13 {
-                    let s = m.apply_enter();
-                    send_message(s, o.clone(), &l, &dstips);
-                } else {
-                    v.push(c);
-                    if String::from_utf8(v.clone()).is_ok() {
-                        m.update_input(v.clone());
-                        v.clear();
+    loop {
+        let i = input.read_char();
+        model.lock().unwrap().update_last_keypress();
+        match i {
+            UserInput::Character(buf) => {
+                let mut v = vec![];
+                for c in buf {
+                    let mut m = model.lock().unwrap();
+                    if c == 13 {
+                        let s = m.apply_enter();
+                        send_message(s, o.clone(), &l, &dstips);
+                    } else {
+                        v.push(c);
+                        if String::from_utf8(v.clone()).is_ok() {
+                            m.update_input(v.clone());
+                            v.clear();
+                        }
+                    }
+                }
+                view.lock().unwrap().refresh();
+            },
+            UserInput::Escape | UserInput::CtrlD => {
+                view.lock().unwrap().close();
+                o.send(ConsoleMessage::Exit).expect("Send failed.");
+                // Wait some seconds to give the thread in create_console_sender a chance to
+                // release its view so that the terminal is recovered correctly.
+                thread::sleep(Duration::from_millis(100));
+                break;
+            },
+            UserInput::ArrowDown => {
+                view.lock().unwrap().scroll_down();
+            },
+            UserInput::ArrowUp => {
+                view.lock().unwrap().scroll_up();
+            },
+            UserInput::Backspace => {
+                model.lock().unwrap().apply_backspace();
+                view.lock().unwrap().refresh();
+            },
+            UserInput::End => {
+                view.lock().unwrap().key_end();
+            },
+            UserInput::PageDown => {
+                view.lock().unwrap().page_down();
+            },
+            UserInput::PageUp => {
+                view.lock().unwrap().page_up();
+            },
+            UserInput::CtrlR => {
+                view.lock().unwrap().toggle_raw_view();
+            },
+            UserInput::CtrlS => {
+                model.lock().unwrap().toggle_scramble();
+                view.lock().unwrap().refresh();
+            },
+            UserInput::Enter => {
+                let s = model.lock().unwrap().apply_enter();
+                view.lock().unwrap().refresh();
+                if s.len() > 0 {
+                    if s.starts_with("/") {
+                        parse_command(s, o.clone(), &l, &dstips);
+                    } else {
+                        send_message(s, o.clone(), &l, &dstips);
                     }
                 }
             }
-            view.lock().unwrap().refresh();
-
-        },
-        UserInput::Escape | UserInput::CtrlD => {
-            view.lock().unwrap().close();
-            o.send(ConsoleMessage::Exit).expect("Send failed.");
-            break;
-        },
-        UserInput::ArrowDown => {
-            view.lock().unwrap().scroll_down();
-        },
-        UserInput::ArrowUp => {
-            view.lock().unwrap().scroll_up();
-        },
-        UserInput::Backspace => {
-            model.lock().unwrap().apply_backspace();
-            view.lock().unwrap().refresh();
-        },
-        UserInput::End => {
-            view.lock().unwrap().key_end();
-        },
-        UserInput::PageDown => {
-            view.lock().unwrap().page_down();
-        },
-        UserInput::PageUp => {
-            view.lock().unwrap().page_up();
-        },
-        UserInput::CtrlR => {
-            view.lock().unwrap().toggle_raw_view();
-        },
-        UserInput::CtrlS => {
-            view.lock().unwrap().toggle_scramble_view();
-        },
-        UserInput::Enter => {
-            let s = model.lock().unwrap().apply_enter();
-            view.lock().unwrap().refresh();
-            if s.len() > 0 {
-                if s.starts_with("/") {
-                    parse_command(s, o.clone(), &l, &dstips);
-                } else {
-                    send_message(s, o.clone(), &l, &dstips);
-                }
-            }
         }
-    }}
+    }
 }
 
 fn create_console_sender(model: ArcModel, view: ArcView) -> ConsoleSender {
@@ -423,10 +453,38 @@ fn create_console_sender(model: ArcModel, view: ArcView) -> ConsoleSender {
             // is not restored.
             ConsoleMessage::Exit => {
                 break;
+            },
+            ConsoleMessage::SetScrambleTimeout(n) => {
+                model.lock().unwrap().scramble_timeout = n;
+            },
+            ConsoleMessage::ScrambleTick => {
+                let mut redraw = false;
+                {
+                    let mut m = model.lock().unwrap();
+                    if !m.is_scrambled() {
+                        let last_keypress = m.last_keypress();
+                        if last_keypress.elapsed().unwrap().as_secs() > m.scramble_timeout as u64 {
+                            m.scramble(true);
+                            redraw = true;
+                        }
+                    }
+                }
+                if redraw {
+                    view.lock().unwrap().refresh();
+                }
             }
         }}
     });
     tx
+}
+
+fn scramble_trigger(o: ConsoleSender) {
+    thread::spawn(move || {
+       loop {
+           thread::sleep(Duration::from_secs(1));
+           o.send(ConsoleMessage::ScrambleTick).unwrap();
+       }
+    });
 }
 
 fn main() {
@@ -446,10 +504,12 @@ fn main() {
 
     // TODO replace status_message_loop by tx?
     // TODO have only one loop? for keyboard events, status message events and other events
-    
+
     let layer = get_layer(&args, status_message_loop(tx.clone()), &dstips);
 
     welcome(&args, tx.clone(), &layer, &dstips);
+
+    scramble_trigger(tx.clone());
 
     // this is the loop which handles messages received via rx
     recv_loop(tx.clone(), layer.rx);
@@ -457,5 +517,8 @@ fn main() {
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.
     keyboad_loop(tx.clone(), layer.layers, dstips, model, view);
+
+    // IMPORTANT! If the are threads which are using a clone of the view, the view isn't destroyed
+    // properly and the terminal state is not restored.
 }
 

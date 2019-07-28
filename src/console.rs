@@ -11,6 +11,8 @@ pub enum ConsoleMessage {
     TextMessage(Item),
     Ack(u64),
     AckProgress(u64, usize, usize),
+    SetScrambleTimeout(u32),
+    ScrambleTick,
     Exit,
 }
 

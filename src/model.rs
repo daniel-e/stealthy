@@ -1,4 +1,5 @@
 use time::Tm;
+use std::time::SystemTime;
 
 static MAX_BUF_LEN: usize = 500;
 
@@ -7,6 +8,10 @@ pub struct Model {
     pub buf: Vec<Item>,
     /// Content of the input field.
     pub input: Vec<u8>,
+    /// Time of last keypress
+    pub last_key: SystemTime,
+    scrambled: bool,
+    pub scramble_timeout: u32,
 }
 
 impl Model {
@@ -14,7 +19,30 @@ impl Model {
         Model {
             buf: vec![],
             input: vec![],
+            last_key: SystemTime::now(),
+            scrambled: false,
+            scramble_timeout: 20,
         }
+    }
+
+    pub fn toggle_scramble(&mut self) {
+        self.scrambled = !self.scrambled;
+    }
+
+    pub fn scramble(&mut self, value: bool) {
+        self.scrambled = value;
+    }
+
+    pub fn is_scrambled(&self) -> bool {
+        self.scrambled
+    }
+
+    pub fn update_last_keypress(&mut self) {
+        self.last_key = SystemTime::now();
+    }
+
+    pub fn last_keypress(&self) -> SystemTime {
+        self.last_key.clone()
     }
 
     /// Adds a new character (given as byte stream) to the input field.
@@ -95,6 +123,10 @@ pub struct Item {
 }
 
 impl Item {
+    pub fn new_system(msg: &str) -> Item {
+        Item::new(msg.to_string(), ItemType::Info, Source::System)
+    }
+
     /// Creates a new item without a symbol and without an id.
     pub fn new(msg: String, typ: ItemType, from: Source) -> Item {
         Item {

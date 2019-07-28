@@ -25,7 +25,6 @@ pub struct View {
     // when a new message has been added to the buffer in the model.
     scroll_offset: usize,
     raw_view: bool,
-    scramble_view: bool,
 }
 
 impl View {
@@ -36,7 +35,6 @@ impl View {
             model: model,
             scroll_offset: 0,
             raw_view: false,
-            scramble_view: false,
         }.init()
     }
 
@@ -56,8 +54,9 @@ impl View {
     /// not scroll for the new message.
     /// The message is added to the model.
     pub fn adjust_scroll_offset(&mut self, i: Item) {
+        let scrambled = self.model.lock().unwrap().is_scrambled();
         if self.scroll_offset > 0 {
-            self.increase_scroll_offset(View::split_line(self, &i).len());
+            self.increase_scroll_offset(View::split_line(self, &i, scrambled).len());
         }
 
         self.redraw();
@@ -103,11 +102,6 @@ impl View {
         self.redraw();
     }
 
-    pub fn toggle_scramble_view(&mut self) {
-        self.scramble_view = !self.scramble_view;
-        self.redraw();
-    }
-
     // ===========================================================================================
 
     fn init(mut self) -> View {
@@ -125,10 +119,11 @@ impl View {
 
     fn increase_scroll_offset(&mut self, n: usize) {
         let model = self.model.lock().unwrap();
+        let scrambled = model.is_scrambled();
         // The number of lines in the window.
         let window_height = self.window_height();
         // The number of lines required to show all messages. One message can consume multiple lines.
-        let buffer_lines = self.lines(&model.buf).len();
+        let buffer_lines = self.lines(&model.buf, scrambled).len();
 
         if buffer_lines > window_height {
             let max_off = buffer_lines - window_height;
@@ -184,7 +179,7 @@ impl View {
         format!("|{}{}| {:.2}%", s_transmitted, s_remaining, (total - pending) as f64 / total as f64 * 100.0)
     }
 
-    fn txt(&self, i: &Item) -> String {
+    fn txt(&self, i: &Item, scrambled: bool) -> String {
         let msg = i.msg.to_string();
 
         if self.raw_view {
@@ -192,7 +187,7 @@ impl View {
         }
 
         // Optionally Scramble
-        let maybe_scrambled_msg = if self.scramble_view {
+        let maybe_scrambled_msg = if scrambled {
             scramble(&i.msg)
         } else {
             msg.clone()
@@ -240,10 +235,11 @@ impl View {
         let wy = self.window_y_offset();
 
         let model = self.model.lock().unwrap();
+        let scrambled = model.is_scrambled();
         let screen_width = self.window_width();
         let screen_height = self.window_height();
 
-        let buffer = self.lines(&model.buf);
+        let buffer = self.lines(&model.buf, scrambled);
         let n = buffer.len();
         let mut p = 0;
 
@@ -257,7 +253,7 @@ impl View {
 
         // Show messages.
         for (y, line) in buf.iter().enumerate() {
-            let t = self.txt(&line); // formatted line
+            let t = self.txt(&line, scrambled); // formatted line
             let m = extend_line_to_screen_width(t, screen_width);
 
             write_color(&mut self.stdout, line.typ.clone());
@@ -275,6 +271,10 @@ impl View {
         // Show scroll status.
         if !self.raw_view && self.scroll_offset > 0 {
             write_scroll_status(&mut self.stdout, p, buffer.len());
+        }
+
+        if !self.raw_view && scrambled {
+            write_scramble_status(&mut self.stdout);
         }
 
         self.stdout.flush().unwrap();
@@ -318,9 +318,9 @@ impl View {
         termion::terminal_size().unwrap()
     }
 
-    fn split_line(&self, s: &Item) -> Vec<Item> {
+    fn split_line(&self, s: &Item, scrambled: bool) -> Vec<Item> {
         // TODO use https://github.com/unicode-rs/unicode-width to estimate the width of UTF-8 characters
-        View::remove_symbol(self.txt(s).chars().collect::<Vec<char>>()
+        View::remove_symbol(self.txt(s, scrambled).chars().collect::<Vec<char>>()
             .chunks(self.window_width())
             .map(|x| s.clone().message(x.iter().collect()).raw())
             .collect()
@@ -336,9 +336,9 @@ impl View {
         v
     }
 
-    fn lines(&self, buf: &Vec<Item>) -> Vec<Item> {
+    fn lines(&self, buf: &Vec<Item>, scrambled: bool) -> Vec<Item> {
         buf.iter()
-            .map(|v| self.split_line(v))
+            .map(|v| self.split_line(v, scrambled))
             .flatten()
             .collect()
     }
@@ -431,6 +431,16 @@ fn write_scroll_status(o: &mut RawTerminal<Stdout>, current: usize, len: usize) 
            termion::color::Bg(termion::color::Red),
            termion::color::Fg(termion::color::LightWhite),
            s,
+           termion::color::Bg(termion::color::Reset),
+           termion::color::Fg(termion::color::Reset)
+    ).expect("Error.");
+}
+
+fn write_scramble_status(o: &mut RawTerminal<Stdout>) {
+    write!(o, "{}{}{}scrambled{}{}",
+           termion::cursor::Goto(2, 1),
+           termion::color::Bg(termion::color::Red),
+           termion::color::Fg(termion::color::LightWhite),
            termion::color::Bg(termion::color::Reset),
            termion::color::Fg(termion::color::Reset)
     ).expect("Error.");

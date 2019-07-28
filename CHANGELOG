@@ -1,3 +1,8 @@
+0.0.3
+
+* progress bar for file uploads
+* scramble messages in the view
+
 0.0.2
 
 * speed up file uploads by using larger packets (increases max packet size from 128B to 8KB)

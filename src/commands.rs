@@ -1,47 +1,46 @@
-use crate::ConsoleSender;
 use crate::ConsoleMessage;
 use crate::Item;
 use crate::Layers;
 use crate::IpAddresses;
-use crate::console;
 use crate::ItemType;
 use crate::Message;
 use crate::Source;
 use crate::uptime;
 use crate::send_message;
 use crate::outputs::help_message;
+use crate::Console;
 
 use crate::tools::{read_file, read_bin_file, decode_uptime, without_dirs};
 
-fn parse_command_set(txt: String, o: ConsoleSender) -> bool {
+fn parse_command_set(txt: String, o: Console) -> bool {
     let txt_parts = txt.split(' ').collect::<Vec<_>>();
     if !(txt_parts.len() != 3 && txt_parts[1] != "scramble") {
         let n = txt_parts[2].parse::<u32>();
         if n.is_ok() {
             let val = n.unwrap();
-            o.send(ConsoleMessage::SetScrambleTimeout(val)).unwrap();
-            o.send(ConsoleMessage::TextMessage(Item::new_system(&format!("Value set to {} seconds.", val)))).unwrap();
+            o.send(ConsoleMessage::SetScrambleTimeout(val));
+            o.send(ConsoleMessage::TextMessage(Item::new_system(&format!("Value set to {} seconds.", val))));
             return true;
         }
     }
     false
 }
 
-pub fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
+pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
         let (_, b) = txt.as_str().split_at(5);
         match read_file(b) {
             Ok(data) => {
-                console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info, Source::System);
+                o.msg(String::from("Transmitting data ..."), ItemType::Info, Source::System);
                 let s = data.as_str();
                 for line in s.split("\n") {
                     send_message(line.to_string().trim_end().to_string(), o.clone(), l, dstips);
                 }
             },
             _ => {
-                console::msg(o.clone(), String::from("Could not read file."), ItemType::Error, Source::System);
+                o.msg(String::from("Could not read file."), ItemType::Error, Source::System);
             }
         }
         return;
@@ -49,7 +48,7 @@ pub fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddre
 
     if txt.starts_with("/set ") {
         if !parse_command_set(txt, o.clone()) {
-            o.send(ConsoleMessage::TextMessage(Item::new_system("Command not understood."))).unwrap();
+            o.send(ConsoleMessage::TextMessage(Item::new_system("Command not understood.")));
         }
         return;
     }
@@ -61,7 +60,7 @@ pub fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddre
                 send_file(data, b.to_string(), o, l, dstips);
             },
             Err(s) => {
-                console::msg(o, String::from(s), ItemType::Error, Source::System);
+                o.msg(String::from(s), ItemType::Error, Source::System);
             }
         }
         return;
@@ -72,10 +71,10 @@ pub fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddre
             help_message(o.clone());
         },
         "/uptime" | "/up" => {
-            console::msg(o, format!("up {}", decode_uptime(uptime())), ItemType::Info, Source::System);
+            o.msg(format!("up {}", decode_uptime(uptime())), ItemType::Info, Source::System);
         },
         _ => {
-            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info, Source::System);
+            o.msg(String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info, Source::System);
         }
     };
 }
@@ -94,7 +93,7 @@ fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message
 /// * `data` - Content of the file (binary data).
 /// * `fname` - Name of the file.
 /// * `o` - Sender object to which messages are sent to.
-fn send_file(data: Vec<u8>, fname: String, console: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
+fn send_file(data: Vec<u8>, fname: String, console: Console, l: &Layers, dstips: &IpAddresses) {
 
     let n = data.len();
 
@@ -118,7 +117,7 @@ fn send_file(data: Vec<u8>, fname: String, console: ConsoleSender, l: &Layers, d
     }
 
     // Show the message.
-    console::msg_item(console.clone(),item);
+    console.msg_item(item);
 
     // Now, start the file transfer in the background for each given IP.
     for (msg, id) in v {

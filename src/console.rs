@@ -51,6 +51,22 @@ impl Console {
     pub fn new_msg(&self, m: Message) {
         new_msg(self.console.clone(), m);
     }
+
+    pub fn raw(&self, s: String, typ: ItemType, from: Source) {
+        raw(self.console.clone(), s, typ, from);
+    }
+
+    pub fn send(&self, msg: ConsoleMessage) {
+        self.console.send(msg).unwrap();
+    }
+
+    pub fn msg_item(&self, i: Item) {
+        msg_item(self.console.clone(), i);
+    }
+
+    pub fn msg(&self, s: String, typ: ItemType, from: Source) {
+        msg(self.console.clone(), s, typ, from);
+    }
 }
 
 pub fn raw_item(o: Sender<ConsoleMessage>, i: Item) {

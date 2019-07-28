@@ -17,6 +17,7 @@ mod packet;
 mod rsa;
 mod error;
 mod commands;
+mod upload;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -37,7 +38,6 @@ use crate::console::Console;
 
 type ArcModel = Arc<Mutex<Model>>;
 type ArcView = Arc<Mutex<View>>;
-pub type ConsoleSender = Sender<ConsoleMessage>;
 
 /// Listens for incoming messages from the network.
 fn recv_loop(o: Console, rx: Receiver<IncomingMessage>) {
@@ -56,7 +56,7 @@ fn recv_loop(o: Console, rx: Receiver<IncomingMessage>) {
                         o.error(s);
                     }
                     IncomingMessage::FileUpload(msg) => {
-                        process_upload(o.clone(), msg)
+                        upload::save_upload(o.clone(), msg)
                     }
                     IncomingMessage::AckProgress(id, done, total) => {
                         o.ack_msg_progress(id, done, total);
@@ -69,29 +69,6 @@ fn recv_loop(o: Console, rx: Receiver<IncomingMessage>) {
         }}
     });
 }
-
-fn process_upload(o: Console, msg: Message) {
-
-    if msg.get_filename().is_none() {
-        o.error(format!("Could not get filename of received file upload."));
-        return;
-    } else if msg.get_filedata().is_none() {
-        o.error(format!("Could not get data of received file upload."));
-        return;
-    }
-
-    let fname = msg.get_filename().unwrap();
-    let data = msg.get_filedata().unwrap();
-    let dst = format!("/tmp/stealthy_{}_{}", tools::random_str(10), &fname);
-    o.new_file(msg, fname);
-
-    if write_data(&dst, data) {
-        o.status(format!("File written to '{}'.", dst));
-    } else {
-        o.error(format!("Could not write data of received file upload."));
-    }
-}
-
 
 #[derive(Clone, Debug)]
 pub struct GlobalState {
@@ -121,7 +98,7 @@ fn create_data(dstip: String, txt: &String) -> (Message, u64) {
     (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
 }
 
-fn send_message(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
+fn send_message(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
 
     let mut item = Item::new(format!("{}", txt), ItemType::MyMessage, model::Source::You);
 
@@ -133,7 +110,7 @@ fn send_message(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses)
     for (_, id) in &v {
         item = item.add_id(*id);
     }
-    console::msg_item(o.clone(),item);
+    o.msg_item(item);
 
     for (msg, id) in v {
         l.send(msg, id, false);
@@ -170,7 +147,7 @@ fn status_message_loop(o: Console) -> Sender<String> {
     tx
 }
 
-fn keyboad_loop(o: ConsoleSender, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
+fn keyboad_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
     let mut input = InputKeyboard::new();
 
     loop {
@@ -196,7 +173,7 @@ fn keyboad_loop(o: ConsoleSender, l: Layers, dstips: IpAddresses, model: ArcMode
             },
             UserInput::Escape | UserInput::CtrlD => {
                 view.lock().unwrap().close();
-                o.send(ConsoleMessage::Exit).expect("Send failed.");
+                o.send(ConsoleMessage::Exit);
                 // Wait some seconds to give the thread in create_console_sender a chance to
                 // release its view so that the terminal is recovered correctly.
                 thread::sleep(Duration::from_millis(100));
@@ -243,7 +220,7 @@ fn keyboad_loop(o: ConsoleSender, l: Layers, dstips: IpAddresses, model: ArcMode
     }
 }
 
-fn create_console_sender(model: ArcModel, view: ArcView) -> ConsoleSender {
+fn create_console_sender(model: ArcModel, view: ArcView) -> Console {
 
     // The sender "tx" is used at other locations to send messages to the output.
     let (tx, rx) = channel::<ConsoleMessage>();
@@ -288,14 +265,14 @@ fn create_console_sender(model: ArcModel, view: ArcView) -> ConsoleSender {
             }
         }}
     });
-    tx
+    Console::new(tx)
 }
 
-fn scramble_trigger(o: ConsoleSender) {
+fn scramble_trigger(o: Console) {
     thread::spawn(move || {
        loop {
            thread::sleep(Duration::from_secs(1));
-           o.send(ConsoleMessage::ScrambleTick).unwrap();
+           o.send(ConsoleMessage::ScrambleTick);
        }
     });
 }
@@ -313,25 +290,24 @@ fn main() {
 
     let view = Arc::new(Mutex::new(View::new(model.clone())));
 
-    let tx = create_console_sender(model.clone(), view.clone());
+    let c = create_console_sender(model.clone(), view.clone());
 
     // TODO replace status_message_loop by tx?
     // TODO have only one loop? for keyboard events, status message events and other events
 
-    let c = Console::new(tx.clone());
-
     let layer = get_layer(&args, status_message_loop(c.clone()), &dstips);
 
-    outputs::welcome(&args, tx.clone(), &layer, &dstips);
+    // Show welchome message.
+    outputs::welcome(&args, c.clone(), &layer, &dstips);
 
-    scramble_trigger(tx.clone());
+    scramble_trigger(c.clone());
 
-    // this is the loop which handles messages received via rx
-    recv_loop(c, layer.rx);
+    // This is the loop which handles messages received from the network.
+    recv_loop(c.clone(), layer.rx);
 
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.
-    keyboad_loop(tx.clone(), layer.layers, dstips, model, view);
+    keyboad_loop(c.clone(), layer.layers, dstips, model, view);
 
     // IMPORTANT! If the are threads which are using a clone of the view, the view isn't destroyed
     // properly and the terminal state is not restored.

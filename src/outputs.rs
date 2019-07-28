@@ -3,20 +3,19 @@ use crypto::digest::Digest;
 
 use std::iter::repeat;
 
-use crate::ConsoleSender;
 use crate::ItemType;
 use crate::Source;
-use crate::console;
 use crate::Layer;
 use crate::Arguments;
 use crate::IpAddresses;
 use crate::rsatools;
 use crate::tools::insert_delimiter;
 use crate::tools::read_file;
+use crate::Console;
 
-pub fn write_lines(o: ConsoleSender, lines: &[&str], typ: ItemType, from: Source) {
+pub fn write_lines(o: Console, lines: &[&str], typ: ItemType, from: Source) {
     for v in lines {
-        console::raw(o.clone(), String::from(*v), typ.clone(), from.clone())
+        o.raw(String::from(*v), typ.clone(), from.clone())
     }
 }
 
@@ -32,7 +31,7 @@ pub fn get_logo() -> Vec<String> {
     s
 }
 
-pub fn help_message(o: ConsoleSender) {
+pub fn help_message(o: Console) {
 
     write_lines(o, &vec![
         "Commands always start with a slash:",
@@ -57,9 +56,9 @@ pub fn help_message(o: ConsoleSender) {
     ], ItemType::Info, Source::System);
 }
 
-pub fn welcome(args: &Arguments, o: ConsoleSender, layer: &Layer, dstips: &IpAddresses) {
+pub fn welcome(args: &Arguments, o: Console, layer: &Layer, dstips: &IpAddresses) {
     for l in get_logo() {
-        console::raw(o.clone(), l, ItemType::Introduction, Source::System);
+        o.raw(l, ItemType::Introduction, Source::System);
     }
 
     let ips = dstips.as_strings().join(", ");
@@ -92,16 +91,16 @@ pub fn welcome(args: &Arguments, o: ConsoleSender, layer: &Layer, dstips: &IpAdd
 
         h.input(&layer.layers.encryption_key());
         let s = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of encryption key : {}", s), ItemType::Introduction, Source::System);
+        o.raw(format!("Hash of encryption key : {}", s), ItemType::Introduction, Source::System);
 
         h.reset();
         h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
         let q = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of your public key: {}", q), ItemType::Introduction, Source::System);
+        o.raw(format!("Hash of your public key: {}", q), ItemType::Introduction, Source::System);
     }
-    console::raw(o.clone(), format!(" "), ItemType::Introduction, Source::System);
-    console::raw(o.clone(), format!("Happy chatting..."), ItemType::Introduction, Source::System);
-    console::raw(o.clone(), format!(" "), ItemType::Introduction, Source::System);
+    o.raw(format!(" "), ItemType::Introduction, Source::System);
+    o.raw(format!("Happy chatting..."), ItemType::Introduction, Source::System);
+    o.raw(format!(" "), ItemType::Introduction, Source::System);
 }
 
 fn chars(n: usize, c: char) -> String {

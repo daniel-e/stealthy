@@ -4,7 +4,8 @@ use std::sync::mpsc::Sender;
 use std::time::Duration;
 use std::convert::From;
 
-use crate::{IncomingMessage, Message, Errors, MessageType};
+use crate::types::{IncomingMessage, Message, MessageType};
+use crate::types::Errors;
 use crate::packet::{Packet, IdType};
 use crate::iptools::IpAddresses;
 use crate::tools;
@@ -56,13 +57,14 @@ extern "C" fn callback(target: *mut Network, buf: *const u8, len: u32, typ: u32,
 	}
 }
 
-#[link(name = "pcap")]
+#[link(name = "icmp")]
 extern {
 	fn send_icmp(ip: *const u8, buf: *const u8, siz: u16) -> libc::c_int;
 }
 
 // TODO warning about improper ctypes is disabled; we should enable it again
 // and try to eliminate all warnings
+#[link(name = "pcap")]
 #[allow(improper_ctypes)]
 extern {
 	fn recv_callback(

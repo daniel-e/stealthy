@@ -1,4 +1,4 @@
-mod logo;
+mod outputs;
 mod tools;
 mod rsatools;
 mod arguments;
@@ -16,66 +16,27 @@ mod blowfish;
 mod packet;
 mod rsa;
 mod error;
+mod commands;
 
 use std::thread;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-
-use crypto::sha1::Sha1;
-use crypto::digest::Digest;
+use std::time::Duration;
 
 use crate::message::{Message, IncomingMessage};
 use crate::layer::{Layers, Layer};
-use crate::tools::{read_file, insert_delimiter, read_bin_file, write_data, decode_uptime, without_dirs};
+use crate::tools::write_data;
 use crate::iptools::IpAddresses;
-
 use crate::arguments::{parse_arguments, Arguments};
 use crate::console::ConsoleMessage;
-
 use crate::view::View;
 use crate::keyboad::{InputKeyboard, UserInput};
 use crate::model::{ItemType, Model, Item};
-use std::iter::repeat;
 use crate::model::Source;
-use std::time::Duration;
 
 type ArcModel = Arc<Mutex<Model>>;
 type ArcView = Arc<Mutex<View>>;
-type ConsoleSender = Sender<ConsoleMessage>;
-
-fn help_message(o: ConsoleSender) {
-
-    write_lines(o, &vec![
-        "Commands always start with a slash:",
-        " ",
-        "/help                 - this help message",
-        "/uptime, /up          - uptime",
-        "/cat <filename>       - send content of an UTF-8 encoded text file",
-        "/upload <filename>    - send binary file",
-        "/set scramble <value> - set timeout in seconds when to scramble content (default: 20)",
-        " ",
-        "Keys:",
-        " ",
-        "arrow up     - scroll to older messages",
-        "arrow dow    - scroll to latest messages",
-        "page up      - scroll one page up",
-        "page down    - scroll one page down",
-        "end          - scroll to last message in buffer",
-        "ctrl+r       - switch to plain messages and back to normal view",
-        "ctrl+s       - toggle scrambling",
-        "esc | ctrl+d - quit",
-        " "
-    ], ItemType::Info, Source::System);
-}
-
-fn write_lines(o: ConsoleSender, lines: &[&str], typ: ItemType, from: Source) {
-
-    for v in lines {
-        console::raw(o.clone(), String::from(*v), typ.clone(), from.clone())
-    }
-}
-
-
+pub type ConsoleSender = Sender<ConsoleMessage>;
 
 fn recv_loop(o: ConsoleSender, rx: Receiver<IncomingMessage>) {
 
@@ -144,118 +105,6 @@ fn init_global_state() {
     };
 }
 
-fn parse_command_set(txt: String, o: ConsoleSender) -> bool {
-    let txt_parts = txt.split(' ').collect::<Vec<_>>();
-    if !(txt_parts.len() != 3 && txt_parts[1] != "scramble") {
-        let n = txt_parts[2].parse::<u32>();
-        if n.is_ok() {
-            let val = n.unwrap();
-            o.send(ConsoleMessage::SetScrambleTimeout(val)).unwrap();
-            o.send(ConsoleMessage::TextMessage(Item::new_system(&format!("Value set to {} seconds.", val)))).unwrap();
-            return true;
-        }
-    }
-    false
-}
-
-fn parse_command(txt: String, o: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
-    // TODO: find more elegant solution for this
-    if txt.starts_with("/cat ") {
-        // TODO split_at works on bytes not characters
-        let (_, b) = txt.as_str().split_at(5);
-        match read_file(b) {
-            Ok(data) => {
-                console::msg(o.clone(), String::from("Transmitting data ..."), ItemType::Info, Source::System);
-                let s = data.as_str();
-                for line in s.split("\n") {
-                    send_message(line.to_string().trim_end().to_string(), o.clone(), l, dstips);
-                }
-            },
-            _ => {
-                console::msg(o.clone(), String::from("Could not read file."), ItemType::Error, Source::System);
-            }
-        }
-        return;
-    }
-
-    if txt.starts_with("/set ") {
-        if !parse_command_set(txt, o.clone()) {
-            o.send(ConsoleMessage::TextMessage(Item::new_system("Command not understood."))).unwrap();
-        }
-        return;
-    }
-
-    if txt.starts_with("/upload ") {
-        let (_, b) = txt.as_str().split_at(8);
-        match read_bin_file(b) {
-            Ok(data) => {
-                send_file(data, b.to_string(), o, l, dstips);
-            },
-            Err(s) => {
-                console::msg(o, String::from(s), ItemType::Error, Source::System);
-            }
-        }
-        return;
-    }
-
-    match txt.as_str() {
-        "/help" => {
-            help_message(o.clone());
-        },
-        "/uptime" | "/up" => {
-            console::msg(o, format!("up {}", decode_uptime(uptime())), ItemType::Info, Source::System);
-        },
-        _ => {
-            console::msg(o, String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info, Source::System);
-        }
-    };
-}
-
-fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message, u64) {
-    (
-        Message::file_upload(dstip, without_dirs(fname), data),
-        rand::random::<u64>()
-    )
-}
-
-/// Sends a file in background.
-///
-/// # Arguments
-///
-/// * `data` - Content of the file (binary data).
-/// * `fname` - Name of the file.
-/// * `o` - Sender object to which messages are sent to.
-fn send_file(data: Vec<u8>, fname: String, console: ConsoleSender, l: &Layers, dstips: &IpAddresses) {
-
-    let n = data.len();
-
-    // This is sent to the console to show the user information about the file upload.
-    let mut item = Item::new(
-        format!("sending file '{}' with {} bytes...", fname, n),
-        ItemType::UploadMessage,
-        model::Source::You
-    ).add_size(n);
-
-    // Create a tuple (Message, u64) for each destination IP. For each IP a unique ID is created.
-    let v = dstips.as_strings()
-        .iter()
-        .map(|dstip| create_upload_data(dstip.clone(), &fname, &data))
-        .collect::<Vec<_>>();
-
-    // Add the file upload id to the item which is shown to the user. This ID allows us to
-    // update the status of this item, e.g. once the file upload is finished.
-    for (_, id) in &v {
-        item = item.add_id(*id);
-    }
-
-    // Show the message.
-    console::msg_item(console.clone(),item);
-
-    // Now, start the file transfer in the background for each given IP.
-    for (msg, id) in v {
-        l.send(msg, id, true);
-    }
-}
 
 fn create_data(dstip: String, txt: &String) -> (Message, u64) {
     (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
@@ -291,72 +140,6 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>, dstips: &IpAddresses) 
         };
     ret.expect("Initialization failed.")
 }
-
-fn chars(n: usize, c: char) -> String {
-    repeat(c).take(n).collect()
-}
-
-fn normalize(v: &[&String], c: char) -> (Vec<String>, usize) {
-    let maxlen = v.iter().map(|x| x.len()).max().unwrap();
-    let r = v.iter()
-        .map(|&s| s.clone() + &chars(maxlen - s.len() + 1, c))
-        .collect::<Vec<String>>();
-    let x = r.iter().map(|s| s.len()).max().unwrap();
-    (r, x)
-}
-
-fn welcome(args: &Arguments, o: ConsoleSender, layer: &Layer, dstips: &IpAddresses) {
-    for l in logo::get_logo() {
-        console::raw(o.clone(), l, ItemType::Introduction, Source::System);
-    }
-
-    let ips = dstips.as_strings().join(", ");
-
-    let (values, n) = normalize(&[&args.device, &ips, &ips], ' ');
-
-    let v = vec![
-        format!("The most secure ICMP messenger."),
-        format!(" "),
-        format!("┌─────────────────────┬─{}┐", chars(n, '─')),
-        format!("│ Listening on device │ {}│", values[0]),
-        format!("│ Talking to IPs      │ {}│", values[1]),
-        format!("│ Accepting IPs       │ {}│", values[2]),
-        format!("└─────────────────────┴─{}┘", chars(n, '─')),
-        format!(" "),
-        format!("Type /help to get a list of available commands."),
-        format!("Check https://github.com/daniel-e/stealthy for more documentation."),
-        format!("Esc or Ctrl+D to quit.")
-    ];
-
-    write_lines(
-        o.clone(),
-        v.iter().map(|x| x.as_str()).collect::<Vec<_>>().as_slice(),
-        ItemType::Introduction,
-            Source::System
-    );
-
-    if args.hybrid_mode {
-        let mut h = Sha1::new();
-
-        h.input(&layer.layers.encryption_key());
-        let s = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of encryption key : {}", s), ItemType::Introduction, Source::System);
-
-        h.reset();
-        h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
-        let q = insert_delimiter(&h.result_str());
-        console::raw(o.clone(), format!("Hash of your public key: {}", q), ItemType::Introduction, Source::System);
-    }
-    console::raw(o.clone(), format!(" "), ItemType::Introduction, Source::System);
-    console::raw(o.clone(), format!("Happy chatting..."), ItemType::Introduction, Source::System);
-    console::raw(o.clone(), format!(" "), ItemType::Introduction, Source::System);
-}
-
-
-
-
-
-
 
 fn status_message_loop(o: ConsoleSender) -> Sender<String> {
 
@@ -431,7 +214,7 @@ fn keyboad_loop(o: ConsoleSender, l: Layers, dstips: IpAddresses, model: ArcMode
                 view.lock().unwrap().refresh();
                 if s.len() > 0 {
                     if s.starts_with("/") {
-                        parse_command(s, o.clone(), &l, &dstips);
+                        commands::parse_command(s, o.clone(), &l, &dstips);
                     } else {
                         send_message(s, o.clone(), &l, &dstips);
                     }
@@ -518,7 +301,7 @@ fn main() {
 
     let layer = get_layer(&args, status_message_loop(tx.clone()), &dstips);
 
-    welcome(&args, tx.clone(), &layer, &dstips);
+    outputs::welcome(&args, tx.clone(), &layer, &dstips);
 
     scramble_trigger(tx.clone());
 

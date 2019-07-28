@@ -1,16 +1,9 @@
-use crypto::sha1::Sha1;
-use crypto::digest::Digest;
-
 use std::iter::repeat;
 
 use crate::ItemType;
 use crate::Source;
-use crate::Layer;
 use crate::Arguments;
 use crate::IpAddresses;
-use crate::rsatools;
-use crate::tools::insert_delimiter;
-use crate::tools::read_file;
 use crate::Console;
 
 pub fn write_lines(o: Console, lines: &[&str], typ: ItemType, from: Source) {
@@ -56,7 +49,13 @@ pub fn help_message(o: Console) {
     ], ItemType::Info, Source::System);
 }
 
-pub fn welcome(args: &Arguments, o: Console, layer: &Layer, dstips: &IpAddresses) {
+pub struct WelcomeData {
+    pub hybrid_mode: bool,
+    pub hashed_hybrid_encryption_key: String,
+    pub hashed_hybrid_public_key: String,
+}
+
+pub fn welcome(args: &Arguments, o: Console, data: WelcomeData, dstips: &IpAddresses) {
     for l in get_logo() {
         o.raw(l, ItemType::Introduction, Source::System);
     }
@@ -86,17 +85,9 @@ pub fn welcome(args: &Arguments, o: Console, layer: &Layer, dstips: &IpAddresses
         Source::System
     );
 
-    if args.hybrid_mode {
-        let mut h = Sha1::new();
-
-        h.input(&layer.layers.encryption_key());
-        let s = insert_delimiter(&h.result_str());
-        o.raw(format!("Hash of encryption key : {}", s), ItemType::Introduction, Source::System);
-
-        h.reset();
-        h.input(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
-        let q = insert_delimiter(&h.result_str());
-        o.raw(format!("Hash of your public key: {}", q), ItemType::Introduction, Source::System);
+    if data.hybrid_mode {
+        o.raw(format!("Hash of encryption key : {}", data.hashed_hybrid_encryption_key), ItemType::Introduction, Source::System);
+        o.raw(format!("Hash of your public key: {}", data.hashed_hybrid_public_key), ItemType::Introduction, Source::System);
     }
     o.raw(format!(" "), ItemType::Introduction, Source::System);
     o.raw(format!("Happy chatting..."), ItemType::Introduction, Source::System);

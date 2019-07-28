@@ -1,11 +1,8 @@
-use std::fs::File;
-use std::io::Read;
-
-//use super::{blowfish, rsa, rsatools};
 use crate::blowfish;
 use crate::rsa;
 use crate::rsatools;
 use crate::delivery::{push_value, pop_value, push_slice};
+use crate::read_file;
 
 pub type ResultVec = Result<Vec<u8>, &'static str>;
 
@@ -141,22 +138,6 @@ pub fn from_hex(s: String) -> ResultVec {
     }
     Ok(v)
 }
-
-pub fn read_file(fname: &str) -> Result<String, &'static str> {
-
-    let r = File::open(fname);
-    match r {
-        Ok(mut file) => {
-            let mut s = String::new();
-            match file.read_to_string(&mut s) {
-                Ok(_) => Ok(s),
-                _     => Err("Could not read file")
-            }
-        }
-        _ => Err("Could not open file for reading.")
-    }
-}
-
 
 // ------------------------------------------------------------------------
 // TESTS

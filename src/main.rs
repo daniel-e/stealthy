@@ -35,6 +35,8 @@ use crate::keyboad::{InputKeyboard, UserInput};
 use crate::model::{ItemType, Model, Item};
 use crate::model::Source;
 use crate::console::Console;
+use crate::tools::read_file;
+use crate::outputs::WelcomeData;
 
 type ArcModel = Arc<Mutex<Model>>;
 type ArcView = Arc<Mutex<View>>;
@@ -117,7 +119,7 @@ fn send_message(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
     }
 }
 
-fn get_layer(args: &Arguments, console: Console, dstips: &IpAddresses) -> Layer {
+fn init_network_layer(args: &Arguments, console: Console, dstips: &IpAddresses) -> Layer {
     let ret =
         if args.hybrid_mode {
             // use asymmetric encryption
@@ -129,7 +131,7 @@ fn get_layer(args: &Arguments, console: Console, dstips: &IpAddresses) -> Layer 
     ret.expect("Initialization failed.")
 }
 
-fn keyboad_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
+fn keyboard_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
     let mut input = InputKeyboard::new();
 
     loop {
@@ -202,7 +204,7 @@ fn keyboad_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, vie
     }
 }
 
-fn create_console_sender(model: ArcModel, view: ArcView) -> Console {
+fn create_console(model: ArcModel, view: ArcView) -> Console {
 
     // The sender "tx" is used at other locations to send messages to the output.
     let (tx, rx) = channel::<ConsoleMessage>();
@@ -259,6 +261,22 @@ fn scramble_trigger(o: Console) {
     });
 }
 
+fn welcome_data(args: &Arguments, network_layer: &Layer) -> WelcomeData {
+    let mut hashed_encryption_key = String::new();
+    let mut hashed_public_key = String::new();
+
+    if args.hybrid_mode {
+        hashed_encryption_key = tools::sha1(&network_layer.layers.encryption_key());
+        hashed_public_key = tools::sha1(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
+    }
+
+    WelcomeData {
+        hybrid_mode: args.hybrid_mode,
+        hashed_hybrid_encryption_key: hashed_encryption_key,
+        hashed_hybrid_public_key: hashed_public_key
+    }
+}
+
 fn main() {
     init_global_state();
 
@@ -272,24 +290,21 @@ fn main() {
 
     let view = Arc::new(Mutex::new(View::new(model.clone())));
 
-    let c = create_console_sender(model.clone(), view.clone());
+    let c = create_console(model.clone(), view.clone());
 
-    // TODO replace status_message_loop by tx?
-    // TODO have only one loop? for keyboard events, status message events and other events
-
-    let layer = get_layer(&args, c.clone(), &dstips);
+    let network_layer = init_network_layer(&args, c.clone(), &dstips);
 
     // Show welchome message.
-    outputs::welcome(&args, c.clone(), &layer, &dstips);
+    outputs::welcome(&args, c.clone(), welcome_data(&args, &network_layer), &dstips);
 
     scramble_trigger(c.clone());
 
     // This is the loop which handles messages received from the network.
-    recv_loop(c.clone(), layer.rx);
+    recv_loop(c.clone(), network_layer.rx);
 
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.
-    keyboad_loop(c.clone(), layer.layers, dstips, model, view);
+    keyboard_loop(c.clone(), network_layer.layers, dstips, model, view);
 
     // IMPORTANT! If the are threads which are using a clone of the view, the view isn't destroyed
     // properly and the terminal state is not restored.

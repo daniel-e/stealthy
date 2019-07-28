@@ -1,3 +1,6 @@
+use crypto::sha1::Sha1;
+use crypto::digest::Digest;
+
 use std::io::Read;
 use std::io::Write;
 use rand::{thread_rng, Rng};
@@ -61,6 +64,7 @@ pub fn read_bin_file(fname: &str) -> Result<Vec<u8>, String> {
     }
 }
 
+
 pub fn read_file(fname: &str) -> Result<String, &'static str> {
 
     let r = File::open(fname);
@@ -102,4 +106,10 @@ pub fn random_str(n: usize) -> String {
     String::from_utf8(
         (0..n).map(|_| { chars[rng.gen::<usize>() % chars.len()] }).collect()
     ).unwrap()
+}
+
+pub fn sha1(s: &[u8]) -> String {
+    let mut h = Sha1::new();
+    h.input(s);
+    insert_delimiter(&h.result_str())
 }

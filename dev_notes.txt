@@ -8,3 +8,4 @@ cargo build --features "debugout"
 * update version in logo.rs
 * update CHANGELOG
 * git tag -a v0.0.X -m "version v0.0.X"
+* git push --tags

@@ -2,10 +2,10 @@ use std::sync::mpsc::Sender;
 use crate::message::Message;
 use crate::model::ItemType;
 use crate::model::Item;
+use crate::model::Source;
 
 #[cfg(not(feature = "no_notify"))]
 use std::process::Command;
-use crate::model::Source;
 
 pub enum ConsoleMessage {
     TextMessage(Item),
@@ -14,6 +14,43 @@ pub enum ConsoleMessage {
     SetScrambleTimeout(u32),
     ScrambleTick,
     Exit,
+}
+
+#[derive(Clone)]
+pub struct Console {
+    console: Sender<ConsoleMessage>,
+}
+
+impl Console {
+    pub fn new(sender: Sender<ConsoleMessage>) -> Console {
+        Console {
+            console: sender
+        }
+    }
+
+    pub fn new_file(&self, m: Message, filename: String) {
+        new_file(self.console.clone(), m, filename);
+    }
+
+    pub fn ack_msg(&self, id: u64) {
+        ack_msg(self.console.clone(), id);
+    }
+
+    pub fn ack_msg_progress(&self, id: u64, done: usize, total: usize) {
+        ack_msg_progress(self.console.clone(), id, done, total);
+    }
+
+    pub fn error(&self, s: String) {
+        error(self.console.clone(), s);
+    }
+
+    pub fn status(&self, s: String) {
+        status(self.console.clone(), s);
+    }
+
+    pub fn new_msg(&self, m: Message) {
+        new_msg(self.console.clone(), m);
+    }
 }
 
 pub fn raw_item(o: Sender<ConsoleMessage>, i: Item) {

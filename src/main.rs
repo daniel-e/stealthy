@@ -33,61 +33,62 @@ use crate::view::View;
 use crate::keyboad::{InputKeyboard, UserInput};
 use crate::model::{ItemType, Model, Item};
 use crate::model::Source;
+use crate::console::Console;
 
 type ArcModel = Arc<Mutex<Model>>;
 type ArcView = Arc<Mutex<View>>;
 pub type ConsoleSender = Sender<ConsoleMessage>;
 
 /// Listens for incoming messages from the network.
-fn recv_loop(o: ConsoleSender, rx: Receiver<IncomingMessage>) {
+fn recv_loop(o: Console, rx: Receiver<IncomingMessage>) {
 
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
                 match msg {
                     IncomingMessage::New(msg) => {
-                        console::new_msg(o.clone(), msg);
+                        o.new_msg(msg);
                     }
                     IncomingMessage::Ack(id) => {
-                        console::ack_msg(o.clone(), id);
+                        o.ack_msg(id);
                     }
                     IncomingMessage::Error(_, s) => {
-                        console::error(o.clone(), s);
+                        o.error(s);
                     }
                     IncomingMessage::FileUpload(msg) => {
                         process_upload(o.clone(), msg)
                     }
                     IncomingMessage::AckProgress(id, done, total) => {
-                        console::ack_msg_progress(o.clone(), id, done, total);
+                        o.ack_msg_progress(id, done, total);
                     }
                 }
             },
             Err(e) =>  {
-                console::error(o.clone(), format!("recv_loop: failed to receive message. {:?}", e))
+                o.error(format!("recv_loop: failed to receive message. {:?}", e))
             }
         }}
     });
 }
 
-fn process_upload(o: ConsoleSender, msg: Message) {
+fn process_upload(o: Console, msg: Message) {
 
     if msg.get_filename().is_none() {
-        console::error(o.clone(), format!("Could not get filename of received file upload."));
+        o.error(format!("Could not get filename of received file upload."));
         return;
     } else if msg.get_filedata().is_none() {
-        console::error(o.clone(), format!("Could not get data of received file upload."));
+        o.error(format!("Could not get data of received file upload."));
         return;
     }
 
     let fname = msg.get_filename().unwrap();
     let data = msg.get_filedata().unwrap();
     let dst = format!("/tmp/stealthy_{}_{}", tools::random_str(10), &fname);
-    console::new_file(o.clone(), msg, fname);
+    o.new_file(msg, fname);
 
     if write_data(&dst, data) {
-        console::status(o.clone(), format!("File written to '{}'.", dst));
+        o.status(format!("File written to '{}'.", dst));
     } else {
-        console::error(o.clone(), format!("Could not write data of received file upload."));
+        o.error(format!("Could not write data of received file upload."));
     }
 }
 
@@ -151,13 +152,21 @@ fn get_layer(args: &Arguments, status_tx: Sender<String>, dstips: &IpAddresses) 
     ret.expect("Initialization failed.")
 }
 
-fn status_message_loop(o: ConsoleSender) -> Sender<String> {
+/// Returns a sender object to which status message can be sent to. These message will be
+/// forwarded to the console.
+fn status_message_loop(o: Console) -> Sender<String> {
 
     let (tx, rx) = channel::<String>();
-    thread::spawn(move || { loop { match rx.recv() {
-        Ok(msg) => console::status(o.clone(), msg),
-        Err(er) => console::error(o.clone(), format!("status_message_loop: failed. {:?}", er))
-    }}});
+    thread::spawn(move || {
+        loop { match rx.recv() {
+            Ok(msg) => {
+                o.status(msg)
+            },
+            Err(er) => {
+                o.error(format!("status_message_loop: failed. {:?}", er))
+            }
+        }}
+    });
     tx
 }
 
@@ -309,14 +318,16 @@ fn main() {
     // TODO replace status_message_loop by tx?
     // TODO have only one loop? for keyboard events, status message events and other events
 
-    let layer = get_layer(&args, status_message_loop(tx.clone()), &dstips);
+    let c = Console::new(tx.clone());
+
+    let layer = get_layer(&args, status_message_loop(c.clone()), &dstips);
 
     outputs::welcome(&args, tx.clone(), &layer, &dstips);
 
     scramble_trigger(tx.clone());
 
     // this is the loop which handles messages received via rx
-    recv_loop(tx.clone(), layer.rx);
+    recv_loop(c, layer.rx);
 
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.

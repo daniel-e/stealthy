@@ -283,7 +283,7 @@ fn main() {
     init_global_state();
 
     // Parse command line arguments.
-	let args = parse_arguments().expect("Cannot parse arguments");;
+	let args = parse_arguments().expect("Cannot parse arguments");
 
     let dstips = IpAddresses::from_comma_list(&args.dstip);
 

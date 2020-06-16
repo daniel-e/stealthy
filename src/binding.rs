@@ -15,7 +15,7 @@ use std::collections::HashMap;
 use std::iter::repeat;
 
 const RETRY_TIMEOUT: i64      = 15000;  // TODO
-const MAX_MESSAGE_SIZE: usize = (1024 * 1024 * 1024);
+const MAX_MESSAGE_SIZE: usize = 1024 * 1024 * 1024;
 
 
 pub fn string_from_cstr(cstr: *const u8) -> String {

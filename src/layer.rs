@@ -16,7 +16,7 @@ pub struct Layer {
 }
 
 pub struct Layers {
-    encryption_layer: Arc<Box<Encryption>>,
+    encryption_layer: Arc<Box<dyn Encryption>>,
     delivery_layer  : Arc<Box<Delivery>>,
     console: Console,
 }
@@ -66,7 +66,7 @@ impl Layers {
 
     // ------ private functions
 
-    fn init(e: Box<Encryption>, device: &String, console: Console, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
+    fn init(e: Box<dyn Encryption>, device: &String, console: Console, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
@@ -84,7 +84,7 @@ impl Layers {
         ))
     }
 
-    fn new(e: Box<Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>, console: Console) -> Layer {
+    fn new(e: Box<dyn Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>, console: Console) -> Layer {
 
         // tx is used to send received messages to the application via rx
         let (tx, rx) = channel::<IncomingMessage>();
@@ -132,7 +132,7 @@ impl Layers {
 
     /// Decrypts incoming messages of type "new" or returns the message without
     /// modification if it is not of type "new".
-    fn handle_message(m: IncomingMessage, enc: Arc<Box<Encryption>>, _console: Console) -> Option<IncomingMessage> {
+    fn handle_message(m: IncomingMessage, enc: Arc<Box<dyn Encryption>>, _console: Console) -> Option<IncomingMessage> {
 
         // TODO error handling
         #[cfg(feature="debugout")]

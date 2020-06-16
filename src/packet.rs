@@ -1,7 +1,7 @@
 //extern crate rand;
 //extern crate time;
 
-pub type IdType = (u64);
+pub type IdType = u64;
 
 pub enum PacketType {
     NewMessage = 16,

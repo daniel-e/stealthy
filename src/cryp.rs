@@ -127,9 +127,9 @@ pub fn from_hex(s: String) -> ResultVec {
             b = b << 4;
             let val = bytes[p];
             match val {
-                b'A'...b'F' => b += val - b'A' + 10,
-                b'a'...b'f' => b += val - b'a' + 10,
-                b'0'...b'9' => b += val - b'0',
+                b'A'..=b'F' => b += val - b'A' + 10,
+                b'a'..=b'f' => b += val - b'a' + 10,
+                b'0'..=b'9' => b += val - b'0',
                 _ => { return Err("Invalid character in hexadecimal string."); }
             }
             p += 1;

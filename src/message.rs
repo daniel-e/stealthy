@@ -106,7 +106,7 @@ impl Message {
 
 fn replace_char(c: char) -> char {
     match c {
-        'a'...'z' | 'A'...'Z' | '0'...'9' | '-' | '.' => c,
+        'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '.' => c,
         _ => '_'
     }
 }

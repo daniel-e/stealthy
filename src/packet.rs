@@ -7,6 +7,7 @@ pub enum PacketType {
     NewMessage = 16,
     AckMessage = 17,
 	FileUpload = 18,
+	HelloMessage = 19,
 }
 
 pub struct Packet {
@@ -31,6 +32,20 @@ impl Packet {
 
 	pub fn is_file_upload(&self) -> bool {
 		self.typ == (PacketType::FileUpload as u8)
+	}
+
+	pub fn is_hello(&self) -> bool {
+		self.typ == (PacketType::HelloMessage as u8)
+	}
+
+	pub fn hello(data: Vec<u8>, ip: String, r: u64) -> Packet {
+		Packet {
+			data: data,
+			id: r,
+			created: time::PreciseTime::now(),
+			ip: ip,
+			typ: PacketType::HelloMessage as u8,
+		}
 	}
 
 	pub fn file_upload(data: Vec<u8>, ip: String, r: u64) -> Packet {
@@ -97,7 +112,8 @@ impl Packet {
     fn valid_type(typ: u8) -> bool {
 		typ == (PacketType::NewMessage as u8) ||
 			typ == (PacketType::AckMessage as u8) ||
-			typ == (PacketType::FileUpload as u8)
+			typ == (PacketType::FileUpload as u8) ||
+			typ == (PacketType::HelloMessage as u8)
     }
 
 	pub fn deserialize(buf: *const u8, len: u32, ip: String) -> Option<Packet> {
@@ -106,7 +122,7 @@ impl Packet {
 			return None;
 		}
 
-		let mut raw = Packet{ 
+		let mut raw = Packet {
 			id: 0, 
 			data: vec![], 
 			created: time::PreciseTime::now(),

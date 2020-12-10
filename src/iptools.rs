@@ -18,6 +18,13 @@ impl IpAddresses {
     pub fn as_strings(&self) -> Vec<String> {
         self.ips.iter().map(|x| x.to_string()).collect()
     }
+
+    pub fn set_ip(&mut self, ip: String) {
+        match ip.parse() {
+            Err(_) => {},
+            Ok(ip) => { self.ips = vec![ip]; }
+        }
+    }
 }
 
 

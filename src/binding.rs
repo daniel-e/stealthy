@@ -242,13 +242,15 @@ impl Network {
 			return;
 		}
 
+		// TODO: do we need this?
+		/*
 		if self.accept_ip.iter().find(|&x| *x == ip).is_none() {
 			// Ignore packet as it comes from an IP which is not accepted.
 			#[cfg(feature = "show_dropped")]
 			self.console.send(format!("Dropped packet from {} / {:?}", ip, self.accept_ip)).expect("Send failed.");
-
 			return;
 		}
+		*/
 
 		// TODO error handling
 		//self.status_tx.send(String::from("[Network::recv_packet()] receving packet")).unwrap();
@@ -262,12 +264,14 @@ impl Network {
 			self.console.send(format!("[Network::recv_packet()] new message; len = {}, {:?}", len, vv)).unwrap();
 		}
 
-		let r = Packet::deserialize(buf, len, ip);
 		// The payload in the packet in r is still encrypted.
+		let r = Packet::deserialize(buf, len, ip);
 		match r {
 			Some(p) => {
 				if p.is_file_upload() {
 					self.handle_file_upload(p);
+				} else if p.is_hello() {
+					self.handle_hello(p);
 				} else if p.is_new_message() {
 					#[cfg(feature="debugout")]
 					self.console.send(String::from("[Network::recv_packet()] new message")).unwrap();
@@ -310,6 +314,11 @@ impl Network {
 			Network::transmit(Packet::create_ack(p));
 			// TODO error
 		}
+	}
+
+	fn handle_hello(&self, p: Packet) {
+		let m = Message::hello(p.ip.clone(), p.data.clone());
+		self.console.status(format!("HELLO"));
 	}
 
 	// This method is called when a new message has been received.
@@ -369,14 +378,20 @@ impl Network {
 
 		let p = match msg.typ {
 			MessageType::FileUpload => Packet::file_upload(buf, ip, mini_id),
+			MessageType::HelloMessage => Packet::hello(buf, ip, mini_id),
 			_ => Packet::new(buf, ip, mini_id)
 		};
 
 		Network::wait_for_queue(shared.clone());
 
-		// Push message before sending it. Otherwise there could be a race condition that the ACK
-		// is received before message is sent.
-		Network::add_packet(shared.clone(), p.clone());
+		// 1) Push message before sending it. Otherwise there could be a race condition that the ACK
+		//    is received before message is sent.
+		// 2) We might never see a response for a HelloMessage. Therefore, we don't push it to the
+		//    buffer.
+		match msg.typ {
+			MessageType::HelloMessage => {},
+			_ => { Network::add_packet(shared.clone(), p.clone()); }
+		}
 
 		let id = p.id;
 		if Network::transmit(p) {
@@ -433,10 +448,10 @@ impl Network {
 		}
 	}
 
-	pub fn send_data_as_ping(buf: Vec<u8>, ip: String) -> Result<u64, ()> {
+	pub fn send_data_as_ping(payload: Vec<u8>, ip: String) -> Result<u64, ()> {
 
 		let id = rand::random::<u64>();
-		let p = Packet::new(buf, ip, id);
+		let p = Packet::new(payload, ip, id);
 		if Network::transmit(p) {
 			Ok(id)
 		} else {

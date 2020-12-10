@@ -40,6 +40,7 @@ use crate::outputs::WelcomeData;
 
 type ArcModel = Arc<Mutex<Model>>;
 type ArcView = Arc<Mutex<View>>;
+type Ips = Arc<Mutex<IpAddresses>>;
 
 /// Listens for incoming messages from the network.
 fn recv_loop(o: Console, rx: Receiver<IncomingMessage>) {
@@ -98,6 +99,13 @@ fn init_global_state() {
 
 fn create_data(dstip: String, txt: &String) -> (Message, u64) {
     (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
+}
+
+fn send_hello(l: &Layers, ip: String) {
+    let payload = format!("hello:{}", ip);
+    let msg = Message::hello(ip, payload.into_bytes());
+    let id = rand::random::<u64>();
+    l.send(msg, id, true);
 }
 
 fn send_message(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
@@ -279,6 +287,67 @@ fn welcome_data(args: &Arguments, network_layer: &Layer) -> WelcomeData {
     }
 }
 
+/*
+fn net_as_u32(bits: &str) -> Result<u32, String> {
+    let b = bits.parse::<u16>().unwrap(); // TODO -> map to error
+    match b {
+        16..=31 => {
+            let mut val: u32 = 0;
+            let mut bit: u32 = 0x80000000;
+            for _ in 0..b {
+                val |= bit;
+                bit >>= 1;
+            }
+            Ok(val)
+        },
+        _ => Err(format!("Invalid number of bits for network {}", bits))
+    }
+}
+
+fn ip_as_u32(ip: &str) -> Result<u32, String> {
+
+}
+
+fn expand_range(iprange: String) -> Result<Vec<String>, String> {
+    let ip_net: Vec<&str> = iprange.split("/").collect();
+    match ip_net.len() {
+        2 => {
+            let ip = ip_as_u32(ip_net[0])?;
+            let net = net_as_u32(ip_net[1])?;
+            let mut ips: Vec<String> = vec![];
+            XXX
+            Ok(vec![ip.to_string()])
+        },
+        _ => Err(format!("Invalid range: {}", iprange))
+    }
+}
+
+fn expand_ranges(ipranges: Vec<String>) -> Result<Vec<String>, String> {
+    match ipranges.len() {
+        0 => Ok(vec![]),
+        _ => Ok(
+            expand_range(ipranges[0].clone())?
+                .iter()
+                .chain(expand_ranges(ipranges.iter().skip(1).cloned().collect())?.iter())
+                .cloned()
+                .collect()
+            )
+    }
+}
+
+fn probe_range(o: Console, dstips: Vec<String>, ipranges: Vec<String>) -> Result<(), String> {
+    let ips: Vec<_> = dstips.iter().chain(expand_ranges(ipranges)?.iter()).cloned().collect();
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(1));
+            o.status(format!("probe {:?}", ips));
+        }
+    });
+    Ok(())
+}
+*/
+
+
 fn main() {
     init_global_state();
 
@@ -286,6 +355,7 @@ fn main() {
 	let args = parse_arguments().expect("Cannot parse arguments");
 
     let dstips = IpAddresses::from_comma_list(&args.dstip);
+    let ipranges = args.ranges.clone();
 
     // The model stores all information which is required to show the screen.
     let model = Arc::new(Mutex::new(Model::new()));
@@ -303,6 +373,8 @@ fn main() {
 
     // This is the loop which handles messages received from the network.
     recv_loop(c.clone(), network_layer.rx);
+
+    //probe_range(c.clone(), dstips.as_strings(), ipranges).unwrap();
 
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.

@@ -19,7 +19,8 @@ impl Clone for MessageType {
         match *self {
             MessageType::NewMessage => MessageType::NewMessage,
             //MessageType::AckMessage => MessageType::AckMessage,
-            MessageType::FileUpload => MessageType::FileUpload
+            MessageType::FileUpload => MessageType::FileUpload,
+            MessageType::HelloMessage => MessageType::HelloMessage,
         }
     }
 }
@@ -34,7 +35,8 @@ pub struct Message {
 pub enum MessageType {
     NewMessage,
     //AckMessage,
-    FileUpload
+    FileUpload,
+    HelloMessage,
 }
 
 impl Message {
@@ -43,6 +45,10 @@ impl Message {
         buffer.push(0);
         buffer.extend(data.iter());
         Message::create(ip, buffer, MessageType::FileUpload)
+    }
+
+    pub fn hello(ip: String, buf: Vec<u8>) -> Message {
+        Message::create(ip, buf, MessageType::HelloMessage)
     }
 
     pub fn new(ip: String, buf: Vec<u8>) -> Message {

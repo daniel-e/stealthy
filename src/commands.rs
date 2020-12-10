@@ -1,4 +1,4 @@
-use crate::ConsoleMessage;
+use crate::{ConsoleMessage, send_hello};
 use crate::Item;
 use crate::Layers;
 use crate::IpAddresses;
@@ -46,6 +46,12 @@ pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) 
         return;
     }
 
+    if txt.starts_with("/hello ") {
+        let (_, ip) = txt.as_str().split_at(7);
+        send_hello(&l, ip.to_string());
+        return;
+    }
+
     if txt.starts_with("/set ") {
         if !parse_command_set(txt, o.clone()) {
             o.send(ConsoleMessage::TextMessage(Item::new_system("Command not understood.")));
@@ -73,10 +79,17 @@ pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) 
         "/uptime" | "/up" => {
             o.msg(format!("up {}", decode_uptime(uptime())), ItemType::Info, Source::System);
         },
+        "/probe" => {
+            probe_network(o, l);
+        },
         _ => {
             o.msg(String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info, Source::System);
         }
     };
+}
+
+fn probe_network(console: Console, l: &Layers) {
+    console.status(String::from("Start probing the network ..."));
 }
 
 fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message, u64) {

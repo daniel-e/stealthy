@@ -1,6 +1,6 @@
 use std::iter::repeat;
 
-use crate::ItemType;
+use crate::{ItemType, Ips};
 use crate::Source;
 use crate::Arguments;
 use crate::IpAddresses;
@@ -55,12 +55,12 @@ pub struct WelcomeData {
     pub hashed_hybrid_public_key: String,
 }
 
-pub fn welcome(args: &Arguments, o: Console, data: WelcomeData, dstips: &IpAddresses) {
+pub fn welcome(args: &Arguments, o: Console, data: WelcomeData, dstips: Ips) {
     for l in get_logo() {
         o.raw(l, ItemType::Introduction, Source::System);
     }
 
-    let ips = dstips.as_strings().join(", ");
+    let ips = dstips.lock().unwrap().as_strings().join(", ");
 
     let (values, n) = normalize(&[&args.device, &ips, &ips], ' ');
 

@@ -1,4 +1,4 @@
-use crate::{ConsoleMessage, send_hello};
+use crate::{ConsoleMessage, send_hello, Ips};
 use crate::Item;
 use crate::Layers;
 use crate::IpAddresses;
@@ -26,7 +26,7 @@ fn parse_command_set(txt: String, o: Console) -> bool {
     false
 }
 
-pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
+pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: Ips) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
@@ -36,7 +36,7 @@ pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) 
                 o.msg(String::from("Transmitting data ..."), ItemType::Info, Source::System);
                 let s = data.as_str();
                 for line in s.split("\n") {
-                    send_message(line.to_string().trim_end().to_string(), o.clone(), l, dstips);
+                    send_message(line.to_string().trim_end().to_string(), o.clone(), l, dstips.clone());
                 }
             },
             _ => {
@@ -52,6 +52,13 @@ pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) 
         return;
     }
 
+    if txt.starts_with("/newip ") {
+        let (_, ip) = txt.as_str().split_at(7);
+        dstips.lock().unwrap().set_ip(ip.to_string());
+        o.status(format!("Set new IP to {}", ip));
+        return;
+    }
+
     if txt.starts_with("/set ") {
         if !parse_command_set(txt, o.clone()) {
             o.send(ConsoleMessage::TextMessage(Item::new_system("Command not understood.")));
@@ -63,7 +70,7 @@ pub fn parse_command(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) 
         let (_, b) = txt.as_str().split_at(8);
         match read_bin_file(b) {
             Ok(data) => {
-                send_file(data, b.to_string(), o, l, dstips);
+                send_file(data, b.to_string(), o, l, dstips.clone());
             },
             Err(s) => {
                 o.msg(String::from(s), ItemType::Error, Source::System);
@@ -106,7 +113,7 @@ fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message
 /// * `data` - Content of the file (binary data).
 /// * `fname` - Name of the file.
 /// * `o` - Sender object to which messages are sent to.
-fn send_file(data: Vec<u8>, fname: String, console: Console, l: &Layers, dstips: &IpAddresses) {
+fn send_file(data: Vec<u8>, fname: String, console: Console, l: &Layers, dstips: Ips) {
 
     let n = data.len();
 
@@ -118,7 +125,8 @@ fn send_file(data: Vec<u8>, fname: String, console: Console, l: &Layers, dstips:
     ).add_size(n);
 
     // Create a tuple (Message, u64) for each destination IP. For each IP a unique ID is created.
-    let v = dstips.as_strings()
+    let ips = dstips.lock().unwrap().as_strings();
+    let v = ips
         .iter()
         .map(|dstip| create_upload_data(dstip.clone(), &fname, &data))
         .collect::<Vec<_>>();

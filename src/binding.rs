@@ -11,7 +11,7 @@ use crate::iptools::IpAddresses;
 use crate::tools;
 use crate::Console;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, LinkedList};
 use std::iter::repeat;
 
 const RETRY_TIMEOUT: i64      = 15000;  // TODO
@@ -93,7 +93,9 @@ impl PendingPacket {
 pub struct SharedData {
 	// Packets that have been transmitted and for which we
 	// are waiting for the acknowledge.
-	packets          : HashMap<u64, PendingPacket>,
+	packets : HashMap<u64, PendingPacket>,
+
+	hello_packets : LinkedList<PendingPacket>,
 }
 
 
@@ -102,7 +104,7 @@ pub struct Network {
     tx_msg: Sender<IncomingMessage>,
 	shared: Arc<Mutex<SharedData>>,
 	console: Console,
-	accept_ip: Vec<String>,
+	accept_ip: Arc<Mutex<IpAddresses>>,
 	pub current_siz: usize,
 	ping_id: u32,
 }
@@ -113,10 +115,11 @@ fn current_millis() -> i64 {
 }
 
 impl Network {
-	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, console: Console, accept_ip: &IpAddresses) -> Box<Network> {
+	pub fn new(dev: &String, tx_msg: Sender<IncomingMessage>, console: Console, accept_ip: Arc<Mutex<IpAddresses>>) -> Box<Network> {
 
 		let s = Arc::new(Mutex::new(SharedData {
-			packets : HashMap::new(),
+			packets: HashMap::new(),
+			hello_packets: LinkedList::new(),
 		}));
 
 		let ping_id = rand::random::<u32>();
@@ -126,7 +129,7 @@ impl Network {
 			shared: s.clone(),
             tx_msg,
 			console: console.clone(),
-			accept_ip: accept_ip.as_strings().into_iter().collect(),
+			accept_ip: accept_ip.clone(),
 			current_siz: 128,
 			ping_id,
 		});
@@ -134,7 +137,8 @@ impl Network {
 		n.init_callback(dev);
 		n.init_retry_event_receiver(s.clone());
 
-		Network::ping(console, 8192, accept_ip.as_strings().pop().unwrap(), ping_id);
+		let mut ips = accept_ip.lock().unwrap().as_strings();
+		Network::ping(console, 8192, ips.pop().unwrap(), ping_id);
 		n
 	}
 
@@ -317,8 +321,20 @@ impl Network {
 	}
 
 	fn handle_hello(&self, p: Packet) {
+		// If the id of the packet exists in hello_packets we have sent the hello message and
+		// should ignore it.
+		{
+			let l = self.shared.lock().expect("handle_hello: lock failed");
+			for i in l.hello_packets.iter() {
+				if i.p.id == p.id {
+					return;
+				}
+			}
+		}
+
+		self.console.status(format!("Received an HELLO from {}.", p.ip));
+
 		let m = Message::hello(p.ip.clone(), p.data.clone());
-		self.console.status(format!("HELLO"));
 	}
 
 	// This method is called when a new message has been received.
@@ -389,13 +405,15 @@ impl Network {
 		// 2) We might never see a response for a HelloMessage. Therefore, we don't push it to the
 		//    buffer.
 		match msg.typ {
-			MessageType::HelloMessage => {},
+			MessageType::HelloMessage => {
+				Network::add_hello(shared.clone(), p.clone());
+			},
 			_ => { Network::add_packet(shared.clone(), p.clone()); }
 		}
 
 		let id = p.id;
+		//tools::log_to_file(format!("Sent package with id: {} to IP {}\n", id, p.ip.clone()));
 		if Network::transmit(p) {
-			//tools::log_to_file(format!("Sent package with id: {}\n", id));
 			Ok(id)
 		} else {
 			Network::remove_packet(shared.clone(), id);
@@ -412,6 +430,22 @@ impl Network {
 			.expect("binding::push_packet: lock failed")
 			.packets
 			.remove(&id);
+	}
+
+	fn add_hello(shared: Arc<Mutex<SharedData>>, p: Packet) {
+		let mut l = shared.lock().expect("binding::push_packet: lock failed");
+
+		// Remove old hello messages.
+		let t = current_millis();
+		while !l.hello_packets.is_empty() && t.clone() - l.hello_packets.front().unwrap().millis > 5000 {
+			//let id = l.hello_packets.front().unwrap().p.id;
+			//tools::log_to_file(format!("Remove hello with id: {}\n", id));
+			l.hello_packets.pop_front();
+		}
+
+		// Add new hello message.
+		//tools::log_to_file(format!("Add hello with id: {}\n", p.id));
+		l.hello_packets.push_back(PendingPacket::new(p, current_millis()));
 	}
 
 	fn add_packet(shared: Arc<Mutex<SharedData>>, p: Packet) {

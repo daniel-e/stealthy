@@ -108,11 +108,11 @@ fn send_hello(l: &Layers, ip: String) {
     l.send(msg, id, true);
 }
 
-fn send_message(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
+fn send_message(txt: String, o: Console, l: &Layers, dstips: Ips) {
 
     let mut item = Item::new(format!("{}", txt), ItemType::MyMessage, model::Source::You);
 
-    let v = dstips.as_strings()
+    let v = dstips.lock().unwrap().as_strings()
         .iter()
         .map(|dstip| create_data(dstip.clone(), &txt))
         .collect::<Vec<_>>();
@@ -127,7 +127,7 @@ fn send_message(txt: String, o: Console, l: &Layers, dstips: &IpAddresses) {
     }
 }
 
-fn init_network_layer(args: &Arguments, console: Console, dstips: &IpAddresses) -> Layer {
+fn init_network_layer(args: &Arguments, console: Console, dstips: Ips) -> Layer {
     let ret =
         if args.hybrid_mode {
             // use asymmetric encryption
@@ -139,7 +139,7 @@ fn init_network_layer(args: &Arguments, console: Console, dstips: &IpAddresses) 
     ret.expect("Initialization failed.")
 }
 
-fn keyboard_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, view: ArcView) {
+fn keyboard_loop(o: Console, l: Layers, dstips: Ips, model: ArcModel, view: ArcView) {
     let mut input = InputKeyboard::new();
 
     loop {
@@ -152,7 +152,7 @@ fn keyboard_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, vi
                     let mut m = model.lock().unwrap();
                     if c == 13 {
                         let s = m.apply_enter();
-                        send_message(s, o.clone(), &l, &dstips);
+                        send_message(s, o.clone(), &l, dstips.clone());
                     } else {
                         v.push(c);
                         if String::from_utf8(v.clone()).is_ok() {
@@ -202,9 +202,9 @@ fn keyboard_loop(o: Console, l: Layers, dstips: IpAddresses, model: ArcModel, vi
                 view.lock().unwrap().refresh();
                 if s.len() > 0 {
                     if s.starts_with("/") {
-                        commands::parse_command(s, o.clone(), &l, &dstips);
+                        commands::parse_command(s, o.clone(), &l, dstips.clone());
                     } else {
-                        send_message(s, o.clone(), &l, &dstips);
+                        send_message(s, o.clone(), &l, dstips.clone());
                     }
                 }
             }
@@ -354,7 +354,7 @@ fn main() {
     // Parse command line arguments.
 	let args = parse_arguments().expect("Cannot parse arguments");
 
-    let dstips = IpAddresses::from_comma_list(&args.dstip);
+    let dstips = Arc::new(Mutex::new(IpAddresses::from_comma_list(&args.dstip)));
     let ipranges = args.ranges.clone();
 
     // The model stores all information which is required to show the screen.
@@ -364,10 +364,10 @@ fn main() {
 
     let c = create_console(model.clone(), view.clone());
 
-    let network_layer = init_network_layer(&args, c.clone(), &dstips);
+    let network_layer = init_network_layer(&args, c.clone(), dstips.clone());
 
     // Show welchome message.
-    outputs::welcome(&args, c.clone(), welcome_data(&args, &network_layer), &dstips);
+    outputs::welcome(&args, c.clone(), welcome_data(&args, &network_layer), dstips.clone());
 
     scramble_trigger(c.clone());
 
@@ -378,7 +378,7 @@ fn main() {
 
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.
-    keyboard_loop(c.clone(), network_layer.layers, dstips, model, view);
+    keyboard_loop(c.clone(), network_layer.layers, dstips.clone(), model, view);
 
     // IMPORTANT! If the are threads which are using a clone of the view, the view isn't destroyed
     // properly and the terminal state is not restored.

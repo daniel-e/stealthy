@@ -8,7 +8,7 @@ use crate::binding::Network;
 use crate::message::{IncomingMessage, Message};
 use crate::error::ErrorType;
 use crate::iptools::IpAddresses;
-use crate::Console;
+use crate::{Console, Ips};
 
 pub struct Layer {
     pub rx    : Receiver<IncomingMessage>,
@@ -23,12 +23,12 @@ pub struct Layers {
 
 impl Layers {
 
-    pub fn symmetric(hexkey: &String, device: &String, console: Console, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
+    pub fn symmetric(hexkey: &String, device: &String, console: Console, accept_ip: Ips) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(SymmetricEncryption::new(hexkey)?), device, console, accept_ip)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, console: Console, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, console: Console, accept_ip: Ips) -> Result<Layer, &'static str> {
 
         Layers::init(Box::new(
             AsymmetricEncryption::new(&pubkey_file, &privkey_file)?
@@ -66,7 +66,7 @@ impl Layers {
 
     // ------ private functions
 
-    fn init(e: Box<dyn Encryption>, device: &String, console: Console, accept_ip: &IpAddresses) -> Result<Layer, &'static str> {
+    fn init(e: Box<dyn Encryption>, device: &String, console: Console, accept_ip: Ips) -> Result<Layer, &'static str> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers

@@ -1,4 +1,4 @@
-use crate::{ConsoleMessage, send_hello, Ips};
+use crate::{ConsoleMessage, send_hello, Ips, LayerMessage, probe};
 use crate::Item;
 use crate::Layers;
 use crate::IpAddresses;
@@ -13,6 +13,7 @@ use crate::Console;
 use crate::tools::{read_file, read_bin_file, decode_uptime, without_dirs};
 
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::Sender;
 
 fn parse_command_set(txt: String, o: Console) -> bool {
     let txt_parts = txt.split(' ').collect::<Vec<_>>();
@@ -28,7 +29,7 @@ fn parse_command_set(txt: String, o: Console) -> bool {
     false
 }
 
-pub fn parse_command(txt: String, o: Console, l: Arc<Mutex<Layers>>, dstips: Ips) {
+pub fn parse_command(txt: String, o: Console, l: Sender<LayerMessage>, dstips: Ips) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
@@ -81,6 +82,12 @@ pub fn parse_command(txt: String, o: Console, l: Arc<Mutex<Layers>>, dstips: Ips
         return;
     }
 
+    if txt.starts_with("/probe") {
+        let (_, addr) = txt.as_str().split_at(7);
+        probe(o, addr, l);
+        return;
+    }
+
     match txt.as_str() {
         "/help" => {
             help_message(o.clone());
@@ -88,18 +95,15 @@ pub fn parse_command(txt: String, o: Console, l: Arc<Mutex<Layers>>, dstips: Ips
         "/uptime" | "/up" => {
             o.msg(format!("up {}", decode_uptime(uptime())), ItemType::Info, Source::System);
         },
-        "/probe" => {
-            probe_network(o, l);
-        },
         _ => {
             o.msg(String::from("Unknown command. Type /help to see a list of commands."), ItemType::Info, Source::System);
         }
     };
 }
 
-fn probe_network(console: Console, l: Arc<Mutex<Layers>>) {
-    console.status(String::from("Start probing the network ..."));
-}
+//fn probe_network(console: Console, l: Arc<Mutex<Layers>>) {
+//    console.status(String::from("Start probing the network ..."));
+//}
 
 fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message, u64) {
     (
@@ -115,7 +119,7 @@ fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message
 /// * `data` - Content of the file (binary data).
 /// * `fname` - Name of the file.
 /// * `o` - Sender object to which messages are sent to.
-fn send_file(data: Vec<u8>, fname: String, console: Console, l: Arc<Mutex<Layers>>, dstips: Ips) {
+fn send_file(data: Vec<u8>, fname: String, console: Console, l: Sender<LayerMessage>, dstips: Ips) {
 
     let n = data.len();
 
@@ -144,6 +148,6 @@ fn send_file(data: Vec<u8>, fname: String, console: Console, l: Arc<Mutex<Layers
 
     // Now, start the file transfer in the background for each given IP.
     for (msg, id) in v {
-        l.lock().unwrap().send(msg, id, true);
+        l.send(LayerMessage::new(msg, id, true));
     }
 }

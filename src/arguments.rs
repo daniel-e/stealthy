@@ -3,6 +3,7 @@ use std::io::{BufRead, BufReader};
 use std::env;
 use getopts::Options;
 
+#[derive(Clone)]
 pub struct Arguments {
     pub device: String,
     pub dstip: String,
@@ -11,7 +12,7 @@ pub struct Arguments {
     pub rcpt_pubkey_file: String,
     pub privkey_file: String,
     pub pubkey_file: String,
-    pub ranges: Vec<String>,
+    pub ranges: Option<String>,
 }
 
 fn get_key_from_home() -> Option<String> {
@@ -48,7 +49,8 @@ pub fn parse_arguments() -> Option<Arguments> {
     opts.optopt("r", "recipient", "recipient's public key in PEM format used for encryption", "filename");
     opts.optopt("p", "priv", "your private key in PEM format used for decryption", "filename");
     opts.optopt("q", "pub", "your public key in PEM format", "filename");
-    opts.optmulti("b", "probe", "in case destination is not available probe the given range", "IP range");
+    //opts.optmulti("b", "probe", "in case destination is not available probe the given range", "IP range");
+    opts.optopt("b", "probe", "in case destination is not available probe the given range", "IP range");
     opts.optflag("h", "help", "print this message");
 
     let matches = match opts.parse(&args[1..]) {
@@ -80,6 +82,6 @@ pub fn parse_arguments() -> Option<Arguments> {
         rcpt_pubkey_file:  matches.opt_str("r").unwrap_or("".to_string()),
         privkey_file: matches.opt_str("p").unwrap_or("".to_string()),
         pubkey_file:  matches.opt_str("q").unwrap_or("".to_string()),
-        ranges: matches.opt_strs("b"),
+        ranges: matches.opt_str("b"),
     })
 }

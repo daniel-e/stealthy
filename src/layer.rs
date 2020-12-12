@@ -10,10 +10,10 @@ use crate::error::ErrorType;
 use crate::iptools::IpAddresses;
 use crate::{Console, Ips, tools};
 
-pub struct Layer {
-    pub rx    : Receiver<IncomingMessage>,
-    pub layers: Layers,
-}
+//pub struct Layer {
+    //pub rx    : Receiver<IncomingMessage>,
+//    pub layers: Layers,
+//}
 
 pub struct Layers {
     encryption_layer: Arc<Box<dyn Encryption>>,
@@ -23,16 +23,16 @@ pub struct Layers {
 
 impl Layers {
 
-    pub fn symmetric(hexkey: &String, device: &String, console: Console, accept_ip: Ips) -> Result<Layer, &'static str> {
+    pub fn symmetric(hexkey: &String, device: &String, console: Console, accept_ip: Ips, tx: Sender<IncomingMessage>) -> Result<Layers, &'static str> {
 
-        Layers::init(Box::new(SymmetricEncryption::new(hexkey)?), device, console, accept_ip)
+        Layers::init(Box::new(SymmetricEncryption::new(hexkey)?), device, console, accept_ip, tx)
     }
 
-    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, console: Console, accept_ip: Ips) -> Result<Layer, &'static str> {
+    pub fn asymmetric(pubkey_file: &String, privkey_file: &String, device: &String, console: Console, accept_ip: Ips, tx: Sender<IncomingMessage>) -> Result<Layers, &'static str> {
 
         Layers::init(Box::new(
             AsymmetricEncryption::new(&pubkey_file, &privkey_file)?
-        ), device, console, accept_ip
+        ), device, console, accept_ip, tx
         )
     }
 
@@ -70,7 +70,7 @@ impl Layers {
 
     // ------ private functions
 
-    fn init(e: Box<dyn Encryption>, device: &String, console: Console, accept_ip: Ips) -> Result<Layer, &'static str> {
+    fn init(e: Box<dyn Encryption>, device: &String, console: Console, accept_ip: Ips, tx: Sender<IncomingMessage>) -> Result<Layers, &'static str> {
 
         // network  tx1 --- incoming message ---> rx1 delivery
         // delivery tx2 --- incoming message ---> rx2 layers
@@ -84,14 +84,15 @@ impl Layers {
                            console.clone(),
                        ),
                        rx2,
-                       console
+                       console,
+                       tx
         ))
     }
 
-    fn new(e: Box<dyn Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>, console: Console) -> Layer {
+    fn new(e: Box<dyn Encryption>, d: Delivery, rx_network: Receiver<IncomingMessage>, console: Console, tx_app: Sender<IncomingMessage>) -> Layers {
 
         // tx is used to send received messages to the application via rx
-        let (tx, rx) = channel::<IncomingMessage>();
+        //let (tx, rx) = channel::<IncomingMessage>();
 
         let l = Layers {
             encryption_layer: Arc::new(e),
@@ -99,11 +100,14 @@ impl Layers {
             console: console
         };
 
-        l.recv_loop(tx, rx_network);
+        //l.recv_loop(tx, rx_network);
+        l.recv_loop(tx_app, rx_network);
+        /*
         Layer {
-            rx: rx,
+            //rx: rx,
             layers: l,
-        }
+        }*/
+        l
     }
 
     /// Listens for incoming messages and processes them.
@@ -173,7 +177,7 @@ impl Layers {
                 match enc.decrypt(&msg.buf) {
                     Ok(buf) => {
                         let s = String::from_utf8(buf.clone()).unwrap();
-                        if s.starts_with("hello:") || s.starts_with("what's up:") {
+                        if s.starts_with("hello:") || s.starts_with("nice to meet you:") {
                             //tools::log_to_file(format!("Layers: got HELLO from: {}, {}\n", msg.ip.clone(), s));
                             // Set decrypted payload.
                             Some(IncomingMessage::HelloMessage(msg.set_payload(buf)))

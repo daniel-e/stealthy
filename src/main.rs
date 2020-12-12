@@ -20,12 +20,12 @@ mod commands;
 mod upload;
 
 use std::thread;
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::message::{Message, IncomingMessage};
-use crate::layer::{Layers, Layer};
+use crate::layer::{Layers};
 use crate::tools::write_data;
 use crate::iptools::IpAddresses;
 use crate::arguments::{parse_arguments, Arguments};
@@ -43,7 +43,7 @@ type ArcView = Arc<Mutex<View>>;
 type Ips = Arc<Mutex<IpAddresses>>;
 
 /// Listens for incoming messages from the network.
-fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, layer: Arc<Mutex<Layers>>) {
+fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, tx: Sender<LayerMessage>, dstips: Ips) {
 
     thread::spawn(move || {
         loop { match rx.recv() {
@@ -53,14 +53,22 @@ fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, layer: Arc<Mutex<Layers>
                         match String::from_utf8(msg.buf) {
                             Ok(s) => {
                                 if s.starts_with("hello:") {
-                                    o.status(format!("Received HELLO from {}.", msg.ip.clone()));
+                                    let ip = msg.ip.clone();
+                                    o.status(format!("Received HELLO from {}.", ip.clone()));
 
-                                    let payload = format!("what's up:{}", msg.ip.clone());
-                                    let m = Message::hello(msg.ip, payload.into_bytes());
+                                    dstips.lock().unwrap().set_ip(ip.clone());
+                                    o.status(format!("Set new destination IP."));
+
+                                    let payload = format!("nice to meet you:{}", ip.clone());
+                                    let m = Message::hello(ip.clone(), payload.into_bytes());
                                     let id = rand::random::<u64>();
-                                    layer.lock().unwrap().send_sync(msg, id, true);
-                                } else if s.starts_with("what's up:") {
-                                    o.status(format!("Received WHAT'S UP from {}.", msg.ip));
+                                    tx.send(LayerMessage::new(m, id, true));
+                                } else if s.starts_with("nice to meet you:") {
+                                    let ip = msg.ip.clone();
+                                    o.status(format!("Received NICE TO MEET YOU from {}.", ip.clone()));
+
+                                    dstips.lock().unwrap().set_ip(ip);
+                                    o.status(format!("Set new destination IP."));
                                 }
                             }
                             _ => {}
@@ -118,14 +126,14 @@ fn create_data(dstip: String, txt: &String) -> (Message, u64) {
     (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
 }
 
-fn send_hello(l: Arc<Mutex<Layers>>, ip: String) {
+fn send_hello(l: Sender<LayerMessage>, ip: String) {
     let payload = format!("hello:{}", ip);
     let msg = Message::hello(ip, payload.into_bytes());
     let id = rand::random::<u64>();
-    l.lock().unwrap().send(msg, id, true);
+    l.send(LayerMessage::new(msg, id, true));
 }
 
-fn send_message(txt: String, o: Console, l: Arc<Mutex<Layers>>, dstips: Ips) {
+fn send_message(txt: String, o: Console, l: Sender<LayerMessage>, dstips: Ips) {
 
     let mut item = Item::new(format!("{}", txt), ItemType::MyMessage, model::Source::You);
 
@@ -140,23 +148,24 @@ fn send_message(txt: String, o: Console, l: Arc<Mutex<Layers>>, dstips: Ips) {
     o.msg_item(item);
 
     for (msg, id) in v {
-        l.lock().unwrap().send(msg, id, false);
+        //tools::log_to_file(format!("send_message: {} to {}\n", txt.clone(), msg.ip.clone()));
+        l.send(LayerMessage::new(msg, id, false)).unwrap();
     }
 }
 
-fn init_network_layer(args: &Arguments, console: Console, dstips: Ips) -> Layer {
+fn init_network_layer(args: &Arguments, console: Console, dstips: Ips, tx: Sender<IncomingMessage>) -> Layers {
     let ret =
         if args.hybrid_mode {
             // use asymmetric encryption
-            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, console, dstips)
+            Layers::asymmetric(&args.rcpt_pubkey_file, &args.privkey_file, &args.device, console, dstips, tx)
         } else {
             // use symmetric encryption
-            Layers::symmetric(&args.secret_key, &args.device, console, dstips)
+            Layers::symmetric(&args.secret_key, &args.device, console, dstips, tx)
         };
     ret.expect("Initialization failed.")
 }
 
-fn keyboard_loop(o: Console, l: Arc<Mutex<Layers>>, dstips: Ips, model: ArcModel, view: ArcView) {
+fn keyboard_loop(o: Console, l: Sender<LayerMessage>, dstips: Ips, model: ArcModel, view: ArcView) {
     let mut input = InputKeyboard::new();
 
     loop {
@@ -291,13 +300,14 @@ fn scramble_trigger(o: Console) {
     });
 }
 
-fn welcome_data(args: &Arguments, network_layer: &Layer) -> WelcomeData {
+fn welcome_data(args: &Arguments) -> WelcomeData {
     let mut hashed_encryption_key = String::new();
     let mut hashed_public_key = String::new();
 
     if args.hybrid_mode {
-        hashed_encryption_key = tools::sha1(&network_layer.layers.encryption_key());
-        hashed_public_key = tools::sha1(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
+        panic!("Currently deactivated.");
+        //hashed_encryption_key = tools::sha1(&network_layer.layers.encryption_key());
+        //hashed_public_key = tools::sha1(&rsatools::key_as_der(&read_file(&args.pubkey_file).unwrap()));
     }
 
     WelcomeData {
@@ -368,6 +378,114 @@ fn probe_range(o: Console, dstips: Vec<String>, ipranges: Vec<String>) -> Result
 */
 
 
+pub struct LayerMessage {
+    pub msg: Message,
+    pub id: u64,
+    pub background: bool,
+}
+
+impl LayerMessage {
+    pub fn new(msg: Message, id: u64, background: bool) -> LayerMessage {
+        LayerMessage {
+            msg,
+            id,
+            background
+        }
+    }
+}
+
+fn compute_netmask(bits: u8) -> u32 {
+    let mut netmask: u32 = 0;
+    let mut bitmask: u32 = 0x80000000;
+    for _ in 0..bits {
+        netmask |= bitmask;
+        bitmask >>= 1;
+    }
+    netmask
+}
+
+fn ip_to_bits(ip: Vec<u8>) -> u32 {
+    let mut bits: u32 = 0;
+    for val in ip {
+        bits = (bits << 8) | val as u32;
+    }
+    bits
+}
+
+fn bits_to_ip(bits: u32) -> String {
+    let mut v = vec![];
+    let mut b = bits;
+    for i in 0..4 {
+        let val = ((b >> (i * 8)) & 0xff) as u8;
+        v.insert(0, val);
+    }
+    let r: Vec<String> = v.iter().map(|x| format!("{}", x)).collect();
+    r.join(".")
+}
+
+fn create_ips(ip: Vec<u8>, net: u8) -> Vec<String> {
+    let netmask = compute_netmask(net);
+    let ipbits = ip_to_bits(ip);
+    let mut cnt: u32 = 0;
+    let mut addr = vec![];
+
+    loop {
+        let next_ip_bits = (ipbits & netmask) | cnt;
+        if next_ip_bits & 0xff != 0 {
+            addr.push(bits_to_ip(next_ip_bits));
+        }
+        if (netmask | cnt) == 0xffffffff {
+            break;
+        }
+        cnt += 1;
+    }
+    addr
+}
+
+fn ips_for_probing(addr: &str) -> Result<Vec<String>, String>{
+    let parts: Vec<&str> = addr.split("/").collect();
+    if parts.len() != 2 {
+        return Err(String::from("Invalid syntax."));
+    }
+
+    let ip_parts: Vec<&str> = parts[0].split(".").collect();
+    if ip_parts.len() != 4 {
+        return Err(String::from("Invalid IP address."));
+    }
+
+    let ip: Vec<u8> = ip_parts.iter().map(|x| x.parse::<u8>().unwrap()).collect();
+    let net = parts[1].parse::<u8>().unwrap();
+    if net > 31 {
+        return Err(String::from("Invalid netmask."));
+    }
+    Ok(create_ips(ip, net))
+}
+
+pub fn probe(o: Console, addr: &str, tx: Sender<LayerMessage>) {
+    //tools::log_to_file(format!("Probing {}.\n", &addr));
+    match ips_for_probing(addr) {
+        Ok(ips) => {
+            thread::sleep(Duration::from_millis(1000));
+            o.status(format!("Probing {} IPs.", ips.len()));
+            thread::spawn(move || {
+                for ip in ips {
+                    //tools::log_to_file(format!("Sending HELLO to {}.\n", ip.clone()));
+                    // TODO: this is copy&paste from recv_loop
+                    let payload = format!("hello:{}", ip.clone());
+                    let m = Message::hello(ip.clone(), payload.into_bytes());
+                    let id = rand::random::<u64>();
+                    tx.send(LayerMessage::new(m, id, true));
+                    thread::sleep(Duration::from_millis(100));
+                }
+                o.status(format!("Probing done.\n"));
+            });
+        }
+        Err(msg) => {
+            o.error(msg);
+        }
+    }
+}
+
 fn main() {
     init_global_state();
 
@@ -375,7 +493,6 @@ fn main() {
 	let args = parse_arguments().expect("Cannot parse arguments");
 
     let dstips = Arc::new(Mutex::new(IpAddresses::from_comma_list(&args.dstip)));
-    let ipranges = args.ranges.clone();
 
     // The model stores all information which is required to show the screen.
     let model = Arc::new(Mutex::new(Model::new(dstips.clone())));
@@ -384,23 +501,38 @@ fn main() {
 
     let c = create_console(model.clone(), view.clone());
 
-    let network_layer = init_network_layer(&args, c.clone(), dstips.clone());
+    // tx_send_message is used to send a messave over the network
 
-    // Show welchome message.
-    outputs::welcome(&args, c.clone(), welcome_data(&args, &network_layer), dstips.clone());
+    let (tx_send_message, rx_send_message) = channel::<LayerMessage>();
+    let (tx_incoming_message, rx_incoming_message) = channel();
+    let a = args.clone();
+    let cc = c.clone();
+    let dips = dstips.clone();
+    thread::spawn(move || {
+        let tx = tx_incoming_message.clone();
+        let layers = init_network_layer(&a, cc, dips, tx);
+        loop {
+            let msg = rx_send_message.recv().unwrap();
+            layers.send(msg.msg, msg.id, msg.background);
+        }
+    });
+
+    // Show welcome message.
+    outputs::welcome(&args, c.clone(), welcome_data(&args), dstips.clone());
 
     scramble_trigger(c.clone());
 
-    let layer = Arc::new(Mutex::new(network_layer.layers));
-
     // This is the loop which handles messages received from the network.
-    recv_loop(c.clone(), network_layer.rx, layer.clone());
+    recv_loop(c.clone(), rx_incoming_message, tx_send_message.clone(), dstips.clone());
 
-    //probe_range(c.clone(), dstips.as_strings(), ipranges).unwrap();
+    if args.ranges.is_some() {
+        probe(c.clone(), &args.ranges.unwrap(), tx_send_message.clone());
+    }
 
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.
-    keyboard_loop(c.clone(), layer.clone(), dstips.clone(), model, view);
+    keyboard_loop(c.clone(), tx_send_message.clone(), dstips.clone(), model, view);
+
 
     // IMPORTANT! If the are threads which are using a clone of the view, the view isn't destroyed
     // properly and the terminal state is not restored.

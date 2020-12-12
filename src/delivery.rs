@@ -3,7 +3,7 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 
-use crate::{Message, IncomingMessage};
+use crate::{Message, IncomingMessage, tools};
 use crate::binding::Network;
 use crate::Console;
 
@@ -121,6 +121,21 @@ impl Delivery {
             match rx.recv() {
                 Ok(msg) => {
                     match msg {
+                        IncomingMessage::HelloMessage(m) => {
+                            //tools::log_to_file(format!("Got HELLO from: {}\n", m.ip.clone()));
+                            match Delivery::deserialize(&m.buf) {
+                                Some(small_msg) => {
+                                    let r = Delivery::insert_packet(incoming.clone(), small_msg);
+                                    if r.is_some() {
+                                        // The payload is still encrypted.
+                                        // Send to Layers.
+                                        if tx.send(IncomingMessage::HelloMessage(Message::new(m.ip, r.unwrap()))).is_err() {
+                                        }
+                                    }
+                                }
+                                _ => { } // TODO error handling
+                            }
+                        }
                         IncomingMessage::Error(_errortype, _msg) => {
                             // TODO implement
                         },

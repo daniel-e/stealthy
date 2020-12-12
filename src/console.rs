@@ -14,6 +14,7 @@ pub enum ConsoleMessage {
     SetScrambleTimeout(u32),
     ScrambleTick,
     Exit,
+    HelloMessage(String),
 }
 
 #[derive(Clone)]
@@ -26,6 +27,10 @@ impl Console {
         Console {
             console: sender
         }
+    }
+
+    pub fn new_hello(&self, m: Message) {
+        self.console.send(ConsoleMessage::HelloMessage(m.ip)).unwrap();
     }
 
     pub fn new_file(&self, m: Message, filename: String) {

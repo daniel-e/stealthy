@@ -12,6 +12,7 @@ pub enum IncomingMessage {
     AckProgress(u64, usize, usize),
     Error(ErrorType, String),
     FileUpload(Message),
+    HelloMessage(Message),
 }
 
 impl Clone for MessageType {

@@ -155,7 +155,7 @@ impl Network {
 				}
 			}
 			for packet in packets_for_resend {
-				tools::log_to_file(format!("Resent package with id: {}\n", packet.id));
+				//tools::log_to_file(format!("Resent package with id: {}\n", packet.id));
 				Network::transmit(packet);
 			}
 		}});
@@ -332,9 +332,13 @@ impl Network {
 			}
 		}
 
-		self.console.status(format!("Received an HELLO from {}.", p.ip));
+		//self.console.status(format!("Received an HELLO from {}.", p.ip));
 
 		let m = Message::hello(p.ip.clone(), p.data.clone());
+		//TODO remove
+		//self.console.new_hello(m);
+		// Sent via channel to Delivery.
+		self.tx_msg.send(IncomingMessage::HelloMessage(m)).expect("Error in handle_hello.");
 	}
 
 	// This method is called when a new message has been received.

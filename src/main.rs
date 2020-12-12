@@ -43,12 +43,29 @@ type ArcView = Arc<Mutex<View>>;
 type Ips = Arc<Mutex<IpAddresses>>;
 
 /// Listens for incoming messages from the network.
-fn recv_loop(o: Console, rx: Receiver<IncomingMessage>) {
+fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, layer: Arc<Mutex<Layers>>) {
 
     thread::spawn(move || {
         loop { match rx.recv() {
             Ok(msg) => {
                 match msg {
+                    IncomingMessage::HelloMessage(msg) => {
+                        match String::from_utf8(msg.buf) {
+                            Ok(s) => {
+                                if s.starts_with("hello:") {
+                                    o.status(format!("Received HELLO from {}.", msg.ip.clone()));
+
+                                    let payload = format!("what's up:{}", msg.ip.clone());
+                                    let m = Message::hello(msg.ip, payload.into_bytes());
+                                    let id = rand::random::<u64>();
+                                    layer.lock().unwrap().send_sync(msg, id, true);
+                                } else if s.starts_with("what's up:") {
+                                    o.status(format!("Received WHAT'S UP from {}.", msg.ip));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
                     IncomingMessage::New(msg) => {
                         o.new_msg(msg);
                     }
@@ -101,14 +118,14 @@ fn create_data(dstip: String, txt: &String) -> (Message, u64) {
     (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
 }
 
-fn send_hello(l: &Layers, ip: String) {
+fn send_hello(l: Arc<Mutex<Layers>>, ip: String) {
     let payload = format!("hello:{}", ip);
     let msg = Message::hello(ip, payload.into_bytes());
     let id = rand::random::<u64>();
-    l.send(msg, id, true);
+    l.lock().unwrap().send(msg, id, true);
 }
 
-fn send_message(txt: String, o: Console, l: &Layers, dstips: Ips) {
+fn send_message(txt: String, o: Console, l: Arc<Mutex<Layers>>, dstips: Ips) {
 
     let mut item = Item::new(format!("{}", txt), ItemType::MyMessage, model::Source::You);
 
@@ -123,7 +140,7 @@ fn send_message(txt: String, o: Console, l: &Layers, dstips: Ips) {
     o.msg_item(item);
 
     for (msg, id) in v {
-        l.send(msg, id, false);
+        l.lock().unwrap().send(msg, id, false);
     }
 }
 
@@ -139,7 +156,7 @@ fn init_network_layer(args: &Arguments, console: Console, dstips: Ips) -> Layer 
     ret.expect("Initialization failed.")
 }
 
-fn keyboard_loop(o: Console, l: Layers, dstips: Ips, model: ArcModel, view: ArcView) {
+fn keyboard_loop(o: Console, l: Arc<Mutex<Layers>>, dstips: Ips, model: ArcModel, view: ArcView) {
     let mut input = InputKeyboard::new();
 
     loop {
@@ -152,7 +169,7 @@ fn keyboard_loop(o: Console, l: Layers, dstips: Ips, model: ArcModel, view: ArcV
                     let mut m = model.lock().unwrap();
                     if c == 13 {
                         let s = m.apply_enter();
-                        send_message(s, o.clone(), &l, dstips.clone());
+                        send_message(s, o.clone(), l.clone(), dstips.clone());
                     } else {
                         v.push(c);
                         if String::from_utf8(v.clone()).is_ok() {
@@ -202,9 +219,9 @@ fn keyboard_loop(o: Console, l: Layers, dstips: Ips, model: ArcModel, view: ArcV
                 view.lock().unwrap().refresh();
                 if s.len() > 0 {
                     if s.starts_with("/") {
-                        commands::parse_command(s, o.clone(), &l, dstips.clone());
+                        commands::parse_command(s, o.clone(), l.clone(), dstips.clone());
                     } else {
-                        send_message(s, o.clone(), &l, dstips.clone());
+                        send_message(s, o.clone(), l.clone(), dstips.clone());
                     }
                 }
             }
@@ -233,6 +250,9 @@ fn create_console(model: ArcModel, view: ArcView) -> Console {
                     view.lock().unwrap().refresh();
                 }
             },
+            ConsoleMessage::HelloMessage(ip) => {
+                tools::log_to_file(format!("Got HELLO from IP: {}\n", ip));
+            }
             // We need this as otherwise "out" is not dropped and the terminal state
             // is not restored.
             ConsoleMessage::Exit => {
@@ -358,7 +378,7 @@ fn main() {
     let ipranges = args.ranges.clone();
 
     // The model stores all information which is required to show the screen.
-    let model = Arc::new(Mutex::new(Model::new()));
+    let model = Arc::new(Mutex::new(Model::new(dstips.clone())));
 
     let view = Arc::new(Mutex::new(View::new(model.clone())));
 
@@ -371,14 +391,16 @@ fn main() {
 
     scramble_trigger(c.clone());
 
+    let layer = Arc::new(Mutex::new(network_layer.layers));
+
     // This is the loop which handles messages received from the network.
-    recv_loop(c.clone(), network_layer.rx);
+    recv_loop(c.clone(), network_layer.rx, layer.clone());
 
     //probe_range(c.clone(), dstips.as_strings(), ipranges).unwrap();
 
     // Waits for data from the keyboard.
     // If data is received the model and the view will be updated.
-    keyboard_loop(c.clone(), network_layer.layers, dstips.clone(), model, view);
+    keyboard_loop(c.clone(), layer.clone(), dstips.clone(), model, view);
 
     // IMPORTANT! If the are threads which are using a clone of the view, the view isn't destroyed
     // properly and the terminal state is not restored.

@@ -8,7 +8,7 @@ use crate::binding::Network;
 use crate::message::{IncomingMessage, Message};
 use crate::error::ErrorType;
 use crate::iptools::IpAddresses;
-use crate::{Console, Ips};
+use crate::{Console, Ips, tools};
 
 pub struct Layer {
     pub rx    : Receiver<IncomingMessage>,
@@ -34,6 +34,10 @@ impl Layers {
             AsymmetricEncryption::new(&pubkey_file, &privkey_file)?
         ), device, console, accept_ip
         )
+    }
+
+    pub fn send_sync(&self, msg: Message, id: u64, background: bool) {
+
     }
 
     pub fn send(&self, msg: Message, id: u64, background: bool) {
@@ -163,7 +167,23 @@ impl Layers {
             },
             IncomingMessage::Ack(_) => Some(m),
             IncomingMessage::Error(_, _) => Some(m),
-            IncomingMessage::AckProgress(_, _, _) => Some(m)
+            IncomingMessage::AckProgress(_, _, _) => Some(m),
+
+            IncomingMessage::HelloMessage(msg) => {
+                match enc.decrypt(&msg.buf) {
+                    Ok(buf) => {
+                        let s = String::from_utf8(buf.clone()).unwrap();
+                        if s.starts_with("hello:") || s.starts_with("what's up:") {
+                            //tools::log_to_file(format!("Layers: got HELLO from: {}, {}\n", msg.ip.clone(), s));
+                            // Set decrypted payload.
+                            Some(IncomingMessage::HelloMessage(msg.set_payload(buf)))
+                        } else {
+                            None
+                        }
+                    },
+                    _ => { None }
+                }
+            }
         }
     }
 }

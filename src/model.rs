@@ -1,6 +1,5 @@
 use time::Tm;
 use std::time::SystemTime;
-use crate::Ips;
 
 static MAX_BUF_LEN: usize = 500;
 
@@ -14,11 +13,10 @@ pub struct Model {
     scrambled: bool,
     pub scramble_timeout: u32,
     last_ack_progress_view_update: SystemTime,
-    dst_ips: Ips,
 }
 
 impl Model {
-    pub fn new(dst_ips: Ips) -> Model {
+    pub fn new() -> Model {
         Model {
             buf: vec![],
             input: vec![],
@@ -26,7 +24,6 @@ impl Model {
             scrambled: false,
             scramble_timeout: 20,
             last_ack_progress_view_update: SystemTime::now(),
-            dst_ips,
         }
     }
 

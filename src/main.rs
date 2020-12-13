@@ -61,12 +61,14 @@ fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, tx: Sender<LayerMessageT
 
                                     // When we have a new endpoint we need to estimate the new
                                     // maximum payload size.
-                                    tx.send(LayerMessageType::MaxSizePing);
+                                    tx.send(LayerMessageType::MaxSizePing)
+                                        .expect("Could not sent message.");
 
                                     let payload = format!("nice to meet you:{}", ip.clone());
                                     let m = Message::hello(ip.clone(), payload.into_bytes());
                                     let id = rand::random::<u64>();
-                                    tx.send(LayerMessageType::Message(LayerMessage::new(m, id, true)));
+                                    tx.send(LayerMessageType::Message(LayerMessage::new(m, id, true)))
+                                        .expect("Could not sent message.");
                                 } else if s.starts_with("nice to meet you:") {
                                     let ip = msg.ip.clone();
                                     o.status(format!("Received NICE TO MEET YOU from {}.", ip.clone()));
@@ -134,7 +136,8 @@ fn send_hello(l: Sender<LayerMessageType>, ip: String) {
     let payload = format!("hello:{}", ip);
     let msg = Message::hello(ip, payload.into_bytes());
     let id = rand::random::<u64>();
-    l.send(LayerMessageType::Message(LayerMessage::new(msg, id, true)));
+    l.send(LayerMessageType::Message(LayerMessage::new(msg, id, true)))
+        .expect("Could not sent message.");
 }
 
 fn send_message(txt: String, o: Console, l: Sender<LayerMessageType>, dstips: Ips) {
@@ -305,8 +308,8 @@ fn scramble_trigger(o: Console) {
 }
 
 fn welcome_data(args: &Arguments) -> WelcomeData {
-    let mut hashed_encryption_key = String::new();
-    let mut hashed_public_key = String::new();
+    let hashed_encryption_key = String::new();
+    let hashed_public_key = String::new();
 
     if args.hybrid_mode {
         panic!("Currently deactivated.");
@@ -422,7 +425,7 @@ fn ip_to_bits(ip: Vec<u8>) -> u32 {
 
 fn bits_to_ip(bits: u32) -> String {
     let mut v = vec![];
-    let mut b = bits;
+    let b = bits;
     for i in 0..4 {
         let val = ((b >> (i * 8)) & 0xff) as u8;
         v.insert(0, val);
@@ -482,7 +485,8 @@ pub fn probe(o: Console, addr: &str, tx: Sender<LayerMessageType>) {
                     let payload = format!("hello:{}", ip.clone());
                     let m = Message::hello(ip.clone(), payload.into_bytes());
                     let id = rand::random::<u64>();
-                    tx.send(LayerMessageType::Message(LayerMessage::new(m, id, true)));
+                    tx.send(LayerMessageType::Message(LayerMessage::new(m, id, true)))
+                        .expect("Could not sent message.");
                     thread::sleep(Duration::from_millis(100));
                 }
                 o.status(format!("Probing done.\n"));
@@ -503,7 +507,7 @@ fn main() {
     let dstips = Arc::new(Mutex::new(IpAddresses::from_comma_list(&args.dstip)));
 
     // The model stores all information which is required to show the screen.
-    let model = Arc::new(Mutex::new(Model::new(dstips.clone())));
+    let model = Arc::new(Mutex::new(Model::new()));
 
     let view = Arc::new(Mutex::new(View::new(model.clone())));
 
@@ -518,7 +522,7 @@ fn main() {
     let dips = dstips.clone();
     thread::spawn(move || {
         let tx = tx_incoming_message.clone();
-        let mut layers = init_network_layer(&a, cc, dips, tx);
+        let layers = init_network_layer(&a, cc, dips, tx);
         loop {
             let msg = rx_send_message.recv().unwrap();
             match msg {

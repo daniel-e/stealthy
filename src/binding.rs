@@ -8,7 +8,6 @@ use crate::message::{IncomingMessage, Message, MessageType};
 use crate::error::Errors;
 use crate::packet::{Packet, IdType};
 use crate::iptools::IpAddresses;
-use crate::tools;
 use crate::Console;
 
 use std::collections::{HashMap, LinkedList};

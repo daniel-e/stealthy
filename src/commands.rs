@@ -1,7 +1,5 @@
 use crate::{ConsoleMessage, send_hello, Ips, LayerMessage, probe, LayerMessageType};
 use crate::Item;
-use crate::Layers;
-use crate::IpAddresses;
 use crate::ItemType;
 use crate::Message;
 use crate::Source;
@@ -12,7 +10,6 @@ use crate::Console;
 
 use crate::tools::{read_file, read_bin_file, decode_uptime, without_dirs};
 
-use std::sync::{Arc, Mutex};
 use std::sync::mpsc::Sender;
 
 fn parse_command_set(txt: String, o: Console) -> bool {
@@ -148,6 +145,7 @@ fn send_file(data: Vec<u8>, fname: String, console: Console, l: Sender<LayerMess
 
     // Now, start the file transfer in the background for each given IP.
     for (msg, id) in v {
-        l.send(LayerMessageType::Message(LayerMessage::new(msg, id, true)));
+        l.send(LayerMessageType::Message(LayerMessage::new(msg, id, true)))
+            .expect("Could not sent message.");
     }
 }

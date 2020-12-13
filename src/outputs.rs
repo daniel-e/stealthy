@@ -3,7 +3,6 @@ use std::iter::repeat;
 use crate::{ItemType, Ips};
 use crate::Source;
 use crate::Arguments;
-use crate::IpAddresses;
 use crate::Console;
 
 pub fn write_lines(o: Console, lines: &[&str], typ: ItemType, from: Source) {

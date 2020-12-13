@@ -7,8 +7,7 @@ use crate::delivery::Delivery;
 use crate::binding::Network;
 use crate::message::{IncomingMessage, Message};
 use crate::error::ErrorType;
-use crate::iptools::IpAddresses;
-use crate::{Console, Ips, tools};
+use crate::{Console, Ips};
 
 pub struct Layers {
     encryption_layer: Arc<Box<dyn Encryption>>,
@@ -59,6 +58,8 @@ impl Layers {
         }
     }
 
+    // public key encryption is deactivated at the moment
+    #[allow(dead_code)]
     pub fn encryption_key(&self) -> Vec<u8> {
         self.encryption_layer.encryption_key()
     }

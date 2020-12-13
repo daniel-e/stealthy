@@ -80,6 +80,8 @@ pub fn read_file(fname: &str) -> Result<String, &'static str> {
     }
 }
 
+// public key encryption is deactivated at the moment
+#[allow(dead_code)]
 pub fn insert_delimiter(s: &str) -> String {
     match s.is_empty() {
         true  => String::from(""),
@@ -108,6 +110,8 @@ pub fn random_str(n: usize) -> String {
     ).unwrap()
 }
 
+// public key encryption is deactivated at the moment
+#[allow(dead_code)]
 pub fn sha1(s: &[u8]) -> String {
     let mut h = Sha1::new();
     h.input(s);

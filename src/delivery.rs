@@ -3,7 +3,7 @@ use std::thread;
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{Receiver, Sender};
 
-use crate::{Message, IncomingMessage, tools};
+use crate::{Message, IncomingMessage};
 use crate::binding::Network;
 use crate::Console;
 

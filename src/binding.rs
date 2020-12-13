@@ -122,8 +122,6 @@ impl Network {
 			hello_packets: LinkedList::new(),
 		}));
 
-		let ping_id = rand::random::<u32>();
-
 		// Network must be on the heap because of the callback function.
 		let mut n = Box::new(Network {
 			shared: s.clone(),
@@ -131,15 +129,18 @@ impl Network {
 			console: console.clone(),
 			accept_ip: accept_ip.clone(),
 			current_siz: 128,
-			ping_id,
+			ping_id: rand::random::<u32>(),
 		});
 
 		n.init_callback(dev);
 		n.init_retry_event_receiver(s.clone());
-
-		let mut ips = accept_ip.lock().unwrap().as_strings();
-		Network::ping(console, 8192, ips.pop().unwrap(), ping_id);
+		n.maxsize_ping();
 		n
+	}
+
+	pub fn maxsize_ping(&self) {
+		let mut ips = self.accept_ip.lock().unwrap().as_strings();
+		Network::ping(self.console.clone(), 8192, ips.pop().unwrap(), self.ping_id);
 	}
 
 	fn init_retry_event_receiver(&mut self, k: Arc<Mutex<SharedData>>) {

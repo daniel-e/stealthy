@@ -1,4 +1,4 @@
-use crate::{ConsoleMessage, send_hello, Ips, LayerMessage, probe};
+use crate::{ConsoleMessage, send_hello, Ips, LayerMessage, probe, LayerMessageType};
 use crate::Item;
 use crate::Layers;
 use crate::IpAddresses;
@@ -29,7 +29,7 @@ fn parse_command_set(txt: String, o: Console) -> bool {
     false
 }
 
-pub fn parse_command(txt: String, o: Console, l: Sender<LayerMessage>, dstips: Ips) {
+pub fn parse_command(txt: String, o: Console, l: Sender<LayerMessageType>, dstips: Ips) {
     // TODO: find more elegant solution for this
     if txt.starts_with("/cat ") {
         // TODO split_at works on bytes not characters
@@ -119,7 +119,7 @@ fn create_upload_data(dstip: String, fname: &String, data: &Vec<u8>) -> (Message
 /// * `data` - Content of the file (binary data).
 /// * `fname` - Name of the file.
 /// * `o` - Sender object to which messages are sent to.
-fn send_file(data: Vec<u8>, fname: String, console: Console, l: Sender<LayerMessage>, dstips: Ips) {
+fn send_file(data: Vec<u8>, fname: String, console: Console, l: Sender<LayerMessageType>, dstips: Ips) {
 
     let n = data.len();
 
@@ -148,6 +148,6 @@ fn send_file(data: Vec<u8>, fname: String, console: Console, l: Sender<LayerMess
 
     // Now, start the file transfer in the background for each given IP.
     for (msg, id) in v {
-        l.send(LayerMessage::new(msg, id, true));
+        l.send(LayerMessageType::Message(LayerMessage::new(msg, id, true)));
     }
 }

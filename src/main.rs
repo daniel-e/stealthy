@@ -43,7 +43,7 @@ type ArcView = Arc<Mutex<View>>;
 type Ips = Arc<Mutex<IpAddresses>>;
 
 /// Listens for incoming messages from the network.
-fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, tx: Sender<LayerMessage>, dstips: Ips) {
+fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, tx: Sender<LayerMessageType>, dstips: Ips) {
 
     thread::spawn(move || {
         loop { match rx.recv() {
@@ -59,10 +59,14 @@ fn recv_loop(o: Console, rx: Receiver<IncomingMessage>, tx: Sender<LayerMessage>
                                     dstips.lock().unwrap().set_ip(ip.clone());
                                     o.status(format!("Set new destination IP."));
 
+                                    // When we have a new endpoint we need to estimate the new
+                                    // maximum payload size.
+                                    tx.send(LayerMessageType::MaxSizePing);
+
                                     let payload = format!("nice to meet you:{}", ip.clone());
                                     let m = Message::hello(ip.clone(), payload.into_bytes());
                                     let id = rand::random::<u64>();
-                                    tx.send(LayerMessage::new(m, id, true));
+                                    tx.send(LayerMessageType::Message(LayerMessage::new(m, id, true)));
                                 } else if s.starts_with("nice to meet you:") {
                                     let ip = msg.ip.clone();
                                     o.status(format!("Received NICE TO MEET YOU from {}.", ip.clone()));
@@ -126,14 +130,14 @@ fn create_data(dstip: String, txt: &String) -> (Message, u64) {
     (Message::new(dstip, txt.clone().into_bytes()), rand::random::<u64>())
 }
 
-fn send_hello(l: Sender<LayerMessage>, ip: String) {
+fn send_hello(l: Sender<LayerMessageType>, ip: String) {
     let payload = format!("hello:{}", ip);
     let msg = Message::hello(ip, payload.into_bytes());
     let id = rand::random::<u64>();
-    l.send(LayerMessage::new(msg, id, true));
+    l.send(LayerMessageType::Message(LayerMessage::new(msg, id, true)));
 }
 
-fn send_message(txt: String, o: Console, l: Sender<LayerMessage>, dstips: Ips) {
+fn send_message(txt: String, o: Console, l: Sender<LayerMessageType>, dstips: Ips) {
 
     let mut item = Item::new(format!("{}", txt), ItemType::MyMessage, model::Source::You);
 
@@ -149,7 +153,7 @@ fn send_message(txt: String, o: Console, l: Sender<LayerMessage>, dstips: Ips) {
 
     for (msg, id) in v {
         //tools::log_to_file(format!("send_message: {} to {}\n", txt.clone(), msg.ip.clone()));
-        l.send(LayerMessage::new(msg, id, false)).unwrap();
+        l.send(LayerMessageType::Message(LayerMessage::new(msg, id, false))).unwrap();
     }
 }
 
@@ -165,7 +169,7 @@ fn init_network_layer(args: &Arguments, console: Console, dstips: Ips, tx: Sende
     ret.expect("Initialization failed.")
 }
 
-fn keyboard_loop(o: Console, l: Sender<LayerMessage>, dstips: Ips, model: ArcModel, view: ArcView) {
+fn keyboard_loop(o: Console, l: Sender<LayerMessageType>, dstips: Ips, model: ArcModel, view: ArcView) {
     let mut input = InputKeyboard::new();
 
     loop {
@@ -377,6 +381,10 @@ fn probe_range(o: Console, dstips: Vec<String>, ipranges: Vec<String>) -> Result
 }
 */
 
+pub enum LayerMessageType {
+    Message(LayerMessage),
+    MaxSizePing
+}
 
 pub struct LayerMessage {
     pub msg: Message,
@@ -461,7 +469,7 @@ fn ips_for_probing(addr: &str) -> Result<Vec<String>, String>{
     Ok(create_ips(ip, net))
 }
 
-pub fn probe(o: Console, addr: &str, tx: Sender<LayerMessage>) {
+pub fn probe(o: Console, addr: &str, tx: Sender<LayerMessageType>) {
     //tools::log_to_file(format!("Probing {}.\n", &addr));
     match ips_for_probing(addr) {
         Ok(ips) => {
@@ -474,7 +482,7 @@ pub fn probe(o: Console, addr: &str, tx: Sender<LayerMessage>) {
                     let payload = format!("hello:{}", ip.clone());
                     let m = Message::hello(ip.clone(), payload.into_bytes());
                     let id = rand::random::<u64>();
-                    tx.send(LayerMessage::new(m, id, true));
+                    tx.send(LayerMessageType::Message(LayerMessage::new(m, id, true)));
                     thread::sleep(Duration::from_millis(100));
                 }
                 o.status(format!("Probing done.\n"));
@@ -503,17 +511,25 @@ fn main() {
 
     // tx_send_message is used to send a messave over the network
 
-    let (tx_send_message, rx_send_message) = channel::<LayerMessage>();
+    let (tx_send_message, rx_send_message) = channel::<LayerMessageType>();
     let (tx_incoming_message, rx_incoming_message) = channel();
     let a = args.clone();
     let cc = c.clone();
     let dips = dstips.clone();
     thread::spawn(move || {
         let tx = tx_incoming_message.clone();
-        let layers = init_network_layer(&a, cc, dips, tx);
+        let mut layers = init_network_layer(&a, cc, dips, tx);
         loop {
             let msg = rx_send_message.recv().unwrap();
-            layers.send(msg.msg, msg.id, msg.background);
+            match msg {
+                LayerMessageType::Message(msg) => {
+                    layers.send(msg.msg, msg.id, msg.background);
+                }
+                LayerMessageType::MaxSizePing => {
+                    layers.maxsize_ping();
+                }
+            }
+
         }
     });
 

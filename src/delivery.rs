@@ -54,6 +54,10 @@ pub struct Delivery {
 
 impl Delivery {
 
+    pub fn maxsize_ping(&self) {
+        self.network_layer.maxsize_ping();
+    }
+
     /// Via rx1 this layer receives incoming messages from the
     /// network layer (message with encrypted payload).
     pub fn new(n: Box<Network>, tx: Sender<IncomingMessage>, rx: Receiver<IncomingMessage>, console: Console) -> Delivery {

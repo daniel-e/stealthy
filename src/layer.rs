@@ -10,11 +10,6 @@ use crate::error::ErrorType;
 use crate::iptools::IpAddresses;
 use crate::{Console, Ips, tools};
 
-//pub struct Layer {
-    //pub rx    : Receiver<IncomingMessage>,
-//    pub layers: Layers,
-//}
-
 pub struct Layers {
     encryption_layer: Arc<Box<dyn Encryption>>,
     delivery_layer  : Arc<Box<Delivery>>,
@@ -36,8 +31,8 @@ impl Layers {
         )
     }
 
-    pub fn send_sync(&self, msg: Message, id: u64, background: bool) {
-
+    pub fn maxsize_ping(&self) {
+        self.delivery_layer.maxsize_ping();
     }
 
     pub fn send(&self, msg: Message, id: u64, background: bool) {
